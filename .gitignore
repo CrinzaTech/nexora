@@ -1,0 +1,116 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# build_runner output (freezed + json_serializable). Regenerated with
+# `flutter pub run build_runner build --delete-conflicting-outputs`, so
+# kept out of version control. A fresh clone MUST run codegen before the
+# app will compile.
+*.g.dart
+*.freezed.dart
+# EXCEPTION: api_client.g.dart is hand-maintained, NOT generated —
+# retrofit_generator is disabled (SDK incompatibility), so build_runner
+# will not recreate it. It must stay tracked or the network layer is
+# lost on a fresh clone.
+!lib/core/network/api_client.g.dart
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+# Gradle drops its task / dependency caches under /android/build at the
+# project-level; never want this tracked.
+/android/build/
+
+# Release signing — keystore is the app's permanent identity on Play
+# Store. Losing it kills the ability to push updates (Play App Signing
+# can reset the UPLOAD key but not the underlying signing key). Never
+# commit either of these.
+**/*.jks
+**/*.keystore
+/android/key.properties
+
+# Personal notes (exclude from version control)
+/personal-notes/
+
+# FVM Version Cache
+.fvm/
+
+# SSH Keys (sensitive)
+gitkey
+gitkey.pub
+
+# Audit reports + feature trackers — kept local for analysis and
+# in-flight development tracking, not tracked in git.
+# Includes: performance audits, chat feature tracker
+# (audits/chat_feature_tracker.md), and any future audit/tracker docs.
+/audits/
+
+# Feature implementation trackers — local-only dev notes that map the
+# chat / future feature work against the source-of-truth MD specs.
+/chat_feature_tracker.md
+
+# Env file — per-machine, NOT tracked in git. Every dev machine + CI
+# runner provides its own .env (comment / uncomment one credential
+# block — test or production — inside the file). pubspec.yaml lists
+# .env under flutter.assets:, so the file MUST exist on disk before
+# a build; missing it fails asset resolution at build time.
+# Onboarding: copy .env.example → .env.
+.env
+
+# Local "*_bad.png" / "*_bad.jpg" snapshots — used as side-by-side
+# backups when swapping brand assets (e.g. `logo_bad.png` parked next
+# to the new `logo.png`). Kept out of git so the repo stays clean.
+*_bad.png
+*_bad.jpg
+*_bad.jpeg
+pubspec.lock
+
+# iOS build
+/ios/build/
+
+# Scripts
+/scripts/
+
+# CocoaPods / iOS dependencies
+/ios/Podfile
+/ios/Podfile.lock
+/ios/Pods/
+/ios/.symlinks/

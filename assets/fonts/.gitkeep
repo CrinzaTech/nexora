@@ -1,0 +1,21 @@
+# Fonts
+
+Place your custom font files here.
+
+Usage in pubspec.yaml:
+```yaml
+fonts:
+  - family: YourFontFamily
+    fonts:
+      - asset: assets/fonts/YourFont-Regular.ttf
+      - asset: assets/fonts/YourFont-Bold.ttf
+        weight: 700
+```
+
+Usage in code:
+```dart
+Text(
+  'Hello',
+  style: TextStyle(fontFamily: 'YourFontFamily'),
+)
+```

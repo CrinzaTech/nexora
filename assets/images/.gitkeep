@@ -1,0 +1,15 @@
+# Images
+
+Place your image assets here.
+
+Supported formats: PNG, JPEG, GIF, WebP, BMP, WBMP
+
+Usage:
+```dart
+Image.asset('assets/images/your_image.png')
+```
+
+Subdirectories:
+- 1.0x/ - 1.0x scale images (baseline)
+- 2.0x/ - 2.0x scale images (Retina)
+- 3.0x/ - 3.0x scale images (Super Retina)

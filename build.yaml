@@ -1,0 +1,9 @@
+targets:
+  $default:
+    sources:
+      exclude:
+        - "lib/core/network/api_client.g.dart"
+        - "lib/core/network/api_client.dart"
+    builders:
+      retrofit_generator:retrofit:
+        enabled: false

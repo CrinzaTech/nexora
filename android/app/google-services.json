@@ -1,0 +1,238 @@
+{
+  "project_info": {
+    "project_number": "592458511076",
+    "project_id": "crinza-app",
+    "storage_bucket": "crinza-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:645132413cc84a700f32f1",
+        "android_client_info": {
+          "package_name": "co.diy7.pvdca"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:29b15bba6c889f380f32f1",
+        "android_client_info": {
+          "package_name": "com.crinesta.crinza"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:13cecfc8d09e4b890f32f1",
+        "android_client_info": {
+          "package_name": "com.crinesta.crinza.v2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:a65e96966a3636cb0f32f1",
+        "android_client_info": {
+          "package_name": "com.crinesta.crinza.v3"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:ff897d7849cd17fc0f32f1",
+        "android_client_info": {
+          "package_name": "com.crinesta.dvr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:c9abacb2265985e90f32f1",
+        "android_client_info": {
+          "package_name": "com.dy.nic"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:9177aa120f4386d10f32f1",
+        "android_client_info": {
+          "package_name": "com.nex.ora"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:f58afc3cd650185f0f32f1",
+        "android_client_info": {
+          "package_name": "com.prash.academy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:fd44bcaf8ff5b4170f32f1",
+        "android_client_info": {
+          "package_name": "com.prime.anjaneya"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:d30ad4ffcf7fb5820f32f1",
+        "android_client_info": {
+          "package_name": "com.sl.gr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:37430d18f2fa57f50f32f1",
+        "android_client_info": {
+          "package_name": "com.studybae.academy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:139220c0a32a52870f32f1",
+        "android_client_info": {
+          "package_name": "com.vtc.ady"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

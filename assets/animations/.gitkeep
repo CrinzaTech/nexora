@@ -1,0 +1,14 @@
+# Animations
+
+Place your Lottie JSON animations here.
+
+Usage with `lottie` package:
+```dart
+Lottie.asset('assets/animations/your_animation.json')
+```
+
+Add to pubspec.yaml:
+```yaml
+dependencies:
+  lottie: ^3.0.0
+```
