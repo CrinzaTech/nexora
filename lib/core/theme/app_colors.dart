@@ -261,13 +261,21 @@ class AppColors {
   // (see the note above the brand-colour block).
   /// Full pink → lavender gradient — use for the app bar band and any
   /// surface that should mirror the hero gradient image.
+  ///
+  /// Direction comes from `currentBranding.headerGradientAngle` rather than
+  /// fixed alignments, so re-angling the app bar is a one-line brand change
+  /// and every surface mirroring the hero gradient turns with it.
   static final LinearGradient primaryGradient = LinearGradient(
     colors: [
-      secondary, // 🩷 Hot pink — full opacity (top)
-      primary.withValues(alpha: 0.4), // 🟣 Indigo — faded light (bottom)
+      secondary, // 🩷 Hot pink — full opacity (gradient start)
+      // 🟣 Indigo — faded light (gradient end). Header_Gradient_Dark holds it
+      // at full strength instead.
+      currentBranding.headerGradientDark
+          ? primary
+          : primary.withValues(alpha: 0.4),
     ],
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
+    begin: currentBranding.headerGradientBegin,
+    end: currentBranding.headerGradientEnd,
   );
 
   /// Convenience alias — same gradient, more descriptive name.

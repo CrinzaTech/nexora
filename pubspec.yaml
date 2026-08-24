@@ -1,7 +1,7 @@
 name: nexora
 description: "A new Flutter project."
 publish_to: "none"
-version: 0.0.5+5
+version: 0.0.1+1
 
 environment:
   sdk: ^3.9.2
@@ -147,6 +147,12 @@ dependencies:
   # bonus but the Android dev-mode signal is authoritative for us.
   flutter_jailbreak_detection: ^1.10.0
   webview_flutter: 4.13.1
+  # Screen brightness, raised only while a workshop entry pass is on
+  # screen and restored the moment it leaves. A dark pass design at 20%
+  # brightness under venue lighting is genuinely hard for a door scanner
+  # to read — this is the single biggest thing the app can do for scan
+  # reliability, and it costs five lines.
+  screen_brightness: ^2.1.2
   device_info_plus: ^12.4.0
   android_id: ^0.4.0        # SSAID — stable across reinstalls/reboots/OTAs
   # math_expressions: exam calculator arithmetic (parsing, precedence, sci functions).

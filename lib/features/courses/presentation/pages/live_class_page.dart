@@ -1244,7 +1244,7 @@ class _AudioModeView extends StatelessWidget {
           ),
           SizedBox(height: Screen.getVerticalSize(10)),
           Text(
-            'Weak network — switched to audio only.',
+            'Weak network. Switched to audio only.',
             textAlign: TextAlign.center,
             style: AppTypography.bodyTextSemiBold.copyWith(
               color: AppColors.alwaysWhite,

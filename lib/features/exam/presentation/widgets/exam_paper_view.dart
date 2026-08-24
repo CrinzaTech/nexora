@@ -241,7 +241,7 @@ class _ExamPaperViewState extends State<ExamPaperView> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              "Time's up — submit now to grade your saved answers.",
+              "Time's up. Submit now to grade your saved answers.",
               style: AppTypography.bodyTextSmallSemiBold.copyWith(
                 color: AppColors.errorDark,
               ),

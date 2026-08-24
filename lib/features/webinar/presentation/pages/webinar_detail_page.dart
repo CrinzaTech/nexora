@@ -24,6 +24,7 @@ import 'package:nexora/features/webinar/presentation/widgets/webinar_card.dart';
 import 'package:nexora/features/webinar/presentation/widgets/webinar_cover.dart';
 import 'package:nexora/features/webinar/presentation/widgets/webinar_external_join.dart';
 import 'package:nexora/features/webinar/presentation/widgets/webinar_live_badge.dart';
+import 'package:nexora/features/workshop_pass/presentation/workshop_pass_entry.dart';
 
 /// A single webinar: what it is, who is teaching it, when it starts —
 /// and the one button that gets the learner in.
@@ -138,8 +139,19 @@ class _LoadedBody extends StatelessWidget {
                   SizedBox(height: Screen.getVerticalSize(12)),
                   const _RegisteredNotice(),
                 ],
-                if (!webinar.canJoin &&
-                    webinar.joinBlockedReason.isNotEmpty) ...[
+                // Only for a paid workshop this learner has bought —
+                // `showsWorkshopPass` mirrors the server's own check, so
+                // the card appears exactly where the call would succeed.
+                if (showsWorkshopPass(webinar)) ...[
+                  SizedBox(height: Screen.getVerticalSize(12)),
+                  _WorkshopPassCta(webinar: webinar),
+                ],
+                // Shown whenever the door is shut, **even if the server
+                // sent no sentence**. `canJoin` also goes false when an
+                // in-person workshop fills up, and a greyed-out button
+                // with nothing next to it reads as a broken page rather
+                // than as "this one is full".
+                if (!webinar.canJoin) ...[
                   SizedBox(height: Screen.getVerticalSize(12)),
                   _BlockedNotice(reason: webinar.joinBlockedReason),
                 ],
@@ -464,6 +476,79 @@ class _RegisteredNotice extends StatelessWidget {
   }
 }
 
+/// The way to the entry pass, for a workshop this learner has bought.
+///
+/// Given a card of its own rather than folded into the Join button
+/// because the two are different errands: the join button hands over the
+/// venue, and this hands over the thing scanned at its door. An attendee
+/// arriving at the workshop is looking for the ticket, not for directions
+/// they already took.
+class _WorkshopPassCta extends StatelessWidget {
+  final WebinarDetail webinar;
+
+  const _WorkshopPassCta({required this.webinar});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppSizes.radiusL),
+      onTap: () => openWorkshopPass(
+        context,
+        slug: webinar.slug,
+        workshopTitle: webinar.title,
+      ),
+      child: Container(
+        padding: Screen.getPadding(all: 14),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(AppSizes.radiusL),
+          border: AppDecorations.cardBorder(
+            lightColor: AppColors.primary.withValues(alpha: 0.18),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.confirmation_number_outlined,
+              size: Screen.getSize(20),
+              color: AppColors.primary,
+            ),
+            SizedBox(width: Screen.getHorizontalSize(10)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Your entry pass',
+                    style: AppTypography.bodyTextLargeSemiBold.copyWith(
+                      color: AppColors.textPrimary,
+                      fontSize: Screen.getFontSize(14),
+                    ),
+                  ),
+                  SizedBox(height: Screen.getVerticalSize(2)),
+                  Text(
+                    'Show this at the door on the day.',
+                    style: AppTypography.bodyTextMedium.copyWith(
+                      color: AppColors.mutedTextPrimary,
+                      fontSize: Screen.getFontSize(12),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: Screen.getSize(20),
+              color: AppColors.primary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _BlockedNotice extends StatelessWidget {
   final String reason;
 
@@ -472,11 +557,18 @@ class _BlockedNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // `joinBlockedReason` is written for the learner by the backend —
-    // shown verbatim rather than re-worded per status.
+    // shown verbatim rather than re-worded per status. It carries the
+    // sold-out sentence for a workshop that filled, among others.
+    //
+    // The fallback is only for a `canJoin: false` that arrives with no
+    // sentence at all: something still has to be said, because a button
+    // that has gone quiet with nothing beside it reads as a bug.
     return _Notice(
       icon: Icons.info_outline_rounded,
       color: AppColors.warning,
-      text: reason,
+      text: reason.trim().isEmpty
+          ? 'This webinar is not open to join right now.'
+          : reason,
     );
   }
 }
@@ -620,6 +712,30 @@ class _JoinBarState extends State<_JoinBar> {
     });
   }
 
+  /// Where a verified payment lands.
+  ///
+  /// **For a paid workshop the pass is the receipt.** It exists the
+  /// moment `verify-payment` succeeds, and it is what the attendee
+  /// actually came away with — so it is shown rather than left to be
+  /// found later. The venue is one Directions button away on that
+  /// screen, so nothing is lost by not going to the room first.
+  ///
+  /// Everything else goes straight in, as before.
+  Future<void> _openAfterPayment() async {
+    final webinar = widget.webinar;
+    if (webinar.isInPerson && !webinar.isFree) {
+      await openWorkshopPass(
+        context,
+        slug: widget.slug,
+        workshopTitle: webinar.title,
+      );
+      if (!mounted) return;
+      context.read<WebinarDetailCubit>().silentRefresh(widget.slug);
+      return;
+    }
+    await _openRoom();
+  }
+
   /// Into the room. A3 runs there — idempotent, so this is also the
   /// path a learner who already has a seat takes.
   Future<void> _openRoom() async {
@@ -631,7 +747,10 @@ class _JoinBarState extends State<_JoinBar> {
       '&title=${Uri.encodeComponent(webinar.title)}'
       '&thumbnailUrl=${Uri.encodeComponent(webinar.thumbnailUrl ?? '')}'
       '&educatorName=${Uri.encodeComponent(webinar.educatorName ?? '')}'
-      '&isFree=${webinar.isFree}',
+      '&isFree=${webinar.isFree}'
+      // Carried so the room opens on the right screen from the first
+      // frame rather than swapping to it once A3 answers.
+      '&isStream=${webinar.isStream}',
     );
     if (!mounted) return;
     // A3 flips `isRegistered`, and the class may have started or
@@ -659,12 +778,28 @@ class _JoinBarState extends State<_JoinBar> {
             // The detail re-read flips `isRegistered`, which is what
             // turns this button from "Buy" into "Join".
             context.read<WebinarDetailCubit>().silentRefresh(widget.slug);
-            _openRoom();
+            _openAfterPayment();
           },
           alreadyPaid: (message) {
             context.read<WebinarCheckoutCubit>().reset();
             context.read<WebinarDetailCubit>().silentRefresh(widget.slug);
             _openRoom();
+          },
+          refused: (message) {
+            // Information, not a red failure: nothing was charged and
+            // the learner did nothing wrong — the last seat went. Shown
+            // with the server's own sentence.
+            CustomSnackbar.info(
+              context,
+              title: 'Not available',
+              message: message,
+              duration: const Duration(seconds: 5),
+            );
+            context.read<WebinarCheckoutCubit>().reset();
+            // Re-read the detail: `canJoin` is false now, which turns
+            // the Buy button off and puts the reason under it, so the
+            // screen stops offering something that cannot happen.
+            context.read<WebinarDetailCubit>().silentRefresh(widget.slug);
           },
           failed: (message, canRetry) {
             CustomSnackbar.error(

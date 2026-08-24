@@ -189,7 +189,7 @@ class WebinarRepositoryImpl implements WebinarRepository {
           Failure.server(
             message:
                 "We're confirming your payment. Please refresh in a "
-                'moment — do not pay again.',
+                'moment. Do not pay again.',
           ),
         );
       }

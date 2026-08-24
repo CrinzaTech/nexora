@@ -111,8 +111,8 @@ class HandRaiseFab extends StatelessWidget {
           icon: Icons.back_hand_outlined,
           color: AppColors.mutedTextPrimary,
           tooltip: pos != null
-              ? 'Hand raised · position $pos — tap to lower'
-              : 'Hand raised — tap to lower',
+              ? 'Hand raised · position $pos. Tap to lower'
+              : 'Hand raised. Tap to lower',
           onTap: cubit.lowerHand,
         );
 
@@ -138,7 +138,7 @@ class HandRaiseFab extends StatelessWidget {
         return _FabSpec(
           icon: Icons.stop_circle,
           color: AppColors.error,
-          tooltip: "You're live — tap to finish",
+          tooltip: "You're live. Tap to finish",
           onTap: cubit.stopSpeaking,
         );
     }

@@ -72,7 +72,7 @@ class PersonCardWidget extends StatelessWidget {
 
           // Name
           Text(
-            profile?.name ?? '—',
+            profile?.name ?? '-',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: AppTypography.h5SemiBold.copyWith(
@@ -82,7 +82,7 @@ class PersonCardWidget extends StatelessWidget {
 
           // Phone / Email
           Text(
-            profile?.email ?? profile?.phoneNumber ?? '—',
+            profile?.email ?? profile?.phoneNumber ?? '-',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: AppTypography.bodyTextMedium.copyWith(

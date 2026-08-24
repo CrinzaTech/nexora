@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_theme.dart';
 import 'package:nexora/core/theme/responsive_helper.dart';
@@ -48,7 +50,8 @@ class _TilePalette {
     final rawColors = pairs[index % pairs.length];
 
     // Lighten each stop by blending it 55 % toward white when not dark mode.
-    Color resolve(Color c) => isDark ? c : Color.lerp(c, AppColors.white, 0.55)!;
+    Color resolve(Color c) =>
+        isDark ? c : Color.lerp(c, AppColors.white, 0.55)!;
 
     return LinearGradient(
       colors: [
@@ -82,6 +85,427 @@ class _TilePalette {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Icon-tile metrics — single source of truth for the Tile_Only_Icon layout.
+//
+// The grid cell and the card that fills it have to agree on how tall the
+// content is, and they used to be derived independently: the cell came from
+// hard-coded design constants scaled through Screen.getVerticalSize() with one
+// clamp, while the image inside it scaled through Screen.getSize() with a
+// different clamp, and the Tile_Text label added a line box nobody budgeted
+// for. Those curves cross on real devices, so Tile_Only_Icon + Tile_Text
+// overflowed the Column by a few pixels on every screen size — including the
+// 360x812 design baseline it was tuned on. Deriving the cell from these
+// numbers keeps the two locked together everywhere.
+// ─────────────────────────────────────────────────────────────────────────────
+class _IconTileMetrics {
+  /// Side of the square neumorphic container — the icon's full footprint.
+  /// Identical whether or not the background is drawn: with Tile_Bg off the
+  /// padding collapses and the image grows by exactly what was removed.
+  final double containerSize;
+
+  /// Inset between the container edge and the image, when Tile_Bg is on.
+  final double padding;
+
+  /// Vertical gap between the icon and its label.
+  final double gap;
+
+  /// Font size of the single-line label.
+  final double fontSize;
+
+  const _IconTileMetrics({
+    required this.containerSize,
+    required this.padding,
+    required this.gap,
+    required this.fontSize,
+  });
+
+  /// The line-height multiplier baked into
+  /// [AppTypography.bodyTextLargeSemiBold]. The card's copyWith() only
+  /// overrides fontSize, so the label's line box stays fontSize * this —
+  /// which is the row of pixels the old constants never accounted for.
+  static const double _labelLineHeight = 24 / 16;
+
+  /// Height of the single label line, rounded up. A fractional line box is
+  /// exactly what surfaced as "overflowed by 3.7 pixels".
+  double get labelHeight => lineBoxFor(fontSize);
+
+  /// Line box for an arbitrary size, using the same multiplier. Lets a caller
+  /// run a different font size without re-deriving how tall its line is.
+  double lineBoxFor(double size) => (size * _labelLineHeight).ceilToDouble();
+
+  /// The height the card actually paints, and therefore the height the grid
+  /// cell must reserve.
+  double cellHeight({required bool showText}) =>
+      showText ? containerSize + gap + labelHeight : containerSize;
+
+  factory _IconTileMetrics.resolve({
+    required ResponsiveHelper rh,
+    required bool isFull,
+    required bool is3x3,
+  }) {
+    // Image dimensions:
+    //   3-col (is3x3=true)  : 64dp  — compact cells, smaller image.
+    //   2-col (is3x3=false) : 130dp — wider cells, much larger image.
+    //   full-length         : 88dp.
+    final double imageSize = Screen.getSize(isFull ? 88 : (is3x3 ? 64 : 130))
+        .clamp(
+          0.0,
+          rh.isLargeScreen
+              ? (isFull ? 140.0 : (is3x3 ? 110.0 : 180.0))
+              : (isFull ? 100.0 : (is3x3 ? 75.0 : 145.0)),
+        );
+
+    final double padding = Screen.getSize(is3x3 ? 10 : 2);
+
+    return _IconTileMetrics(
+      containerSize: imageSize + padding * 2,
+      padding: padding,
+      gap: Screen.getVerticalSize(6),
+      fontSize: rh.isLargeScreen
+          ? rh.cappedFontSize(20)
+          : Screen.getFontSizeCapped(18),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contour drop shadow — the Png_Bg tile theme.
+//
+// A BoxShadow can only trace the *box*: turn it on behind a rounded-square
+// icon and you get a rounded-square shadow, behind a circular badge a
+// circular one, regardless of what the artwork actually is. This instead
+// reads the PNG's alpha channel, so the shadow is cast by the icon's own
+// outline — a cut-out stethoscope throws a stethoscope-shaped shadow.
+//
+// The artwork is painted twice: once flattened to a single tint and blurred
+// (the shadow), then again untouched on top.
+// ─────────────────────────────────────────────────────────────────────────────
+class _ContourShadow extends StatelessWidget {
+  final Widget child;
+
+  /// Fully resolved tint, alpha included. Left to the call site because it
+  /// depends on what the icon sits *on*: the page canvas under a neumorphic
+  /// tile, a brand gradient under a filled one.
+  final Color color;
+
+  /// The icon's rendered extent in dp. Blur and offset scale off this so a
+  /// 3-col tile never wears a 2-col tile's shadow.
+  final double extent;
+
+  /// Deep and tight (true) versus soft and airy (false).
+  final bool deep;
+
+  const _ContourShadow({
+    required this.child,
+    required this.color,
+    required this.extent,
+    required this.deep,
+  });
+
+  // Depth is carried by the ratio between blur and offset, not by opacity:
+  // a contact shadow is tight and thrown further, an airy one is wide and
+  // barely displaced. Turning up only the alpha on a diffuse blur reads as
+  // grime under the icon rather than as weight — so [deep] moves both.
+  //
+  // Both stay conservative. The blur bleeds past the tile into the 10dp
+  // gutter, which is what sells "raised off the page", but a bigger offset
+  // would smear into the label underneath.
+  //
+  // Both are floored. Pure proportional scaling was tuned against a 150dp
+  // icon-only tile; at the 52dp of a side-by-side one it lands on a 2px blur
+  // offset by 1.8px, which is not a faint shadow but no shadow at all. A
+  // shadow needs a few absolute pixels before the eye reads it as depth,
+  // regardless of how big the thing casting it is.
+  static const double _minBlur = 4.5;
+  static const double _minOffset = 2.5;
+
+  double get _blur {
+    final double scaled = extent * (deep ? 0.040 : 0.058);
+    return scaled < _minBlur ? _minBlur : scaled;
+  }
+
+  Offset get _offset {
+    final double scaled = extent * (deep ? 0.034 : 0.020);
+    return Offset(0, scaled < _minOffset ? _minOffset : scaled);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      // Stack clips to its bounds by default, which would shave the blur off
+      // at the icon's edge and leave a hard rectangular cut — the exact
+      // artefact this widget exists to avoid.
+      clipBehavior: Clip.none,
+      fit: StackFit.passthrough,
+      children: [
+        Transform.translate(
+          offset: _offset,
+          child: ImageFiltered(
+            imageFilter: ImageFilter.blur(sigmaX: _blur, sigmaY: _blur),
+            // srcIn keeps the artwork's alpha and replaces every colour with
+            // the tint — a true silhouette. A plain opacity would instead
+            // give a washed-out copy of the icon, colours and all.
+            child: ColorFiltered(
+              colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+              child: child,
+            ),
+          ),
+        ),
+        child,
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Banner layout — the Tile_Text_Banner treatment.
+//
+// The label rides in a tinted pill across the top of the card and the artwork
+// is painted over the pill's lower edge, breaking its outline. Stacking order
+// is the entire effect: banner first, artwork second. Reverse them and this
+// collapses into a label with a coloured box behind it.
+// ─────────────────────────────────────────────────────────────────────────────
+class _BannerTile extends StatefulWidget {
+  final Widget artwork;
+  final String label;
+
+  /// The pill's fill. Exactly one of these is set, and it is the opposite of
+  /// whatever the card behind the artwork uses — only one of the two can be
+  /// the coloured half or the pill stops reading as a separate element.
+  /// Tile_Banner_Invert picks which.
+  final Gradient? bannerGradient;
+  final Color? bannerColor;
+  final Color textColor;
+  final _IconTileMetrics metrics;
+
+  /// Squared off to the card's own radius rather than run as a full pill.
+  final bool squared;
+
+  /// Staggers this tile's shine so a row doesn't flash in unison.
+  final int index;
+
+  const _BannerTile({
+    required this.artwork,
+    required this.label,
+    required this.textColor,
+    required this.metrics,
+    required this.index,
+    this.bannerGradient,
+    this.bannerColor,
+    this.squared = false,
+  });
+
+  @override
+  State<_BannerTile> createState() => _BannerTileState();
+}
+
+class _BannerTileState extends State<_BannerTile>
+    with SingleTickerProviderStateMixin {
+  /// How far down the banner the artwork starts, as a fraction of the
+  /// banner's height. Below ~0.5 the icon swallows the text; above ~0.8 the
+  /// two stop touching and the overlap reads as a mistake rather than a
+  /// composition.
+  static const double _overlap = 0.62;
+
+  /// The banner runs smaller than the standard tile label. It sits on its own
+  /// coloured field rather than in open space, so it reads a size larger than
+  /// it measures.
+  static const double _fontScale = 0.85;
+
+  /// Leading inside the pill.
+  ///
+  /// Now that [_heightFraction] fixes the band's height, this no longer sizes
+  /// anything — it only decides how the two lines are distributed inside a
+  /// band that is already there. That makes it a straight typographic call
+  /// rather than a trade against the tile's proportions, so it runs loose:
+  /// two short stacked words want air between them, and there is spare room
+  /// in the band to give.
+  static const double _lineHeight = 1.45;
+
+  /// Banner height as a share of the tile.
+  ///
+  /// Deliberately a fraction of the tile rather than a function of the label:
+  /// sized off its text, each banner came out as tall as its own category
+  /// name happened to be, so a row of them stepped up and down. A fixed share
+  /// gives every tile the same band and lets the text sit centred in it.
+  static const double _heightFraction = 0.45;
+
+  late final AnimationController _shineCtrl;
+  late final Animation<double> _shineAnim;
+
+  /// The streak only reads on the coloured half. With Tile_Banner_Invert the
+  /// pill is the neutral one and the card behind it carries the colour, so
+  /// the sweep belongs to the card and _FilledCard runs it instead.
+  bool get _shines => widget.bannerGradient != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _shineCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2800),
+    );
+    _shineAnim = CurvedAnimation(parent: _shineCtrl, curve: Curves.easeInOut);
+
+    if (!_shines) return;
+    Future.delayed(Duration(milliseconds: widget.index * 320), () {
+      if (!mounted) return;
+      _runLoop();
+    });
+  }
+
+  void _runLoop() async {
+    while (mounted) {
+      await _shineCtrl.forward(from: 0);
+      await Future.delayed(const Duration(milliseconds: 1600));
+    }
+  }
+
+  @override
+  void dispose() {
+    _shineCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => _build(constraints),
+    );
+  }
+
+  Widget _build(BoxConstraints constraints) {
+    final double inset = Screen.getSize(6);
+    final double padV = Screen.getSize(2);
+    final double fontSize = widget.metrics.fontSize * _fontScale;
+    final double lineBox = (fontSize * _lineHeight).ceilToDouble();
+
+    // Two lines' worth: category names are usually two words, and a banner
+    // that reflowed between one and two lines per tile would leave the row
+    // looking ragged.
+    final double textHeight = lineBox * 2 + padV * 2;
+
+    // Floored at what the text actually needs. On a small 3-column tile the
+    // share lands under two lines, and the band has a fixed height — the
+    // label would be clipped rather than the band shrinking with it.
+    final double share = constraints.hasBoundedHeight
+        ? constraints.maxHeight * _heightFraction
+        : textHeight;
+    final double bannerHeight = share < textHeight ? textHeight : share;
+
+    // Half the height is what makes the ends semicircular.
+    //
+    // Squared, only the *top* pair tightens to the card's own radius: those
+    // are the corners sitting up against the tile's own, and matching them is
+    // what makes the band read as tucked into the top rather than laid over
+    // it. The bottom pair stays semicircular, because that is the edge the
+    // artwork breaks through — squaring it too would give the icon a straight
+    // line to cross and lose the overlap.
+    final Radius round = Radius.circular(bannerHeight / 2);
+    final BorderRadius pillRadius = widget.squared
+        ? BorderRadius.only(
+            topLeft: const Radius.circular(AppSizes.radiusM),
+            topRight: const Radius.circular(AppSizes.radiusM),
+            bottomLeft: round,
+            bottomRight: round,
+          )
+        : BorderRadius.all(round);
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          top: inset,
+          left: inset,
+          right: inset,
+          height: bannerHeight,
+          child: Container(
+            decoration: BoxDecoration(
+              color: widget.bannerColor,
+              gradient: widget.bannerGradient,
+              borderRadius: pillRadius,
+            ),
+            // Clipped so the streak stops at the pill's edge instead of
+            // running square across its rounded ends.
+            child: ClipRRect(
+              borderRadius: pillRadius,
+              child: Stack(
+                children: [
+                  if (_shines)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: AnimatedBuilder(
+                          animation: _shineAnim,
+                          builder: (_, __) => DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: _streak(_shineAnim.value),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  Positioned.fill(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: Screen.getSize(10),
+                        vertical: padV,
+                      ),
+                      child: Center(
+                        child: Text(
+                          widget.label,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: AppTypography.bodyTextLargeSemiBold.copyWith(
+                            color: widget.textColor,
+                            fontSize: fontSize,
+                            fontWeight: FontWeight.w700,
+                            height: _lineHeight,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: inset + bannerHeight * _overlap,
+          left: inset,
+          right: inset,
+          bottom: inset,
+          child: widget.artwork,
+        ),
+      ],
+    );
+  }
+
+  /// A narrow white streak travelling corner to corner. Mapped so its centre
+  /// starts and ends off the pill, which is what keeps the entry and exit
+  /// clean instead of popping in at full strength.
+  LinearGradient _streak(double t) {
+    final double centre = -0.6 + t * 2.2;
+    const double halfWidth = 0.18;
+    return LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      stops: [
+        (centre - halfWidth).clamp(0.0, 1.0),
+        centre.clamp(0.0, 1.0),
+        (centre + halfWidth).clamp(0.0, 1.0),
+      ],
+      colors: [
+        AppColors.alwaysWhite.withValues(alpha: 0.0),
+        AppColors.alwaysWhite.withValues(alpha: 0.28),
+        AppColors.alwaysWhite.withValues(alpha: 0.0),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class CategorySection extends StatelessWidget {
   final List<EducatorTile> tiles;
@@ -102,15 +526,26 @@ class CategorySection extends StatelessWidget {
     final isFull = currentBranding.tileFullLength;
 
     // ── Tile_Only_Icon flag ───────────────────────────────────────────────────
-    // When true: 3-column icon grid with a shorter tile height (no text row).
+    // When true: icon grid, crossAxisCount from Tile_3_X_3.
     // When false: the crossAxisCount / height is governed by Tile_Full_Length.
-    final iconOnly = currentBranding.tileOnlyIcon;
+    //
+    // Tile_Big implies it. A big square tile stacks its icon over its label,
+    // which *is* the icon-only arrangement — the side-by-side one puts them
+    // in a row and has nowhere to apply it. Requiring both flags would just
+    // make Tile_Big silently do nothing on its own.
+    // Tile_Text_Banner is a treatment of the big tile's label, so it turns on
+    // both the square layout and the label itself — neither is meaningful to
+    // leave off underneath it.
+    final banner = currentBranding.tileTextBanner;
+    final tileBig = currentBranding.tileBig || banner;
+
+    final iconOnly = currentBranding.tileOnlyIcon || tileBig;
 
     // ── Tile_Text flag ────────────────────────────────────────────────────────
     // Only meaningful when Tile_Only_Icon=true.
     // true  → show the tile name below the neumorphic image background.
     // false → icon only, no text at all.
-    final showText = currentBranding.tileText;
+    final showText = currentBranding.tileText || currentBranding.tileTextBanner;
 
     // ── Tile_3_X_3 flag ──────────────────────────────────────────────────────
     // Only meaningful when Tile_Only_Icon=true.
@@ -118,37 +553,57 @@ class CategorySection extends StatelessWidget {
     // false → 2 icons per row.
     final is3x3 = currentBranding.tile3x3;
 
+    // ── Tile_Big flag ────────────────────────────────────────────────────────
+    // Only meaningful when Tile_Only_Icon=true.
+    // true  → square cells, card fills them, label sits inside the card.
+    // false → fixed-footprint card with the label hanging below it.
+
     // How many icon columns to display (3 or 2).
     final int colCount = is3x3 ? 3 : 2;
 
     // Priority: iconOnly > isFull > default-2-col.
     final int crossAxisCount = iconOnly ? colCount : (isFull ? 1 : 2);
 
-    // Icon-only tile height depends on column count and whether text is shown.
-    //   3-col: imgSize=64   → containerSize=82   → 90dp cell is fine.
-    //   2-col: imgSize=130  → containerSize=134  → needs 160dp (no text)
-    //                                            or 195dp (with text below).
+    // ── Icon-only cell height ────────────────────────────────────────────
+    // Derived from the exact numbers _DefaultCard lays out with, so the cell
+    // and its content can never drift apart on any device.
+    //
+    // _FilledCard is the exception: in icon-only mode it never renders a
+    // label (Tile_Text does not reach it) and its image maxes out at 75dp, so
+    // it keeps the flat constants it was tuned against.
+    final iconMetrics = _IconTileMetrics.resolve(
+      rh: rh,
+      isFull: isFull,
+      is3x3: is3x3,
+    );
+
+    // The flat constants below are the *icon area* of a filled card — they
+    // always sat comfortably above a bare icon, which is why the unlabelled
+    // case never overflowed. A label is added on top of that rather than
+    // carved out of it, so turning Tile_Text on grows the card instead of
+    // shrinking its artwork.
+    //
+    // The neumorphic card derives its whole height instead, because there the
+    // icon footprint is a known constant rather than "whatever the cell is".
+    final double filledIconArea = Screen.getVerticalSize(is3x3 ? 90 : 160)
+        .clamp(
+          0.0,
+          rh.isLargeScreen ? (is3x3 ? 130.0 : 210.0) : (is3x3 ? 100.0 : 180.0),
+        );
+
     final double tileHeight = iconOnly
-        ? (is3x3
-              ? (showText
-                    ? Screen.getVerticalSize(116).clamp(
-                        0.0,
-                        rh.isLargeScreen ? 160.0 : 130.0,
-                      ) // 3-col + text
-                    : Screen.getVerticalSize(
-                        90,
-                      ).clamp(0.0, rh.isLargeScreen ? 130.0 : 100.0)) // 3-col, no text
-              : (showText
-                    ? Screen.getVerticalSize(165).clamp(
-                        0.0,
-                        rh.isLargeScreen ? 220.0 : 185.0,
-                      ) // 2-col + text
-                    : Screen.getVerticalSize(
-                        160,
-                      ).clamp(0.0, rh.isLargeScreen ? 210.0 : 180.0))) // 2-col, no text
+        ? (showText
+              ? (currentBranding.tileBgFill
+                    // The label hangs below the card, so the cell is the card
+                    // plus a gap plus the label's line box.
+                    ? filledIconArea + iconMetrics.gap + iconMetrics.labelHeight
+                    : iconMetrics.cellHeight(showText: true))
+              : filledIconArea)
         : isFull
         ? Screen.getVerticalSize(80).clamp(0.0, rh.isLargeScreen ? 120.0 : 96.0)
-        : Screen.getVerticalSize(88).clamp(0.0, rh.isLargeScreen ? 130.0 : 100.0);
+        : Screen.getVerticalSize(
+            88,
+          ).clamp(0.0, rh.isLargeScreen ? 130.0 : 100.0);
 
     // Tighter horizontal spacing for the icon grid.
     final double crossAxisSpacing = iconOnly ? 10 : 15;
@@ -209,6 +664,12 @@ class CategorySection extends StatelessWidget {
                     /
                     colCount;
 
+                // Tile_Big squares the cell off against its own measured
+                // width, so it stays square at any column count and on any
+                // screen rather than tracking a design constant that only
+                // happens to be square at one size.
+                final double cellHeight = tileBig ? cellWidth : tileHeight;
+
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -225,7 +686,7 @@ class CategorySection extends StatelessWidget {
                             if (ci > 0 && rows[ri].length < colCount)
                               SizedBox(width: crossAxisSpacing),
                             SizedBox(
-                              height: tileHeight,
+                              height: cellHeight,
                               width: cellWidth,
                               child: _CategoryCard(
                                 tile: rows[ri][ci],
@@ -303,10 +764,17 @@ class _CategoryCard extends StatelessWidget {
     final isDark = currentBranding.tileDark;
 
     // ── Tile_Only_Icon flag ─────────────────────────────────────────────────
-    // true  → show only the tile image (no text label), image is enlarged and
-    //         centred so the extra space is properly used.
+    // true  → stacked layout: enlarged, centred image with the label under it.
     // false → default layout: image + text side by side.
-    final iconOnly = currentBranding.tileOnlyIcon;
+    //
+    // Implied by Tile_Big — see the note in CategorySection.
+    // See the note in CategorySection: the banner implies both.
+    final banner = currentBranding.tileTextBanner;
+    final bannerInvert = currentBranding.tileBannerInvert;
+    final bannerSquare = currentBranding.tileBannerSquare;
+    final tileBig = currentBranding.tileBig || banner;
+
+    final iconOnly = currentBranding.tileOnlyIcon || tileBig;
 
     // ── Tile_Only_Bg_Cricular flag ───────────────────────────────────────
     // Only meaningful when Tile_Only_Icon=true.
@@ -318,7 +786,7 @@ class _CategoryCard extends StatelessWidget {
     // Only meaningful when Tile_Only_Icon=true.
     // true  → show the tile name below the neumorphic image background.
     // false → icon only, no text at all.
-    final showText = currentBranding.tileText;
+    final showText = currentBranding.tileText || banner;
 
     // ── Tile_3_X_3 flag ──────────────────────────────────────────────────────
     // Only meaningful when Tile_Only_Icon=true.
@@ -332,6 +800,30 @@ class _CategoryCard extends StatelessWidget {
     // false → remove background, image grows to fill the entire bg size.
     final showBg = currentBranding.tileBg;
 
+    // ── Png_Bg flag ─────────────────────────────────────────────────────────
+    // Only meaningful when Tile_Only_Icon=true.
+    // true  → shadow is cast from the PNG's own outline; the neumorphic card
+    //         is suppressed so the icon floats on the page.
+    // false → the neumorphic card behaves as Tile_Bg dictates.
+    final pngBg = currentBranding.pngBg;
+
+    // ── Png_Bg_Dark flag ────────────────────────────────────────────────────
+    // Only meaningful when Png_Bg=true.
+    // true  → deep, tight shadow — the icon rests on the page.
+    // false → soft, wide shadow — the icon floats above it.
+    final pngBgDark = currentBranding.pngBgDark;
+
+    // ── Tile_Bg_Dark flag ───────────────────────────────────────────────────
+    // Only meaningful when Tile_Bg=true (and Png_Bg=false, which suppresses
+    // the card).
+    // true  → deep, tight neumorphic card.
+    // false → soft, wide one.
+    final tileBgDark = currentBranding.tileBgDark;
+
+    // ── Tile_Big flag ───────────────────────────────────────────────────────
+    // Only meaningful when Tile_Only_Icon=true: the card fills a square cell
+    // and the label moves inside it.
+
     return isFilled
         ? _FilledCard(
             tile: tile,
@@ -339,16 +831,34 @@ class _CategoryCard extends StatelessWidget {
             isFull: isFull,
             isDark: isDark,
             iconOnly: iconOnly,
+            isCircular: isCircular,
+            showText: showText,
+            tileBig: tileBig,
+            banner: banner,
+            bannerInvert: bannerInvert,
+            bannerSquare: bannerSquare,
+            is3x3: is3x3,
+            tileBgDark: tileBgDark,
+            pngBg: pngBg,
+            pngBgDark: pngBgDark,
             onTap: onTap,
           )
         : _DefaultCard(
             tile: tile,
+            index: index,
             isFull: isFull,
             iconOnly: iconOnly,
             isCircular: isCircular,
             showText: showText,
+            tileBig: tileBig,
+            banner: banner,
+            bannerInvert: bannerInvert,
+            bannerSquare: bannerSquare,
             is3x3: is3x3,
             showBg: showBg,
+            tileBgDark: tileBgDark,
+            pngBg: pngBg,
+            pngBgDark: pngBgDark,
             onTap: onTap,
           );
   }
@@ -360,22 +870,38 @@ class _CategoryCard extends StatelessWidget {
 
 class _DefaultCard extends StatelessWidget {
   final EducatorTile tile;
+  final int index;
   final bool isFull;
   final bool iconOnly;
   final bool isCircular;
   final bool showText;
+  final bool tileBig;
+  final bool banner;
+  final bool bannerInvert;
+  final bool bannerSquare;
   final bool is3x3;
   final bool showBg;
+  final bool tileBgDark;
+  final bool pngBg;
+  final bool pngBgDark;
   final VoidCallback? onTap;
 
   const _DefaultCard({
     required this.tile,
+    required this.index,
     required this.isFull,
     required this.iconOnly,
     this.isCircular = false,
     this.showText = false,
+    this.tileBig = false,
+    this.banner = false,
+    this.bannerInvert = false,
+    this.bannerSquare = false,
     this.is3x3 = true,
     this.showBg = true,
+    this.tileBgDark = false,
+    this.pngBg = false,
+    this.pngBgDark = false,
     this.onTap,
   });
 
@@ -387,15 +913,23 @@ class _DefaultCard extends StatelessWidget {
     final borderMid = AppColors.primary.withValues(alpha: 0.47);
     final innerColor = AppColors.primary.withValues(alpha: 0.12);
 
+    // Png_Bg applies to both layouts, so the tint is resolved once up here.
+    //
+    // Polarity follows the theme: black on a light canvas, white on a dark
+    // one, where black would simply disappear. White carries more weight per
+    // unit alpha, so it is scaled down rather than mirrored.
+    final Color shadowColor = AppColors.isDark
+        ? AppColors.alwaysWhite.withValues(alpha: pngBgDark ? 0.38 : 0.16)
+        : AppColors.black.withValues(alpha: pngBgDark ? 0.46 : 0.18);
+
     // ── Image dimensions ────────────────────────────────────────────────────
-    // iconOnly 3-col (is3x3=true) : 64dp — compact cells, smaller image.
-    // iconOnly 2-col (is3x3=false): 130dp — wider cells, much larger image.
-    // normal layout               : original side-by-side sizing.
-    final double imgSize = iconOnly
-        ? Screen.getSize(
-            isFull ? 88 : (is3x3 ? 64 : 130),
-          ).clamp(0.0, rh.isLargeScreen ? (isFull ? 140.0 : (is3x3 ? 110.0 : 180.0)) : (isFull ? 100.0 : (is3x3 ? 75.0 : 145.0)))
-        : Screen.getSize(isFull ? 68 : 52).clamp(0.0, rh.isLargeScreen ? (isFull ? 100.0 : 80.0) : (isFull ? 80.0 : 60.0));
+    // Only the side-by-side layout sizes its image here; the icon-only sizes
+    // live in [_IconTileMetrics] so the grid can reserve exactly what this
+    // card paints.
+    final double imgSize = Screen.getSize(isFull ? 68 : 52).clamp(
+      0.0,
+      rh.isLargeScreen ? (isFull ? 100.0 : 80.0) : (isFull ? 80.0 : 60.0),
+    );
 
     // ── Icon-only: neumorphic background (circle or rounded square) ───────────
     if (iconOnly) {
@@ -407,61 +941,209 @@ class _DefaultCard extends StatelessWidget {
       // The 'light source' highlight. On a dark surface a near-opaque
       // white reads as a blown-out patch rather than a soft edge, so
       // dark mode uses a much fainter sheen.
-      final nmLight = AppColors.alwaysWhite.withValues(
-        alpha: AppColors.isDark ? 0.06 : 0.85,
+      //
+      // Tile_Bg_Dark moves tint, blur and offset together — same reasoning
+      // as _ContourShadow: a strong tint left on a wide blur reads as haze
+      // around the card instead of elevation under it.
+      // The scale is weighted heavy on purpose. The old soft step was faint
+      // enough to read as no shadow at all, so it now sits where the old deep
+      // step did, and the deep step goes well past it.
+      // Light mode lights the card from the top-left: white highlight there,
+      // dark shadow opposite. Dark mode inverts the pair outright — on a
+      // near-black canvas the mark that reads as depth is a white one, so the
+      // two swap roles rather than merely changing alpha. White also needs
+      // less alpha than black to carry the same weight; pushed to parity it
+      // blows out into a halo.
+      //
+      // Dragged toward black for the deep light-mode step rather than just
+      // turned up: AppColors.primary at 0.6 alpha reads as a purple blob
+      // under the card, not as depth.
+      final Color nmDarkTint = tileBgDark
+          ? Color.lerp(AppColors.primary, AppColors.black, 0.45)!
+          : AppColors.primary;
+
+      final Color nmHighlight = AppColors.isDark
+          ? AppColors.black.withValues(alpha: tileBgDark ? 0.55 : 0.32)
+          : AppColors.alwaysWhite.withValues(alpha: tileBgDark ? 1.0 : 0.95);
+      final Color nmDepth = AppColors.isDark
+          ? AppColors.alwaysWhite.withValues(alpha: tileBgDark ? 0.34 : 0.16)
+          : nmDarkTint.withValues(alpha: tileBgDark ? 0.62 : 0.38);
+      final double nmBlur = tileBgDark ? 8 : 10;
+      final double nmSpread = tileBgDark ? 1 : 0;
+      final double nmShift = tileBgDark ? 9 : 6;
+
+      final metrics = _IconTileMetrics.resolve(
+        rh: rh,
+        isFull: isFull,
+        is3x3: is3x3,
       );
-      final nmDark = AppColors.primary.withValues(alpha: 0.22);
 
-      // Calculate padding based on whether we are showing the background.
-      final double defaultPadding = is3x3 ? 10 : 2;
-      final double paddingVal = showBg ? defaultPadding : 0;
+      // Tile_Bg and Png_Bg compose rather than exclude one another: the card
+      // is the surface the icon sits on, the contour shadow belongs to the
+      // icon itself. Either, both, or neither is a valid look — and with both
+      // on, Tile_Only_Bg_Cricular still shapes the card underneath.
+      final bool showCard = showBg;
 
-      // If we hide the background, we grow the image by the amount of padding
-      // removed so the container footprint stays exactly the same.
-      final double finalImgSize = showBg
-          ? imgSize
-          : imgSize + Screen.getSize(defaultPadding * 2);
+      // The footprint is constant either way: with the card on, the image is
+      // inset by [padding]; with it off the padding collapses and the image
+      // grows to fill the same square.
+      final double containerSize = metrics.containerSize;
+      final double paddingVal = showCard ? metrics.padding : 0;
 
-      final double containerSize =
-          finalImgSize + Screen.getSize(paddingVal * 2);
+      // Tile_Big lets the card fill its square cell; otherwise it keeps the
+      // fixed footprint the grid reserved for it.
+      final BoxDecoration? cardDecoration = showCard
+          ? BoxDecoration(
+              color: nmBg,
+              // ── Shape driven by Tile_Only_Bg_Cricular flag ─────────────
+              shape: isCircular ? BoxShape.circle : BoxShape.rectangle,
+              borderRadius: isCircular
+                  ? null
+                  : BorderRadius.circular(AppSizes.radiusM),
+              boxShadow: [
+                // ── Highlight (top-left) ──────────────────────────────────────────
+                BoxShadow(
+                  color: nmHighlight,
+                  blurRadius: nmBlur,
+                  spreadRadius: nmSpread,
+                  offset: Offset(-nmShift, -nmShift),
+                ),
+                // ── Depth shadow (bottom-right) ───────────────────────────────
+                BoxShadow(
+                  color: nmDepth,
+                  blurRadius: nmBlur,
+                  spreadRadius: nmSpread,
+                  offset: Offset(nmShift, nmShift),
+                ),
+              ],
+            )
+          : null;
 
-      // The neumorphic shape widget — shared between icon-only and
-      // icon+text layouts.
+      final Widget artwork = CustomNetworkImage(
+        url: tile.tileLogoURL,
+        fit: BoxFit.contain,
+        errorWidget: Image.asset(AppImages.bookImg),
+        // Only the decoded artwork gets the shadow — the shimmer placeholder
+        // keeps its plain rectangle.
+        imageBuilder: pngBg
+            ? (context, image) => _ContourShadow(
+                color: shadowColor,
+                extent: containerSize,
+                deep: pngBgDark,
+                child: image,
+              )
+            : null,
+      );
+
+      // Height pinned to the same line box the cell reserved, so a fractional
+      // rounding can never push a Column past its cell.
+      final Widget label = SizedBox(
+        height: metrics.labelHeight,
+        child: Text(
+          tile.tileName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          // primaryContent, not primary: on a white page they are the same
+          // colour, and on the dark canvas this is the variant lifted far
+          // enough to stay legible. A glow behind the glyphs was the other
+          // way to buy that contrast, but any glow thickens letterforms and
+          // the labels came out looking bolded.
+          style: AppTypography.bodyTextLargeSemiBold.copyWith(
+            color: AppColors.primaryContent,
+            fontSize: metrics.fontSize,
+          ),
+        ),
+      );
+
+      if (banner) {
+        // isDark: true asks the palette for full-strength tones rather than
+        // the 55%-toward-white wash — whichever half wears the colour here
+        // wears it at full saturation. The tone still varies per tile.
+        final Gradient bannerTone = _TilePalette.gradientAt(
+          index,
+          isDark: true,
+        );
+
+        return GestureDetector(
+          onTap: onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              // Banner mode always paints a surface — falling through to a
+              // transparent cell would leave the pill floating on the page.
+              // Which of card and pill is the coloured one is the whole of
+              // Tile_Banner_Invert; they are always opposites.
+              color: bannerInvert ? null : AppColors.white,
+              gradient: bannerInvert ? bannerTone : null,
+              borderRadius: BorderRadius.circular(AppSizes.radiusM),
+              boxShadow: showCard
+                  ? [
+                      BoxShadow(
+                        color: nmHighlight,
+                        blurRadius: nmBlur,
+                        spreadRadius: nmSpread,
+                        offset: Offset(-nmShift, -nmShift),
+                      ),
+                      BoxShadow(
+                        color: nmDepth,
+                        blurRadius: nmBlur,
+                        spreadRadius: nmSpread,
+                        offset: Offset(nmShift, nmShift),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: _BannerTile(
+              artwork: artwork,
+              label: tile.tileName,
+              index: index,
+              bannerGradient: bannerInvert ? null : bannerTone,
+              bannerColor: bannerInvert ? AppColors.white : null,
+              // Each tone pairs with its own backdrop, so contrast survives
+              // the swap: literal white on the coloured gradient, and the
+              // theme-aware token on the neutral pill — where pill and text
+              // flip together.
+              textColor: bannerInvert
+                  ? AppColors.textPrimary
+                  : AppColors.alwaysWhite,
+              squared: bannerSquare,
+              metrics: metrics,
+            ),
+          ),
+        );
+      }
+
+      if (tileBig) {
+        // Card fills the square cell, label pinned inside it at the bottom.
+        // Expanded hands the artwork whatever the label's fixed line box
+        // leaves, so the Column cannot overflow whatever the cell turns out
+        // to be.
+        return GestureDetector(
+          onTap: onTap,
+          child: Container(
+            decoration: cardDecoration,
+            padding: EdgeInsets.all(
+              showCard ? Screen.getSize(10) : Screen.getSize(4),
+            ),
+            child: showText
+                ? Column(
+                    children: [
+                      Expanded(child: artwork),
+                      SizedBox(height: metrics.gap),
+                      label,
+                    ],
+                  )
+                : artwork,
+          ),
+        );
+      }
+
       final Widget nmContainer = Container(
         height: containerSize,
         width: containerSize,
-        decoration: showBg
-            ? BoxDecoration(
-                color: nmBg,
-                // ── Shape driven by Tile_Only_Bg_Cricular flag ─────────────
-                shape: isCircular ? BoxShape.circle : BoxShape.rectangle,
-                borderRadius: isCircular
-                    ? null
-                    : BorderRadius.circular(AppSizes.radiusM),
-                boxShadow: [
-                  // ── Highlight (top-left) ──────────────────────────────────────────
-                  BoxShadow(
-                    color: nmLight,
-                    blurRadius: 14,
-                    spreadRadius: 1,
-                    offset: const Offset(-5, -5),
-                  ),
-                  // ── Depth shadow (bottom-right) ───────────────────────────────
-                  BoxShadow(
-                    color: nmDark,
-                    blurRadius: 14,
-                    spreadRadius: 1,
-                    offset: const Offset(5, 5),
-                  ),
-                ],
-              )
-            : null,
-        padding: EdgeInsets.all(Screen.getSize(paddingVal)),
-        child: CustomNetworkImage(
-          url: tile.tileLogoURL,
-          fit: BoxFit.contain,
-          errorWidget: Image.asset(AppImages.bookImg),
-        ),
+        decoration: cardDecoration,
+        padding: EdgeInsets.all(paddingVal),
+        child: artwork,
       );
 
       return GestureDetector(
@@ -473,17 +1155,8 @@ class _DefaultCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     nmContainer,
-                    SizedBox(height: Screen.getVerticalSize(6)),
-                    Text(
-                      tile.tileName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                        color: AppColors.primary,
-                        fontSize: rh.isLargeScreen ? rh.cappedFontSize(20) : Screen.getFontSizeCapped(18),
-                      ),
-                    ),
+                    SizedBox(height: metrics.gap),
+                    label,
                   ],
                 )
               // ── Icon only: just the neumorphic container ─────────────────────
@@ -541,6 +1214,14 @@ class _DefaultCard extends StatelessWidget {
                             url: tile.tileLogoURL,
                             fit: BoxFit.contain,
                             errorWidget: Image.asset(AppImages.bookImg),
+                            imageBuilder: pngBg
+                                ? (context, image) => _ContourShadow(
+                                    color: shadowColor,
+                                    extent: imgSize,
+                                    deep: pngBgDark,
+                                    child: image,
+                                  )
+                                : null,
                           ),
                         ),
                         SizedBox(width: Screen.getHorizontalSize(10)),
@@ -550,7 +1231,7 @@ class _DefaultCard extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                              color: AppColors.primary,
+                              color: AppColors.primaryContent,
                               fontSize: rh.isLargeScreen
                                   ? rh.cappedFontSize(isFull ? 18 : 16)
                                   : Screen.getFontSizeCapped(isFull ? 16 : 13),
@@ -598,6 +1279,16 @@ class _FilledCard extends StatefulWidget {
   final bool isFull;
   final bool isDark;
   final bool iconOnly;
+  final bool isCircular;
+  final bool showText;
+  final bool tileBig;
+  final bool banner;
+  final bool bannerInvert;
+  final bool bannerSquare;
+  final bool is3x3;
+  final bool tileBgDark;
+  final bool pngBg;
+  final bool pngBgDark;
   final VoidCallback? onTap;
 
   const _FilledCard({
@@ -606,6 +1297,16 @@ class _FilledCard extends StatefulWidget {
     required this.isFull,
     required this.isDark,
     required this.iconOnly,
+    this.isCircular = false,
+    this.showText = false,
+    this.tileBig = false,
+    this.banner = false,
+    this.bannerInvert = false,
+    this.bannerSquare = false,
+    this.is3x3 = false,
+    this.tileBgDark = false,
+    this.pngBg = false,
+    this.pngBgDark = false,
     this.onTap,
   });
 
@@ -631,6 +1332,10 @@ class _FilledCardState extends State<_FilledCard>
     // Ease-in-out so the streak accelerates in and fades out naturally.
     _shineAnim = CurvedAnimation(parent: _shineCtrl, curve: Curves.easeInOut);
 
+    // Nothing to sweep when the card is the neutral half — _BannerTile runs
+    // the streak on the pill instead.
+    if (widget.banner && !widget.bannerInvert) return;
+
     // Stagger tiles so they don't sweep simultaneously.
     Future.delayed(Duration(milliseconds: widget.index * 320), () {
       if (!mounted) return;
@@ -655,31 +1360,102 @@ class _FilledCardState extends State<_FilledCard>
   Widget build(BuildContext context) {
     final rh = ResponsiveHelper.of(context);
     final isDark = widget.isDark;
-    final radius = BorderRadius.circular(AppSizes.radiusM);
-    final gradient = _TilePalette.gradientAt(widget.index, isDark: isDark);
+
+    // ── Tile_Only_Bg_Cricular flag ──────────────────────────────────────────
+    // Only meaningful alongside Tile_Only_Icon: the side-by-side layout needs
+    // a wide card to hold its label, and a circle cannot be one.
+    final bool circular = widget.iconOnly && widget.isCircular;
+
+    // An over-large radius is clamped by RRect to half the shorter side, which
+    // on a square is exactly a circle — so one value covers both shapes and
+    // every borderRadius: below (decoration, clip, ink splash) stays in sync.
+    final radius = BorderRadius.circular(circular ? 999 : AppSizes.radiusM);
+    final gradient = _gradient;
     final staticShine = _TilePalette.shineAt(widget.index);
 
     // Shadow: vivid and coloured in dark mode; soft and muted in light mode.
-    final shadowColor = isDark
-        ? gradient.colors.first.withValues(alpha: 0.45)
-        : gradient.colors.first.withValues(alpha: 0.22);
+    // Tile_Bg_Dark then moves tint, blur and offset together, exactly as it
+    // does for the neumorphic card and as Png_Bg_Dark does for the icon.
+    //
+    // Weighted heavy to match the neumorphic scale: the soft step is what the
+    // deep step used to be, and the deep step is well past it.
+    //
+    // Depth here comes mostly from the black veil below, not from this
+    // coloured ambient — a gradient hue turned up just saturates the page
+    // around the tile. So the tint is dragged toward black for the deep step
+    // and the veil carries the real weight.
+    final Color ambientTint = widget.tileBgDark
+        ? Color.lerp(gradient.colors.first, Colors.black, 0.35)!
+        : gradient.colors.first;
+    final shadowColor = ambientTint.withValues(
+      alpha: widget.tileBgDark
+          ? (isDark ? 0.80 : 0.52)
+          : (isDark ? 0.55 : 0.32),
+    );
+    final double cardBlur = widget.tileBgDark ? 10 : 12;
+    final double cardShift = widget.tileBgDark ? 11 : 8;
 
-    return Container(
+    // NB: `isDark` above is the Tile_Dark *flag* — which gradient tones to
+    // use — not the app theme. Shadow polarity keys off the actual theme, so
+    // it reads AppColors.isDark directly.
+    //
+    // The veil under the card carries most of its weight, so it is the piece
+    // that inverts: black on a light canvas, white on a dark one. White needs
+    // roughly a third less alpha than black to land the same, so it is scaled
+    // rather than mirrored.
+    final double cardVeil = widget.tileBgDark ? 0.28 : 0.12;
+
+    // Side-by-side layout: the icon sits on the gradient, so its contour
+    // shadow follows the same theme polarity as everywhere else.
+    final double rowIconExtent = Screen.getVerticalSize(
+      widget.isFull ? 68 : 52,
+    ).clamp(0.0, rh.isLargeScreen ? 90.0 : 999.0);
+    final Color rowShadowColor = AppColors.isDark
+        ? AppColors.alwaysWhite.withValues(
+            alpha: widget.pngBgDark ? 0.38 : 0.16,
+          )
+        : AppColors.black.withValues(alpha: widget.pngBgDark ? 0.46 : 0.18);
+    final Color veilColor = AppColors.isDark
+        ? AppColors.alwaysWhite.withValues(alpha: cardVeil * 0.68)
+        : AppColors.black.withValues(alpha: cardVeil);
+
+    final metrics = _IconTileMetrics.resolve(
+      rh: rh,
+      isFull: widget.isFull,
+      is3x3: widget.is3x3,
+    );
+
+    // Tile_Text_Banner moves the brand colour up into the pill and drops the
+    // surface behind the artwork to the plain panel tone — unless
+    // Tile_Banner_Invert asks for the reverse. Both coloured at once and the
+    // pill has nothing to read against.
+    final bool colouredCard = !widget.banner || widget.bannerInvert;
+
+    // Gloss, shine and top-edge highlight follow the colour. They model light
+    // moving across a saturated surface, so on the neutral banner-mode card
+    // they would just smear — but with Tile_Banner_Invert the card is the
+    // coloured half again and they belong back on it.
+    //
+    // The streak sits below the content layer, so the pill occludes it rather
+    // than the sweep crossing the label.
+    final bool decorativeLayers = colouredCard;
+
+    final Widget card = Container(
       decoration: BoxDecoration(
         borderRadius: radius,
         boxShadow: [
           // Coloured ambient shadow — signature of premium cards.
           BoxShadow(
             color: shadowColor,
-            blurRadius: 16,
+            blurRadius: cardBlur,
             spreadRadius: 0,
-            offset: const Offset(0, 6),
+            offset: Offset(0, cardShift),
           ),
           // Soft black shadow for depth separation.
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
+            color: veilColor,
+            blurRadius: cardBlur * 0.5,
+            offset: Offset(0, cardShift * 0.4),
           ),
         ],
       ),
@@ -687,68 +1463,76 @@ class _FilledCardState extends State<_FilledCard>
         borderRadius: radius,
         child: Stack(
           children: [
-            // ── Base gradient fill ──────────────────────────────────────
+            // ── Base fill ───────────────────────────────────────────────
             Positioned.fill(
-              child: Container(decoration: BoxDecoration(gradient: gradient)),
-            ),
-
-            // ── Static gloss overlay ────────────────────────────────────
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(gradient: staticShine),
-                ),
+              child: Container(
+                decoration: colouredCard
+                    ? BoxDecoration(gradient: gradient)
+                    : BoxDecoration(color: AppColors.white),
               ),
             ),
 
-            // ── Animated shine sweep ────────────────────────────────────
-            // A narrow white streak that slides diagonally from the
-            // top-left corner to the bottom-right corner on each pass.
-            Positioned.fill(
-              child: IgnorePointer(
-                child: AnimatedBuilder(
-                  animation: _shineAnim,
-                  builder: (_, __) {
-                    final t = _shineAnim.value;
-                    // Map [0,1] → streak centre travels from -0.6 to 1.6
-                    // (just off screen on both ends) so the entry/exit is
-                    // always clean with no hard edges visible.
-                    final center = -0.6 + t * 2.2;
-                    const halfWidth = 0.18; // streak width as fraction
+            if (decorativeLayers) ...[
+              // ── Static gloss overlay ────────────────────────────────────
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(gradient: staticShine),
+                  ),
+                ),
+              ),
 
-                    return Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          stops: [
-                            (center - halfWidth).clamp(0.0, 1.0),
-                            center.clamp(0.0, 1.0),
-                            (center + halfWidth).clamp(0.0, 1.0),
-                          ],
-                          colors: [
-                            AppColors.alwaysWhite.withValues(alpha: 0.0),
-                            AppColors.alwaysWhite.withValues(alpha: 0.28),
-                            AppColors.alwaysWhite.withValues(alpha: 0.0),
-                          ],
+              // ── Animated shine sweep ────────────────────────────────────
+              // A narrow white streak that slides diagonally from the
+              // top-left corner to the bottom-right corner on each pass.
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _shineAnim,
+                    builder: (_, __) {
+                      final t = _shineAnim.value;
+                      // Map [0,1] → streak centre travels from -0.6 to 1.6
+                      // (just off screen on both ends) so the entry/exit is
+                      // always clean with no hard edges visible.
+                      final center = -0.6 + t * 2.2;
+                      const halfWidth = 0.18; // streak width as fraction
+
+                      return Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            stops: [
+                              (center - halfWidth).clamp(0.0, 1.0),
+                              center.clamp(0.0, 1.0),
+                              (center + halfWidth).clamp(0.0, 1.0),
+                            ],
+                            colors: [
+                              AppColors.alwaysWhite.withValues(alpha: 0.0),
+                              AppColors.alwaysWhite.withValues(alpha: 0.28),
+                              AppColors.alwaysWhite.withValues(alpha: 0.0),
+                            ],
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ),
-            ),
 
-            // ── Subtle inner highlight at top edge ─────────────────────
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 1,
-              child: IgnorePointer(
-                child: Container(color: AppColors.alwaysWhite.withValues(alpha: 0.30)),
+              // ── Subtle inner highlight at top edge ─────────────────────
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 1,
+                child: IgnorePointer(
+                  child: Container(
+                    color: AppColors.alwaysWhite.withValues(alpha: 0.30),
+                  ),
+                ),
               ),
-            ),
+            ],
 
             // ── Tap ripple + content ────────────────────────────────────
             Positioned.fill(
@@ -761,44 +1545,24 @@ class _FilledCardState extends State<_FilledCard>
                   highlightColor: AppColors.alwaysWhite.withValues(alpha: 0.06),
                   child: Center(
                     child: widget.iconOnly
-                        // ── Icon-only layout: centred, enlarged image ─────
-                        ? SizedBox(
-                            height: Screen.getSize(
-                              widget.isFull ? 80 : 64,
-                            ).clamp(0.0, rh.isLargeScreen ? 120.0 : (widget.isFull ? 90.0 : 75.0)),
-                            width: Screen.getSize(
-                              widget.isFull ? 80 : 64,
-                            ).clamp(0.0, rh.isLargeScreen ? 120.0 : (widget.isFull ? 90.0 : 75.0)),
-                            child: CustomNetworkImage(
-                              url: widget.tile.tileLogoURL,
-                              fit: BoxFit.contain,
-                              errorWidget: ColorFiltered(
-                                colorFilter: const ColorFilter.matrix([
-                                  -1,
-                                  0,
-                                  0,
-                                  0,
-                                  255,
-                                  0,
-                                  -1,
-                                  0,
-                                  0,
-                                  255,
-                                  0,
-                                  0,
-                                  -1,
-                                  0,
-                                  255,
-                                  0,
-                                  0,
-                                  0,
-                                  1,
-                                  0,
-                                ]),
-                                child: Image.asset(AppImages.bookImg),
-                              ),
-                            ),
-                          )
+                        // ── Icon-only layout: artwork fills the card ──────
+                        // The image used to be pinned to a fixed 64dp box,
+                        // which left a 155dp gradient card wrapped around a
+                        // postage stamp. It now takes the whole card, inset
+                        // only enough to clear the rounded corners.
+                        //
+                        // BoxFit.contain still governs the artwork, so a
+                        // square logo lands square and a wide one letterboxes
+                        // rather than stretching — "full width" means the box
+                        // is full width, not that the logo gets distorted to
+                        // fill it.
+                        // ── Icon-only layout: artwork fills the card,
+                        // with the Tile_Text label inside it ─────────
+                        ? (widget.banner
+                              ? _bannerTile()
+                              : (widget.tileBig && widget.showText
+                                    ? _bigContent()
+                                    : _artwork()))
                         // ── Normal layout: image + text side by side ──────
                         : Padding(
                             padding: widget.isFull
@@ -810,15 +1574,21 @@ class _FilledCardState extends State<_FilledCard>
                                 // Icon — no background container, image fills
                                 // the SizedBox directly for maximum visible size.
                                 SizedBox(
-                                  height: Screen.getVerticalSize(
-                                    widget.isFull ? 68 : 52,
-                                  ).clamp(0.0, rh.isLargeScreen ? 90.0 : 999.0),
+                                  height: rowIconExtent,
                                   width: Screen.getHorizontalSize(
                                     widget.isFull ? 68 : 52,
                                   ).clamp(0.0, rh.isLargeScreen ? 90.0 : 999.0),
                                   child: CustomNetworkImage(
                                     url: widget.tile.tileLogoURL,
                                     fit: BoxFit.contain,
+                                    imageBuilder: widget.pngBg
+                                        ? (context, image) => _ContourShadow(
+                                            color: rowShadowColor,
+                                            extent: rowIconExtent,
+                                            deep: widget.pngBgDark,
+                                            child: image,
+                                          )
+                                        : null,
                                     errorWidget: ColorFiltered(
                                       colorFilter: const ColorFilter.matrix([
                                         -1,
@@ -860,7 +1630,9 @@ class _FilledCardState extends State<_FilledCard>
                                               ? AppColors.alwaysWhite
                                               : AppColors.textPrimary,
                                           fontSize: rh.isLargeScreen
-                                              ? rh.cappedFontSize(widget.isFull ? 18 : 16)
+                                              ? rh.cappedFontSize(
+                                                  widget.isFull ? 18 : 16,
+                                                )
                                               : Screen.getFontSizeCapped(
                                                   widget.isFull ? 16 : 13,
                                                 ),
@@ -887,6 +1659,204 @@ class _FilledCardState extends State<_FilledCard>
               ),
             ),
           ],
+        ),
+      ),
+    );
+
+    // A circle needs a square to live in and the grid cell is not one — 3-col
+    // cells land at roughly 100x90. AspectRatio takes the shorter side and
+    // Center keeps the result in the middle of the cell, so the tile reads as
+    // a circle rather than as a squashed oval.
+    final Widget shaped = circular
+        ? Center(child: AspectRatio(aspectRatio: 1, child: card))
+        : card;
+
+    // With Tile_Big the label is drawn inside the card by _bigContent, so
+    // there is nothing to hang underneath it.
+    if (!(widget.iconOnly && widget.showText) || widget.tileBig) return shaped;
+
+    // Tile_Text hangs below the card, on the page — the same placement the
+    // neumorphic card uses, so the two styles read as the same component with
+    // a different skin.
+    //
+    // Expanded hands the card whatever is left once the label's fixed line box
+    // is taken, so the card shrinks to fit rather than the Column overflowing,
+    // no matter how the cell-height constants drift later.
+    return Column(
+      children: [
+        Expanded(child: shaped),
+        SizedBox(height: metrics.gap),
+        SizedBox(
+          height: metrics.labelHeight,
+          child: Text(
+            widget.tile.tileName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            // The label sits on the page canvas now, not on the gradient, so
+            // the theme-aware token is the right call here — the reverse of
+            // the rule that applies to text drawn *on* the card.
+            style: AppTypography.bodyTextLargeSemiBold.copyWith(
+              color: AppColors.primaryContent,
+              fontSize: metrics.fontSize,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Tile_Text_Banner content — see [_BannerTile].
+  Widget _bannerTile() {
+    return _BannerTile(
+      artwork: _artwork(),
+      label: widget.tile.tileName,
+      index: widget.index,
+      // Always the opposite of the card — see `colouredCard` in build().
+      bannerGradient: widget.bannerInvert ? null : _gradient,
+      bannerColor: widget.bannerInvert ? AppColors.white : null,
+      // Each tone pairs with its own backdrop, so contrast survives the swap:
+      // literal white on the coloured gradient, and the theme-aware token on
+      // the neutral pill — where pill and text flip together.
+      textColor: widget.bannerInvert
+          ? AppColors.textPrimary
+          : AppColors.alwaysWhite,
+      squared: widget.bannerSquare,
+      metrics: _IconTileMetrics.resolve(
+        rh: ResponsiveHelper.of(context),
+        isFull: widget.isFull,
+        is3x3: widget.is3x3,
+      ),
+    );
+  }
+
+  /// Tile_Big content: artwork above a label drawn *on* the gradient.
+  ///
+  /// Expanded hands the artwork whatever the label's fixed line box leaves,
+  /// so this cannot overflow however the cell is sized.
+  Widget _bigContent() {
+    final metrics = _IconTileMetrics.resolve(
+      rh: ResponsiveHelper.of(context),
+      isFull: widget.isFull,
+      is3x3: widget.is3x3,
+    );
+
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: Screen.getSize(8),
+        vertical: Screen.getSize(8),
+      ),
+      child: Column(
+        children: [
+          Expanded(child: _artwork()),
+          SizedBox(height: metrics.gap),
+          SizedBox(
+            height: metrics.labelHeight,
+            child: Text(
+              widget.tile.tileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyTextLargeSemiBold.copyWith(
+                // Both tones are literal on purpose. This label is drawn on
+                // the gradient, and the gradient does not follow the app
+                // theme — Tile_Dark alone decides pastel or saturated — so
+                // AppColors.textPrimary would flip to near-white in dark mode
+                // and vanish on a pastel card.
+                color: widget.isDark
+                    ? AppColors.alwaysWhite
+                    : AppColors.black.withValues(alpha: 0.82),
+                fontSize: metrics.fontSize,
+                shadows: widget.isDark
+                    ? [
+                        Shadow(
+                          color: AppColors.black.withValues(alpha: 0.25),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// This tile's palette slot. Read by build() for the card fill and by
+  /// [_bannerTile] for the pill — in banner mode the colour moves from the
+  /// former to the latter, so both need the same source.
+  LinearGradient get _gradient =>
+      _TilePalette.gradientAt(widget.index, isDark: widget.isDark);
+
+  Widget _artwork() {
+    /// The artwork alone — full-bleed inside whatever box it is handed.
+    return Padding(
+      padding: EdgeInsets.all(Screen.getSize(6)),
+      child: SizedBox.expand(
+        // LayoutBuilder because the contour shadow scales
+        // off the icon's rendered extent, and on a filled
+        // card that comes from the cell — not from a
+        // constant this widget already knows.
+        child: LayoutBuilder(
+          builder: (context, c) {
+            final double extent = c.maxWidth < c.maxHeight
+                ? c.maxWidth
+                : c.maxHeight;
+            return CustomNetworkImage(
+              url: widget.tile.tileLogoURL,
+              fit: BoxFit.contain,
+              // Same polarity rule as the neumorphic
+              // card: black in light mode, white in
+              // dark. Note the backdrop here is the
+              // gradient, not the page — so with
+              // Tile_Dark off the card stays pastel in
+              // both themes and a white shadow on it
+              // has little to bite against.
+              imageBuilder: widget.pngBg
+                  ? (context, image) => _ContourShadow(
+                      color: AppColors.isDark
+                          ? AppColors.alwaysWhite.withValues(
+                              alpha: widget.pngBgDark ? 0.38 : 0.16,
+                            )
+                          : AppColors.black.withValues(
+                              alpha: widget.pngBgDark ? 0.46 : 0.18,
+                            ),
+                      extent: extent,
+                      deep: widget.pngBgDark,
+                      child: image,
+                    )
+                  : null,
+              errorWidget: ColorFiltered(
+                // Inverts the fallback book art to white
+                // so it reads against the gradient.
+                colorFilter: const ColorFilter.matrix([
+                  -1,
+                  0,
+                  0,
+                  0,
+                  255,
+                  0,
+                  -1,
+                  0,
+                  0,
+                  255,
+                  0,
+                  0,
+                  -1,
+                  0,
+                  255,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                ]),
+                child: Image.asset(AppImages.bookImg),
+              ),
+            );
+          },
         ),
       ),
     );

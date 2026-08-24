@@ -11,6 +11,7 @@ import 'package:nexora/core/theme/responsive_helper.dart';
 import 'package:nexora/core/utils/utils.dart';
 import 'package:nexora/core/widgets/custom_action_button.dart';
 import 'package:nexora/core/widgets/custom_network_image.dart';
+import 'package:nexora/core/widgets/shine_sweep.dart';
 import 'package:nexora/core/widgets/profile_image_viewer.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/presentation/bloc/continue_courses_cubit.dart';
@@ -482,7 +483,7 @@ class _HomePageState extends State<HomePage>
           final imageUrl = profile?.userProfileImage;
           final name = profile?.name ?? '';
           final initials = Utils.getInitials(name.isEmpty ? '?' : name);
-          final displayName = name.isNotEmpty ? name : '—';
+          final displayName = name.isNotEmpty ? name : '-';
           return Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -499,43 +500,67 @@ class _HomePageState extends State<HomePage>
                   tag: (imageUrl != null && imageUrl.isNotEmpty)
                       ? kProfileImageHeroTag
                       : null,
-                  child: (imageUrl != null && imageUrl.isNotEmpty)
-                      ? CircleAvatar(
-                          radius: 26,
-                          backgroundImage: CachedNetworkImageProvider(
-                            imageUrl,
-                            cacheKey: Utils.imageCacheKey(imageUrl),
-                          ),
-                        )
-                      : Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              colors: [
-                                AppColors.alwaysWhite.withValues(alpha: 0.35),
-                                AppColors.alwaysWhite.withValues(alpha: 0.15),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
+                  // ── Gradient ring ──────────────────────────────────
+                  // Drawn as a filled circle with the avatar inset on top
+                  // rather than as a Border: a Border takes one colour per
+                  // side and cannot carry a gradient, and BoxShape.circle
+                  // rules out the GradientBorder the category cards use,
+                  // which is built for rounded rectangles.
+                  //
+                  // The outer footprint stays 52 and the avatar shrinks to
+                  // 48 inside it, so adding the ring does not nudge the
+                  // greeting text or grow the header band.
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    padding: const EdgeInsets.all(_avatarRingWidth),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        // The warm accent pair, which the brand config
+                        // reserves for exactly this — an edge catching the
+                        // light. It also has to hold its own against a pink
+                        // and indigo band, which a white ring would not.
+                        colors: [AppColors.accentSoft, AppColors.accent],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: (imageUrl != null && imageUrl.isNotEmpty)
+                        ? CircleAvatar(
+                            radius: _avatarInnerRadius,
+                            backgroundImage: CachedNetworkImageProvider(
+                              imageUrl,
+                              cacheKey: Utils.imageCacheKey(imageUrl),
                             ),
-                            border: Border.all(
-                              color: AppColors.alwaysWhite.withValues(alpha: 0.6),
-                              width: 1.5,
+                          )
+                        : Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [
+                                  AppColors.alwaysWhite.withValues(alpha: 0.35),
+                                  AppColors.alwaysWhite.withValues(alpha: 0.15),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              // The white hairline this used to carry is
+                              // gone: inside the accent ring it read as a
+                              // second, competing edge.
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              initials,
+                              style: AppTypography.h6SemiBold.copyWith(
+                                color: AppColors.alwaysWhite,
+                                fontSize: Screen.getFontSize(16),
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            initials,
-                            style: AppTypography.h6SemiBold.copyWith(
-                              color: AppColors.alwaysWhite,
-                              fontSize: Screen.getFontSize(16),
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -639,6 +664,12 @@ class _HomePageState extends State<HomePage>
 /// subtle gradient — top crisp, bottom slightly softened — without
 /// needing an image asset. The SafeArea inside makes the band hug the
 /// status bar on every device while leaving the content padded.
+/// Thickness of the gradient ring around the header avatar.
+const double _avatarRingWidth = 2.0;
+
+/// Radius of the avatar inside that ring — half of (52 - 2 * ring).
+const double _avatarInnerRadius = (52 - _avatarRingWidth * 2) / 2;
+
 class _HeaderBand extends StatelessWidget {
   final Widget child;
 
@@ -646,12 +677,34 @@ class _HeaderBand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: AppColors.primaryGradient, // Hot pink → soft lavender
-      ),
-      child: SafeArea(bottom: false, child: child),
+    final Widget content = SafeArea(bottom: false, child: child);
+
+    if (!currentBranding.headerShine) {
+      return Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          gradient: AppColors.primaryGradient, // Hot pink → soft lavender
+        ),
+        child: content,
+      );
+    }
+
+    // Three layers rather than a streak laid over the finished band: the
+    // sweep has to sit above the gradient but below the header's own text and
+    // icons. Over the top it would wash across white glyphs, which reads as a
+    // rendering glitch rather than as light crossing the surface behind them.
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(gradient: AppColors.primaryGradient),
+          ),
+        ),
+        // Clipped so the streak stops at the band's edge instead of bleeding
+        // onto the content below it.
+        const Positioned.fill(child: ClipRect(child: ShineSweep())),
+        SizedBox(width: double.infinity, child: content),
+      ],
     );
   }
 }

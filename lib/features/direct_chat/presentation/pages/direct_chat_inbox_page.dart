@@ -261,7 +261,7 @@ class _EmptyInbox extends StatelessWidget {
             SizedBox(height: Screen.getVerticalSize(8)),
             Text(
               canStart
-                  ? 'Message a faculty member directly — they\'ll reply here.'
+                  ? 'Message a faculty member directly. They\'ll reply here.'
                   : 'No faculty are available to message right now.',
               textAlign: TextAlign.center,
               style: AppTypography.bodyTextLargeMedium.copyWith(

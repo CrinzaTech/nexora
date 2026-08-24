@@ -27,6 +27,16 @@ class WebinarCheckoutState with _$WebinarCheckoutState {
   const factory WebinarCheckoutState.alreadyPaid(String message) =
       _AlreadyPaid;
 
+  /// The server declined to sell a seat at all, so no sheet ever opened
+  /// and nothing was charged.
+  ///
+  /// The case this exists for is a **workshop that filled up** while the
+  /// learner was deciding: `create-order` answers 403 with the same
+  /// sentence the detail call would now give. Deliberately not [failed]
+  /// — that offers a retry, and no amount of retrying frees a seat.
+  /// [message] is the server's own wording and is shown verbatim.
+  const factory WebinarCheckoutState.refused(String message) = _Refused;
+
   /// Nothing was charged, or the payment was not captured. [canRetry] is
   /// false for a signature mismatch: retrying a payment we could not
   /// verify only produces a second one to refund.

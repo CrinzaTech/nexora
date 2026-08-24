@@ -26,8 +26,8 @@ class TransactionHistoryCard extends StatelessWidget {
     //     : '';
     final dateLabel = transaction.createdAt != null
         ? DateFormat('d MMM yyyy').format(transaction.createdAt!)
-        : '—';
-    final method = transaction.paymentMethod ?? '—';
+        : '-';
+    final method = transaction.paymentMethod ?? '-';
 
     return InkWell(
       onTap: onTap,

@@ -48,7 +48,7 @@ class _AppVersionTextState extends State<AppVersionText> {
       behavior: HitTestBehavior.opaque,
       onLongPress: () => _CrashlyticsDiagnostics.show(context),
       child: Text(
-        _label ?? "App Version —",
+        _label ?? "App Version",
         style: AppTypography.bodyTextSmallMedium.copyWith(
           color: AppColors.mutedTextPrimary,
           fontSize: Screen.getFontSize(12),

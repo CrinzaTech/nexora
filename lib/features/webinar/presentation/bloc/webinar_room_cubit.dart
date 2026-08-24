@@ -61,6 +61,10 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
   String _slug = '';
   String _roomId = '';
 
+  /// What the detail payload said about this webinar, kept so a retry
+  /// re-opens on the same screen rather than falling back to the player.
+  bool _isStream = true;
+
   /// The webinar this room belongs to. Read by the error screen, which
   /// has to be able to send a learner back to the detail page — and the
   /// checkout on it — when A3 refuses them for want of a payment.
@@ -91,10 +95,28 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
 
   /// Take the seat and enter. [roomId] comes from the A1/A2 payload and
   /// is only ever used to join the socket room.
-  Future<void> enter({required String slug, required String roomId}) async {
+  /// [isStream] is what the **detail** payload already said about this
+  /// webinar, and it decides the opening phase.
+  ///
+  /// Without it the room opens on `joining` for everything, renders the
+  /// player layout for a beat, and only swaps to the venue once the
+  /// first state call lands. For a workshop attendee that is a live
+  /// class flashing past on the way to an address — two screens where
+  /// one was asked for. The join mode is known before the room is even
+  /// built, so the right screen is shown from the first frame.
+  Future<void> enter({
+    required String slug,
+    required String roomId,
+    bool isStream = true,
+  }) async {
     _slug = slug;
     _roomId = roomId;
-    emit(state.copyWith(phase: WebinarPhase.joining));
+    _isStream = isStream;
+    emit(
+      state.copyWith(
+        phase: isStream ? WebinarPhase.joining : WebinarPhase.external,
+      ),
+    );
 
     // A3 both seats them and hands back the lobby payload, so there is
     // no follow-up state call on the way in.
@@ -120,7 +142,8 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
   }
 
   /// Retry after a hard error.
-  Future<void> retry() => enter(slug: _slug, roomId: _roomId);
+  Future<void> retry() =>
+      enter(slug: _slug, roomId: _roomId, isStream: _isStream);
 
   // ── Lobby ────────────────────────────────────────────────────────
 
@@ -525,7 +548,7 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
         state.copyWith(
           chatConnected: false,
           transientNotice:
-              'Not connected to the webinar — try again in a moment.',
+              'Not connected to the webinar. Try again in a moment.',
         ),
       );
       return;

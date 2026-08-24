@@ -495,7 +495,7 @@ class ResultQuestionCard extends StatelessWidget {
           ? 'Skipped'
           : (question.studentBoolean! ? 'True' : 'False'),
       correct: question.correctBoolean == null
-          ? '—'
+          ? '-'
           : (question.correctBoolean! ? 'True' : 'False'),
       isCorrect: question.isCorrect == true,
       skipped: question.studentBoolean == null,
@@ -505,7 +505,7 @@ class ResultQuestionCard extends StatelessWidget {
   Widget _integerReview() {
     return _yourVsCorrect(
       your: question.studentInteger?.toString() ?? 'Skipped',
-      correct: question.correctInteger?.toString() ?? '—',
+      correct: question.correctInteger?.toString() ?? '-',
       isCorrect: question.isCorrect == true,
       skipped: question.studentInteger == null,
     );
@@ -657,7 +657,7 @@ class ResultQuestionCard extends StatelessWidget {
                     // theirs wasn't it.
                     if (!row.isCorrect)
                       _pill(
-                        'Correct: ${row.correctRightText ?? '—'}',
+                        'Correct: ${row.correctRightText ?? '-'}',
                         AppColors.success,
                         AppColors.white,
                         textOnly: true,

@@ -639,7 +639,7 @@ class _EmptyConversation extends StatelessWidget {
             Text(
               isBlocked
                   ? 'This conversation has been closed.'
-                  : 'Say hello — your message goes straight to them.',
+                  : 'Say hello. Your message goes straight to them.',
               textAlign: TextAlign.center,
               style: AppTypography.bodyTextLargeMedium.copyWith(
                 color: AppColors.mutedTextPrimary,

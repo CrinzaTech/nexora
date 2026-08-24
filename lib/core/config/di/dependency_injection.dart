@@ -115,6 +115,14 @@ import 'package:nexora/features/webinar/domain/usecases/get_webinars_usecase.dar
 import 'package:nexora/features/webinar/domain/usecases/webinar_payment_usecases.dart';
 import 'package:nexora/features/webinar/domain/usecases/webinar_session_usecases.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinar_checkout_cubit.dart';
+import 'package:nexora/features/workshop_pass/data/repositories/workshop_pass_repository_impl.dart';
+import 'package:nexora/features/workshop_pass/data/services/workshop_pass_cache.dart';
+import 'package:nexora/features/workshop_pass/domain/repositories/workshop_pass_repository.dart';
+import 'package:nexora/features/workshop_pass/domain/usecases/download_workshop_pass_usecase.dart';
+import 'package:nexora/features/workshop_pass/domain/usecases/get_workshop_pass_usecase.dart';
+import 'package:nexora/features/workshop_pass/presentation/bloc/workshop_pass_cubit.dart';
+import 'package:nexora/features/workshop_pass/domain/usecases/get_my_webinars_usecase.dart';
+import 'package:nexora/features/workshop_pass/presentation/bloc/my_webinars_cubit.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinar_detail_cubit.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinar_room_cubit.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinars_cubit.dart';
@@ -491,6 +499,37 @@ Future<void> setupLocator() async {
       createWebinarOrderUseCase: sl(),
       verifyWebinarPaymentUseCase: sl(),
     ),
+  );
+
+  // ============================================
+  // FEATURES - WORKSHOP PASS
+  // ============================================
+  // The entry ticket for a paid in-person workshop. Takes raw Dio
+  // alongside ApiClient for the same reason the certificate repository
+  // does — the save action returns a PDF, which needs
+  // ResponseType.bytes and a far longer receive timeout than the
+  // generated client can express.
+  sl.registerLazySingleton(() => WorkshopPassCache());
+  sl.registerLazySingleton<WorkshopPassRepository>(
+    () => WorkshopPassRepositoryImpl(
+      sl<ApiClient>(),
+      sl<Dio>(),
+      sl<WorkshopPassCache>(),
+    ),
+  );
+  sl.registerLazySingleton(() => GetWorkshopPassUseCase(sl()));
+  sl.registerLazySingleton(() => DownloadWorkshopPassUseCase(sl()));
+  // Factory: one cubit per open pass screen, so two workshops opened
+  // back to back never share a ticket.
+  sl.registerFactory(
+    () => WorkshopPassCubit(getWorkshopPassUseCase: sl()),
+  );
+  // My Bookings. Shares the pass repository because it is the same API
+  // family: this list is what makes a pass reachable once the app is no
+  // longer holding the slug from the purchase that issued it.
+  sl.registerLazySingleton(() => GetMyWebinarsUseCase(sl()));
+  sl.registerFactory(
+    () => MyWebinarsCubit(getMyWebinarsUseCase: sl()),
   );
 
   // ============================================

@@ -172,7 +172,7 @@ class _WebinarChatPanelState extends State<WebinarChatPanel> {
               SizedBox(width: Screen.getHorizontalSize(8)),
               Expanded(
                 child: Text(
-                  'Chat is read-only — reconnecting…',
+                  'Chat is read-only while reconnecting…',
                   style: AppTypography.bodyTextSmallMedium.copyWith(
                     color: Colors.orange.shade900,
                   ),

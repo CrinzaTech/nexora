@@ -41,10 +41,38 @@ class AuthInterceptor extends Interceptor {
     handler.next(options);
   }
 
+  /// The workshop-pass family, exempt from the global logout below.
+  ///
+  /// A 401 here is **not** evidence the session died. The pass screen
+  /// fetches the pass and downloads it with the same token seconds
+  /// apart, so a 401 on one and not the other says something specific to
+  /// that endpoint, not something about the session.
+  ///
+  /// Signing the attendee out on it is the worst possible response: they
+  /// land on the login screen, sign back in, tap download, and are
+  /// thrown out again — a loop with no exit, and they lose the rest of
+  /// their session to an endpoint they were only trying to save a PDF
+  /// from.
+  ///
+  /// Suppressing the logout costs nothing. If the session genuinely has
+  /// expired, the very next ordinary call — any screen, any refresh —
+  /// answers 401 and logs them out properly. This only declines to infer
+  /// a dead session from the one endpoint least qualified to report it.
+  static final RegExp _workshopPassPath = RegExp(
+    r'^/api/v1/workshop-pass/',
+  );
+
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     final status = err.response?.statusCode;
     if (status != 401) {
+      handler.next(err);
+      return;
+    }
+
+    // See [_workshopPassPath]: the caller gets the 401 and shows the
+    // reason; the session is left alone.
+    if (_workshopPassPath.hasMatch(err.requestOptions.uri.path)) {
       handler.next(err);
       return;
     }

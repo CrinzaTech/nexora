@@ -14,6 +14,7 @@ import 'package:nexora/features/webinar/data/models/webinar_model.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinar_room_cubit.dart';
 import 'package:nexora/features/webinar/presentation/widgets/webinar_cover.dart';
 import 'package:nexora/features/webinar/presentation/webinar_formatting.dart';
+import 'package:nexora/features/workshop_pass/presentation/workshop_pass_entry.dart';
 
 /// The room screen for a webinar we do not stream: a Zoom or Meet
 /// meeting, or a workshop with an address.
@@ -41,6 +42,14 @@ class WebinarExternalJoinBody extends StatelessWidget {
   /// address has to be readable to be walked to.
   final bool isFree;
 
+  /// The workshop's slug, for the entry pass.
+  ///
+  /// A **paid** in-person workshop issues a pass the moment it is bought,
+  /// and the venue card is where an attendee already looks for "what do I
+  /// do on the day" — so the way to their ticket belongs beside it. Null
+  /// (and the button absent) for every other mode, which issues none.
+  final String? slug;
+
   const WebinarExternalJoinBody({
     super.key,
     required this.state,
@@ -48,6 +57,7 @@ class WebinarExternalJoinBody extends StatelessWidget {
     this.thumbnailUrl,
     this.educatorName,
     this.isFree = false,
+    this.slug,
   });
 
   @override
@@ -124,6 +134,14 @@ class WebinarExternalJoinBody extends StatelessWidget {
           _VenueCard(session: session)
         else
           _MeetingCard(session: session, isFree: isFree),
+
+        // Only a paid workshop has one. `isFree` mirrors the server's
+        // own check — a workshop discounted to zero issues no pass — and
+        // reaching this screen at all is proof of the seat.
+        if (isVenue && !isFree && (slug?.isNotEmpty ?? false)) ...[
+          SizedBox(height: Screen.getVerticalSize(12)),
+          _PassButton(slug: slug!, title: title),
+        ],
 
         SizedBox(height: Screen.getVerticalSize(24)),
       ],
@@ -302,7 +320,7 @@ class _MeetingCard extends StatelessWidget {
             ],
             Text(
               isFree
-                  ? 'This opens in ${session.platformName}. Keep this link — '
+                  ? 'This opens in ${session.platformName}. Keep this link so '
                         'you can come back here any time during the session.'
                   : 'This opens in ${session.platformName}. Come back to this '
                         'screen any time during the session to rejoin.',
@@ -318,7 +336,7 @@ class _MeetingCard extends StatelessWidget {
               color: AppColors.primary,
               text:
                   'The ${session.platformName} link opens when the webinar '
-                  'starts. Come back here then — this page unlocks on its '
+                  'starts. Come back here then. This page unlocks on its '
                   'own.',
             ),
         ],
@@ -456,7 +474,7 @@ class _VenueCard extends StatelessWidget {
           ),
           SizedBox(height: Screen.getVerticalSize(10)),
           Text(
-            'This is an in-person workshop. Save the location — you will '
+            'This is an in-person workshop. Save the location. You will '
             'need it on the day.',
             style: AppTypography.bodyTextMedium.copyWith(
               color: AppColors.mutedTextPrimary,
@@ -466,6 +484,38 @@ class _VenueCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The way to the entry pass, under the venue.
+///
+/// Deliberately below the venue card and not instead of it: an address
+/// is what gets somebody to the building, and the pass is what gets them
+/// through its door. They are needed in that order, on different days.
+class _PassButton extends StatelessWidget {
+  final String slug;
+  final String title;
+
+  const _PassButton({required this.slug, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomActionButton(
+      isFormFilled: true,
+      name: 'Show my entry pass',
+      shouldAnimate: false,
+      isOutlined: true,
+      leading: Padding(
+        padding: EdgeInsets.only(right: Screen.getHorizontalSize(8)),
+        child: Icon(
+          Icons.confirmation_number_outlined,
+          color: AppColors.primary,
+          size: Screen.getSize(18),
+        ),
+      ),
+      onTap: (startLoading, stopLoading, btnState) =>
+          openWorkshopPass(context, slug: slug, workshopTitle: title),
     );
   }
 }

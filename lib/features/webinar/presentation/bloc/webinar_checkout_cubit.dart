@@ -44,6 +44,14 @@ class WebinarCheckoutCubit extends SafeCubit<WebinarCheckoutState> {
         case 403 when _mentionsAlreadyPaid(message):
           // They own it. Not an error — go to the room.
           emit(WebinarCheckoutState.alreadyPaid(message));
+        case 403:
+          // Any other 403 is the server refusing to sell: the workshop
+          // filled, or the host closed the link, while this screen was
+          // open. Matched on the status rather than the wording — the
+          // client is told no seat counts precisely so it cannot
+          // second-guess this, and string-matching "fully booked" would
+          // break the first time somebody rephrases it.
+          emit(WebinarCheckoutState.refused(message));
         case 400 when _mentionsFree(message):
           // The webinar is free after all (a discount landed between the
           // detail read and the tap). Nothing to pay, so let them in;

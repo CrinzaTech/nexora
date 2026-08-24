@@ -95,7 +95,7 @@ class CertificatePreviewPage extends StatelessWidget {
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(certificate.path, mimeType: 'application/pdf')],
-          subject: '${certificate.courseName} — Certificate',
+          subject: '${certificate.courseName} Certificate',
           text: certificate.certificateNo.isEmpty
               ? 'My certificate for ${certificate.courseName}.'
               : 'My certificate for ${certificate.courseName} '

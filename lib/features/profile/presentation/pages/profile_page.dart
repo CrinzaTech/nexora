@@ -455,6 +455,16 @@ class _ProfilePageState extends State<ProfilePage>
                               onTap: () =>
                                   context.push(AppRoutes.transactionHistory),
                             ),
+                            // Everything they signed up for, and the
+                            // way back to a workshop pass. Sits above
+                            // Certificates because it is the record a
+                            // learner comes looking for soonest: on the
+                            // morning of an event, not months later.
+                            CustomProfileListTileWidget(
+                              title: "My Bookings",
+                              leadingIcon: AppImages.videoIcon,
+                              onTap: () => context.push(AppRoutes.myBookings),
+                            ),
                             // Completed courses + their certificates.
                             // Sits under Transaction History because it's
                             // the other "what have I got out of this

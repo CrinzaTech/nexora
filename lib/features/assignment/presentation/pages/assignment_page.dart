@@ -644,7 +644,7 @@ class _RequirementsSection extends StatelessWidget {
                 label: 'Total',
                 value: assignment.totalMarks != null
                     ? _fmt(assignment.totalMarks!)
-                    : '—',
+                    : '-',
               ),
             ),
             SizedBox(width: Screen.getHorizontalSize(10)),
@@ -654,7 +654,7 @@ class _RequirementsSection extends StatelessWidget {
                 label: 'Passing',
                 value: assignment.passingMarks != null
                     ? _fmt(assignment.passingMarks!)
-                    : '—',
+                    : '-',
               ),
             ),
             SizedBox(width: Screen.getHorizontalSize(10)),
@@ -664,7 +664,7 @@ class _RequirementsSection extends StatelessWidget {
                 label: 'Time',
                 value: assignment.durationMinutes != null
                     ? '${assignment.durationMinutes}m'
-                    : '—',
+                    : '-',
               ),
             ),
           ],
@@ -827,7 +827,7 @@ class _TimelineRow extends StatelessWidget {
                   ),
                   SizedBox(height: Screen.getVerticalSize(5)),
                   Text(
-                    time == null ? '—' : _formatTimelineDateTime(time!),
+                    time == null ? '-' : _formatTimelineDateTime(time!),
                     style: AppTypography.bodyTextMedium.copyWith(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w500,
@@ -1229,7 +1229,7 @@ class _TimeRemainingTimerState extends State<_TimeRemainingTimer> {
 void _openSubmission(BuildContext context, String url, String assignmentTitle) {
   final title = assignmentTitle.isEmpty
       ? 'Submission'
-      : '$assignmentTitle — Submission';
+      : '$assignmentTitle Submission';
   context.push(
     '${AppRoutes.pdfViewer}'
     '?title=${Uri.encodeComponent(title)}'
@@ -1322,7 +1322,7 @@ class _YourSubmissionCard extends StatelessWidget {
                           SizedBox(height: Screen.getVerticalSize(2)),
                           Text(
                             pickedFile != null
-                                ? 'New file picked — submit to upload'
+                                ? 'New file picked. Submit to upload'
                                 : 'Tap to view uploaded file',
                             style: AppTypography.bodyTextMedium.copyWith(
                               color: AppColors.mutedTextPrimary,

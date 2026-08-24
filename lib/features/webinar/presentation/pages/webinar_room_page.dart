@@ -47,6 +47,11 @@ class WebinarRoomPage extends StatelessWidget {
   /// copied. See [WebinarExternalJoinBody].
   final bool isFree;
 
+  /// What the detail payload said about the join mode. A workshop or a
+  /// meeting opens straight onto its own screen; only a streamed webinar
+  /// goes through the lobby.
+  final bool isStream;
+
   const WebinarRoomPage({
     super.key,
     required this.slug,
@@ -55,6 +60,7 @@ class WebinarRoomPage extends StatelessWidget {
     this.thumbnailUrl,
     this.educatorName,
     this.isFree = false,
+    this.isStream = true,
   });
 
   @override
@@ -62,8 +68,10 @@ class WebinarRoomPage extends StatelessWidget {
     Screen().adaptDeviceScreenSize(context);
 
     return BlocProvider(
-      create: (_) => sl<WebinarRoomCubit>()..enter(slug: slug, roomId: roomId),
+      create: (_) => sl<WebinarRoomCubit>()
+        ..enter(slug: slug, roomId: roomId, isStream: isStream),
       child: _WebinarRoomView(
+        slug: slug,
         title: title,
         thumbnailUrl: thumbnailUrl,
         educatorName: educatorName,
@@ -74,12 +82,16 @@ class WebinarRoomPage extends StatelessWidget {
 }
 
 class _WebinarRoomView extends StatefulWidget {
+  /// Carried down only so a workshop's venue card can offer the entry
+  /// pass, which is keyed by slug.
+  final String slug;
   final String title;
   final String? thumbnailUrl;
   final String? educatorName;
   final bool isFree;
 
   const _WebinarRoomView({
+    required this.slug,
     required this.title,
     this.thumbnailUrl,
     this.educatorName,
@@ -308,6 +320,10 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
         thumbnailUrl: widget.thumbnailUrl,
         educatorName: widget.educatorName,
         isFree: widget.isFree,
+        // A paid workshop issues an entry pass; the venue card is where
+        // an attendee already goes looking for "what do I do on the
+        // day", so the way to their ticket belongs beside it.
+        slug: widget.slug,
       );
     }
 
@@ -365,6 +381,10 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
         thumbnailUrl: widget.thumbnailUrl,
         educatorName: widget.educatorName,
         isFree: widget.isFree,
+        // A paid workshop issues an entry pass; the venue card is where
+        // an attendee already goes looking for "what do I do on the
+        // day", so the way to their ticket belongs beside it.
+        slug: widget.slug,
       );
     }
 
@@ -651,7 +671,7 @@ class _Lobby extends StatelessWidget {
                         ),
                         SizedBox(width: Screen.getHorizontalSize(6)),
                         Text(
-                          "You're in — this will start automatically",
+                          "You're in. This will start automatically",
                           style: AppTypography.bodyTextSmallSemiBold.copyWith(
                             color: AppColors.alwaysWhite,
                             fontSize: Screen.getFontSizeCapped(11),

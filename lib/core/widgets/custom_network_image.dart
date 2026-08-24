@@ -31,6 +31,16 @@ class CustomNetworkImage extends StatelessWidget {
   /// [AppColors.grey100] box is used.
   final Widget? errorWidget;
 
+  /// Wraps the artwork once it has decoded.
+  ///
+  /// Effects belong here rather than around the whole widget: wrapping
+  /// [CustomNetworkImage] itself would also catch the shimmer placeholder
+  /// and the error fallback, so a contour shadow would spend the load
+  /// showing the silhouette of a grey rectangle and then pop. The builder
+  /// receives the finished [Image] with [width], [height] and [fit]
+  /// already applied.
+  final Widget Function(BuildContext context, Widget image)? imageBuilder;
+
   const CustomNetworkImage({
     super.key,
     required this.url,
@@ -40,6 +50,7 @@ class CustomNetworkImage extends StatelessWidget {
     this.borderRadius,
     this.placeholder,
     this.errorWidget,
+    this.imageBuilder,
   });
 
   Widget _defaultPlaceholder() {
@@ -70,8 +81,34 @@ class CustomNetworkImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
+        imageBuilder: imageBuilder == null
+            ? null
+            : (context, provider) => imageBuilder!(
+                context,
+                Image(
+                  image: provider,
+                  width: width,
+                  height: height,
+                  fit: fit,
+                ),
+              ),
         placeholder: (_, __) => placeholder ?? _defaultPlaceholder(),
-        errorWidget: (_, __, ___) => errorWidget ?? _defaultErrorWidget(),
+        errorWidget: (_, failedUrl, error) {
+          // Debug-only: every image in the app funnels through here, so a
+          // silent fallback box is indistinguishable from "the URL 403'd",
+          // "the host is unreachable" and "the bytes weren't an image".
+          // Log the real reason. `assert(() {...}())` is stripped in release.
+          assert(() {
+            debugPrint(
+              '[CustomNetworkImage] load failed\n'
+              '  url      : $failedUrl\n'
+              '  cacheKey : ${Utils.imageCacheKey(failedUrl)}\n'
+              '  error    : $error',
+            );
+            return true;
+          }());
+          return errorWidget ?? _defaultErrorWidget();
+        },
       );
     }
 

@@ -40,10 +40,14 @@ import 'package:nexora/features/certificate/presentation/pages/certificates_page
 import 'package:nexora/features/webinar/presentation/pages/webinar_detail_page.dart';
 import 'package:nexora/features/webinar/presentation/pages/webinar_room_page.dart';
 import 'package:nexora/features/webinar/presentation/pages/webinars_page.dart';
+import 'package:nexora/features/workshop_pass/data/models/workshop_pass_model.dart';
+import 'package:nexora/features/workshop_pass/presentation/pages/workshop_pass_page.dart';
+import 'package:nexora/features/workshop_pass/presentation/pages/workshop_pass_pdf_page.dart';
 import 'package:nexora/features/catalog/presentation/pages/catalog_page.dart';
 import 'package:nexora/features/courses/data/models/course_filter_models.dart';
 import 'package:nexora/features/catalog/presentation/pages/category_list_page.dart';
 import 'package:nexora/features/courses/presentation/pages/document_viewer_page.dart';
+import 'package:nexora/features/workshop_pass/presentation/pages/my_bookings_page.dart';
 import 'app_routes.dart';
 
 /// App router configuration using go_router
@@ -523,6 +527,11 @@ class AppRouter {
         },
       ),
       GoRoute(
+        path: AppRoutes.myBookings,
+        name: 'my-bookings',
+        builder: (context, state) => const MyBookingsPage(),
+      ),
+      GoRoute(
         path: AppRoutes.certificates,
         name: 'certificates',
         builder: (context, state) => const CertificatesPage(),
@@ -580,7 +589,39 @@ class AppRouter {
             // failure that costs a free webinar its Copy button is much
             // cheaper than the one that hands a paid seat away.
             isFree: q['isFree'] == 'true',
+            // Absent or unreadable falls back to `true`, which is the
+            // old behaviour: connect first, then swap. Only a value we
+            // can actually read skips the flash.
+            isStream: q['isStream'] != 'false',
           );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.workshopPass,
+        name: 'workshop-pass',
+        builder: (context, state) {
+          final slug = state.uri.queryParameters['slug'] ?? '';
+          // Without a slug there is no workshop to issue a pass for.
+          // Every entry point supplies one; a hand-typed link may not.
+          if (slug.isEmpty) return const WebinarsPage();
+          final title = state.uri.queryParameters['title'];
+          return WorkshopPassPage(
+            slug: slug,
+            workshopTitle: (title?.isEmpty ?? true) ? null : title,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.workshopPassPdf,
+        name: 'workshop-pass-pdf',
+        builder: (context, state) {
+          // Only ever reached from the pass screen's Save action, which
+          // pushes a freshly written file. A deep link (or a hot restart
+          // that drops `extra`) lands here with nothing to show — send
+          // them back to the list rather than crashing on a null cast.
+          final pass = state.extra;
+          if (pass is! DownloadedPass) return const WebinarsPage();
+          return WorkshopPassPdfPage(pass: pass);
         },
       ),
       GoRoute(

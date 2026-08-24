@@ -783,6 +783,43 @@ abstract class ApiClient {
   });
 
   // ============================================================
+  // WORKSHOP PASS — the attendee's entry ticket
+  // GET /api/v1/workshop-pass/{slug}
+  //
+  // `slug` is the webinar's `publicSlug`, not the numeric id. The
+  // attendee and the org both come from the JWT, so nothing here
+  // identifies a user.
+  //
+  // `data.html` is a whole HTML document (doctype, inlined CSS, the
+  // lot) — the same Razor partial the admin panel previews and the PDF
+  // prints. Hand it to a WebView; never rebuild the ticket natively or
+  // it drifts the first time an organiser restyles a design.
+  //
+  // Refusals are branched on status, not on the message: 402 is "not
+  // bought yet" (route to checkout, it is not an error), 409 is the
+  // organiser's problem, 404 is no such workshop for this org.
+  // ============================================================
+  @GET(ApiEndpoints.workshopPass)
+  Future<Map<String, dynamic>> getWorkshopPass(@Path('slug') String slug);
+
+  // ============================================================
+  // WORKSHOP PASS — everything this learner booked
+  // GET /api/v1/workshop-pass/my?pageNo=&pageSize=
+  //
+  // Both routes in are returned: tickets bought and free
+  // registrations, de-duplicated to one row per webinar. Every
+  // platform, not only workshops, and cancelled/finished events too —
+  // it is a history, not a schedule.
+  //
+  // No business refusals: an empty history is a 200 with `total: 0`.
+  // ============================================================
+  @GET(ApiEndpoints.myWebinars)
+  Future<Map<String, dynamic>> getMyWebinars(
+    @Query('pageNo') int pageNo,
+    @Query('pageSize') int pageSize,
+  );
+
+  // ============================================================
   // PAYMENTS — Create Razorpay Order (v2)
   // POST /api/v1/payments/create-order-v2
   // Body: { courseId: int, priceId: int }

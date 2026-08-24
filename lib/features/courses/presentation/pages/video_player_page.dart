@@ -195,7 +195,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       case 5:
         return 'This video cannot be played on this device.';
       case 100:
-        return 'This video is unavailable — it may have been removed or\n'
+        return 'This video is unavailable. It may have been removed or\n'
             'made private.';
       case 101:
       case 150:

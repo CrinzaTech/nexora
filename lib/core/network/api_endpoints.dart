@@ -313,6 +313,53 @@ class ApiEndpoints {
   static const String appRatingUrl = '/api/v1/app-rating-url';
 
   // ============================================================
+  // WORKSHOP PASS
+  // ============================================================
+  // The entry ticket for a paid in-person workshop. Not a certificate:
+  // it exists the moment the workshop is paid for (not on completion),
+  // it is keyed by the webinar's `publicSlug`, and it is meant to be
+  // held up at a door rather than filed away.
+  //
+  // Neither call takes a user id or an org code — both come from the
+  // JWT, so there is no field an attendee could edit to reach somebody
+  // else's pass.
+  // ============================================================
+  /// The pass itself, as JSON carrying a **complete standalone HTML
+  /// document** (`data.html`) plus the raw fields behind it. Fetching is
+  /// also what *issues* the pass, and it is idempotent: the pass number
+  /// and the QR are frozen at the first fetch and never change.
+  ///
+  /// Fast (~100–300ms) — no browser is launched. Do **not** put the
+  /// download call's long receive timeout on this one.
+  /// GET /api/v1/workshop-pass/{slug}
+  static const String workshopPass = '/api/v1/workshop-pass/{slug}';
+
+  /// Everything this learner booked, past and upcoming, with their pass
+  /// and whether they turned up. See MY_WEBINARS_API.md.
+  ///
+  /// The pass endpoints are keyed on a slug, so this is what makes a
+  /// pass findable once the app is no longer holding the slug from a
+  /// purchase. `pageSize` is clamped to 1..50 server-side, so the
+  /// returned value is read back rather than assumed.
+  ///
+  /// An empty history is a 200 with `total: 0`, never a 404.
+  /// GET /api/v1/workshop-pass/my?pageNo=&pageSize=
+  static const String myWebinars = '/api/v1/workshop-pass/my';
+
+  /// The same pass as a 720×340pt PDF card — `application/pdf`, not the
+  /// usual JSON envelope, so this goes through raw Dio with
+  /// `ResponseType.bytes`.
+  ///
+  /// Prefer the absolute `downloadUrl` the pass payload already carries;
+  /// this is the fallback for when it comes back empty.
+  ///
+  /// The first call after an API restart launches Chromium server-side
+  /// and takes 2–5s.
+  /// GET /api/v1/workshop-pass/{slug}/download
+  static const String workshopPassDownload =
+      '/api/v1/workshop-pass/{slug}/download';
+
+  // ============================================================
   // PAYMENTS
   // ============================================================
   static const String createOrder = '/api/v1/payments/create-order-v2';

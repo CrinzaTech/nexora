@@ -176,6 +176,25 @@ class AppRoutes {
   /// ever handed to the share sheet, never opened as the way in.
   static const String webinarRoom = '/webinars/room';
 
+  /// My Bookings — every webinar and workshop this learner signed up
+  /// for, and the way back to a workshop pass once the app is no longer
+  /// holding the slug from the purchase that issued it.
+  static const String myBookings = '/my-bookings';
+
+  /// The entry pass for a paid in-person workshop. Takes `slug` (the
+  /// workshop's `publicSlug` — the key for every pass call) and an
+  /// optional `title`, carried purely so the screen has something to
+  /// name while the first fetch is in flight.
+  ///
+  /// Gated by `showsWorkshopPass`, which mirrors the server's own check,
+  /// so the route is only ever reached where a pass exists.
+  static const String workshopPass = '/workshops/pass';
+
+  /// In-app viewer for an already-saved pass PDF. Takes the
+  /// `DownloadedPass` as go_router `extra:` — the file lives on disk, so
+  /// there is no URL to carry in the path.
+  static const String workshopPassPdf = '/workshops/pass/pdf';
+
   /// Catalog screen route
   static const String catalog = '/catalog';
 

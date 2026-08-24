@@ -358,7 +358,7 @@ class LiveClassCubit extends Cubit<LiveClassState> {
     if (!(_hub?.isConnected ?? false)) {
       emit(state.copyWith(
         hubConnected: false,
-        transientNotice: 'Not connected to live chat — message not sent.',
+        transientNotice: 'Not connected to live chat. Message not sent.',
       ));
       return;
     }
@@ -394,7 +394,7 @@ class LiveClassCubit extends Cubit<LiveClassState> {
     if (!(_hub?.isConnected ?? false)) {
       emit(state.copyWith(
         hubConnected: false,
-        transientNotice: 'Not connected to the class — try again in a moment.',
+        transientNotice: 'Not connected to the class. Try again in a moment.',
       ));
       return;
     }
@@ -544,7 +544,7 @@ class LiveClassCubit extends Cubit<LiveClassState> {
       case MicExpiredEvent():
         await _endAudio();
         emit(state.copyWith(
-          transientNotice: 'Mic timed out — raise your hand again.',
+          transientNotice: 'Mic timed out. Raise your hand again.',
         ));
         break;
 
