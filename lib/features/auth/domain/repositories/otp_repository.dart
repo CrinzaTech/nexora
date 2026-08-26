@@ -39,11 +39,16 @@ abstract class OtpRepository {
   });
 
   /// Verifies an OTP for either a phone or email recipient.
+  ///
+  /// [deviceKey] is the stable hardware identifier, optional per the
+  /// backend contract — it scopes the refresh-token family this login
+  /// opens to one device.
   Future<Either<Failure, OtpVerificationModel>> verifyOtpV2({
     required String recipient,
     required String otpCode,
     required bool isPhone,
     String? orgId,
+    String? deviceKey,
   });
 
   /// Convenience — same shape as [sendOtpV2]; lets the cubit /

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -13,8 +15,10 @@ import 'package:nexora/firebase_options.dart';
 /// annotated with `@pragma('vm:entry-point')` so the AOT compiler keeps it
 /// reachable for the background isolate.
 ///
-/// The system auto-displays any `notification` payload in this state — this
-/// handler exists for `data`-only messages and for analytics / silent work.
+/// The system auto-displays any `notification` payload in this state. A
+/// `data`-only push shows nothing on its own, so this handler raises a
+/// local notification for those — carrying the same payload, so a tap
+/// lands on the same deep link a `notification`+`data` push would.
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // The background isolate has its own memory — Firebase has to be
@@ -25,6 +29,26 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       'FCM background: id=${message.messageId} '
       'title="${message.notification?.title}" data=${message.data}',
     );
+  }
+
+  // Only for data-only sends — when a `notification` block is present the
+  // OS has already drawn the banner and posting our own would double it.
+  if (message.notification != null) return;
+  final title = message.data['title']?.toString();
+  final body = message.data['body']?.toString() ?? message.data['message']?.toString();
+  if ((title == null || title.isEmpty) && (body == null || body.isEmpty)) return;
+  try {
+    // Fresh instance: this isolate doesn't share the one main() built.
+    final notifications = LocalNotificationService();
+    await notifications.init();
+    await notifications.show(
+      id: message.messageId.hashCode & 0x7fffffff,
+      title: title?.isNotEmpty == true ? title! : 'Crinza',
+      body: body ?? '',
+      payload: FcmService.encodePayload(message.data),
+    );
+  } catch (e) {
+    debugPrint('FCM background: local notification failed — $e');
   }
 }
 
@@ -46,6 +70,14 @@ class FcmService {
   /// the FCM `data` map encoded as JSON-ish key/value pairs. The router
   /// owner can wire deep-linking through this.
   void Function(Map<String, dynamic> data)? onNotificationTap;
+
+  /// Cold-start variant of [onNotificationTap], fired only for a tap that
+  /// launched the app from terminated. Split out because that payload
+  /// must NOT be routed on the first frame — the splash's `go()` a beat
+  /// later rebuilds the match list and discards imperative pushes, so
+  /// the link is parked and replayed by SplashScreen instead. Falls back
+  /// to [onNotificationTap] when left unset.
+  void Function(Map<String, dynamic> data)? onColdStartNotificationTap;
 
   FcmService(
     this._session,
@@ -110,7 +142,7 @@ class FcmService {
           id: DateTime.now().millisecondsSinceEpoch.remainder(1 << 31),
           title: title ?? 'Crinza',
           body: body ?? '',
-          payload: _encodePayload(message.data),
+          payload: encodePayload(message.data),
         );
       });
 
@@ -125,18 +157,23 @@ class FcmService {
       // ── Tap from terminated (cold-start) ───────────────────────────
       // Defer to the post-frame callback so the GoRouter (mounted by
       // MaterialApp.router inside runApp) has actually wired up its
-      // delegate before we try to push a route. A plain `Future.microtask`
-      // fires too early — main.dart calls `fcmService.init()` BEFORE
-      // `runApp`, so the microtask resolved against an empty router and
-      // the deep link was lost.
+      // delegate before the payload is handed on. A plain
+      // `Future.microtask` fires too early — main.dart calls
+      // `fcmService.init()` BEFORE `runApp`, so the microtask resolved
+      // against an empty router and the deep link was lost.
+      //
+      // This goes to [onColdStartNotificationTap], which parks the link
+      // rather than routing it: at this point /splash still owns the
+      // navigator and its `go(dashboard)` would wipe any push.
       final initialMessage = await _messaging.getInitialMessage();
       if (initialMessage != null) {
         Utils.debugLog(
           'FCM tap (cold): id=${initialMessage.messageId} '
           'data=${initialMessage.data}',
         );
+        final coldStart = onColdStartNotificationTap ?? onNotificationTap;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          onNotificationTap?.call(initialMessage.data);
+          coldStart?.call(initialMessage.data);
         });
       }
     } catch (e, st) {
@@ -150,23 +187,43 @@ class FcmService {
     }
   }
 
-  /// Flatten the FCM data map into the `key=value&key=value` string that
+  /// Serialise the FCM data map into the string that
   /// [LocalNotificationService] hands back through its tap callback.
-  /// Kept simple on purpose — full JSON is overkill for the small number
-  /// of keys the backend uses (notificationType, referenceValue, etc.).
-  String _encodePayload(Map<String, dynamic> data) {
+  ///
+  /// JSON rather than `key=value&key=value`: an `externalLink` payload
+  /// is a full URL and its own `?a=1&b=2` query string used to split
+  /// the pair list apart, so the deep link came back mangled.
+  static String encodePayload(Map<String, dynamic> data) {
     if (data.isEmpty) return '';
-    return data.entries.map((e) => '${e.key}=${e.value}').join('&');
+    try {
+      return jsonEncode(data);
+    } catch (_) {
+      // Non-encodable value somewhere in the map — stringify everything
+      // and try once more rather than losing the deep link entirely.
+      return jsonEncode(
+        data.map((k, v) => MapEntry(k, v?.toString())),
+      );
+    }
   }
 
-  /// Reverse of [_encodePayload]. Used by the local-notification tap
+  /// Reverse of [encodePayload]. Used by the local-notification tap
   /// handler in [main] so a tap on a foreground-bridged banner reaches
   /// the same router branch an FCM background tap would.
   ///
-  /// Tolerant of empty / null input and of pairs without `=` — both
-  /// collapse to an empty map (the router treats that as "no route").
+  /// Tolerant of empty / null input, and still understands the legacy
+  /// `key=value&key=value` form so a notification posted by a previous
+  /// build of the app (still sitting in the tray across an update)
+  /// keeps routing.
   static Map<String, dynamic> decodePayload(String? payload) {
     if (payload == null || payload.isEmpty) return const {};
+    if (payload.startsWith('{')) {
+      try {
+        final decoded = jsonDecode(payload);
+        if (decoded is Map) return decoded.cast<String, dynamic>();
+      } catch (_) {
+        // Fall through to the legacy parser below.
+      }
+    }
     final out = <String, dynamic>{};
     for (final pair in payload.split('&')) {
       final i = pair.indexOf('=');

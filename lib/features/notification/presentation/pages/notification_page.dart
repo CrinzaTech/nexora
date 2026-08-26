@@ -316,7 +316,10 @@ class _NotificationCard extends StatelessWidget {
       case NotificationType.course:
         final courseId = int.tryParse(ref);
         if (courseId == null) return;
-        context.push('${AppRoutes.courseDetail}?courseId=$courseId');
+        // `tab=content` keeps this in lockstep with the push deep link
+        // (NotificationRouter) — the same notification must land on the
+        // same screen whichever surface it was tapped from.
+        context.push('${AppRoutes.courseDetail}?courseId=$courseId&tab=content');
         return;
       case NotificationType.category:
         final categoryId = int.tryParse(ref);

@@ -437,6 +437,7 @@ class _CourseListCard extends StatelessWidget {
             showViewDetails: true,
             showViewDemo: false,
             showBuyNow: course.isPurchased == false,
+            isCourseFree: course.isCourseFree,
             // Flip the local purchased flag so the row's "Buy Now"
             // disappears without a full refetch of the list.
             onPurchased: () => context

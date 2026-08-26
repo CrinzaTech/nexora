@@ -1,5 +1,6 @@
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/router/app_routes.dart';
+import 'package:nexora/core/services/notification_router.dart';
 import 'package:nexora/core/session/session_service.dart';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_images.dart';
@@ -85,8 +86,19 @@ class _SplashScreenState extends State<SplashScreen>
             // cleared between OTP verify and form submission). Send
             // them back to the form instead of the dashboard.
             context.go(AppRoutes.setupProfile);
+            // The form is mandatory — stacking a course on top of it
+            // would let the user skip past it.
+            NotificationRouter.clearPending();
           } else if (isLoggedIn) {
             context.go(AppRoutes.dashboard);
+            // A notification tap that launched the app parked its deep
+            // link instead of routing it, because the `go()` above
+            // rebuilds the match list from scratch and discards
+            // imperative pushes. Replay it on the NEXT frame, once the
+            // dashboard's match list is in place to push on top of.
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => NotificationRouter.consumePending(),
+            );
           } else {
             // Show the Org Code gate only when ORG_ID is CRINZA and platform is iOS.
             final orgId = dotenv.env['ORG_ID'] ?? '';
@@ -95,6 +107,9 @@ class _SplashScreenState extends State<SplashScreen>
                 ? AppRoutes.orgCode
                 : AppRoutes.login;
             context.go(destination);
+            // Signed out — course detail behind a login wall is a dead
+            // end, so drop the parked link rather than replaying it.
+            NotificationRouter.clearPending();
           }
         });
       }

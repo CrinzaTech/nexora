@@ -1,5 +1,6 @@
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/router/app_routes.dart';
+import 'package:nexora/core/widgets/celebration_overlay.dart';
 import 'package:nexora/core/widgets/custom_snackbar.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/payment/data/models/payment_model.dart';
@@ -42,6 +43,19 @@ class ViewDemoBuyNowRow extends StatelessWidget {
   /// fresh, server-authoritative list.
   final List<CoursePricingTier>? tiers;
 
+  /// Replaces the default "Buy Now" text on the buy CTA. Only the
+  /// plain-purchase label is overridden — the "Get Free Access" and
+  /// "Choose Plan" branches still win when they apply, since those say
+  /// something more specific about what the tap will do.
+  final String? buyLabel;
+
+  /// `true` when the course costs nothing (`Course.isCourseFree`, or
+  /// every tier priced at 0). Flips the buy CTA from "Buy Now" to
+  /// "Get Free Access" so the label matches what the tap actually does —
+  /// the backend enrols the user outright and Razorpay never opens
+  /// (see the `order.isCourseFree` short-circuit below).
+  final bool isCourseFree;
+
   /// Fired once Razorpay reports `paymentSuccess` and the verify-payment
   /// API confirms. Each call site decides what to refresh — course-detail
   /// reloads the course, course-list flips the local purchased flag,
@@ -56,6 +70,8 @@ class ViewDemoBuyNowRow extends StatelessWidget {
     this.showViewDetails = true,
     required this.courseId,
     this.tiers,
+    this.isCourseFree = false,
+    this.buyLabel,
     this.onPurchased,
     this.buttonHeight = 50,
   });
@@ -82,6 +98,8 @@ class ViewDemoBuyNowRow extends StatelessWidget {
         showBuyNow: showBuyNow,
         showViewDetails: showViewDetails,
         tiers: tiers,
+        isCourseFree: isCourseFree,
+        buyLabel: buyLabel,
         onPurchased: onPurchased,
         buttonHeight: buttonHeight,
       ),
@@ -95,6 +113,8 @@ class ViewDemoBuyNowRowInner extends StatefulWidget {
   final bool showViewDemo;
   final bool showViewDetails;
   final List<CoursePricingTier>? tiers;
+  final bool isCourseFree;
+  final String? buyLabel;
   final VoidCallback? onPurchased;
 
   const ViewDemoBuyNowRowInner({
@@ -104,6 +124,8 @@ class ViewDemoBuyNowRowInner extends StatefulWidget {
     required this.showViewDemo,
     required this.showViewDetails,
     this.tiers,
+    this.isCourseFree = false,
+    this.buyLabel,
     this.onPurchased,
     required this.buttonHeight,
   });
@@ -313,10 +335,18 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
                   // Backend already enrolled the user (free course or
                   // 100%-off coupon) — skip Razorpay and run the same
                   // success path we'd run after a paid checkout.
-                  CustomSnackbar.success(
+                  //
+                  // A snackbar under-sells the moment the student gains
+                  // access, so this branch gets the full celebration.
+                  // It sits on the root overlay, which is what lets it
+                  // survive the course refetch `onPurchased` kicks off.
+                  CelebrationOverlay.show(
                     context,
-                    title: 'Enrolled!',
-                    message: 'You are now enrolled in this course.',
+                    emoji: '🎉',
+                    title: 'Congratulations!',
+                    message: 'Course Unlocked',
+                    quote: 'Your free access is ready. Jump in and '
+                        'start learning.',
                   );
                   widget.onPurchased?.call();
                   return;
@@ -365,15 +395,24 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
                         loading: () => true,
                         orElse: () => false,
                       );
+                  // A course is free when the host said so, or when
+                  // every pre-loaded tier is priced at 0.
+                  final tiers = widget.tiers;
+                  final isFree = widget.isCourseFree ||
+                      (tiers != null &&
+                          tiers.isNotEmpty &&
+                          tiers.every((t) => t.calculatedFinalPrice <= 0));
                   // Label depends on the pre-loaded tier count when
                   // the host shipped one. Otherwise it stays "Buy
                   // Now" and the multi-tier branch reveals itself on
                   // tap when the tiers cubit emits.
                   final ctaLabel = isLoading
                       ? 'Please wait...'
-                      : ((widget.tiers?.length ?? 0) > 1
-                          ? 'Choose Plan'
-                          : 'Buy Now');
+                      : isFree
+                          ? 'Get Free Access'
+                          : ((tiers?.length ?? 0) > 1
+                              ? 'Choose Plan'
+                              : (widget.buyLabel ?? 'Buy Now'));
                   return Row(
                     children: [
                       if (widget.showViewDemo) ...[

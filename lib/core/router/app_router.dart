@@ -22,6 +22,7 @@ import 'package:nexora/features/exam/presentation/pages/exam_page.dart';
 import 'package:nexora/features/courses/presentation/pages/folder_content_page.dart';
 import 'package:nexora/features/courses/presentation/pages/pdf_viewer_page.dart';
 import 'package:nexora/features/courses/presentation/pages/image_viewer_page.dart';
+import 'package:nexora/features/courses/presentation/bloc/live_now_cubit.dart';
 import 'package:nexora/features/courses/presentation/pages/live_class_page.dart';
 import 'package:nexora/features/courses/presentation/pages/video_player_page.dart';
 import 'package:nexora/features/courses/presentation/folder_navigation_cache.dart';
@@ -66,6 +67,23 @@ class AppRouter {
 
   /// Initial route (splash screen or onboarding)
   static const String initialRoute = AppRoutes.splash;
+
+  /// Maps the `tab` query param of `/courses/detail` to a tab index —
+  /// `about` / `content` / `reviews`, or a plain index. Anything missing
+  /// or unrecognised falls back to About (0), the historical default.
+  static int _courseTabIndex(String? raw) {
+    switch (raw?.trim().toLowerCase()) {
+      case 'content':
+      case 'curriculum':
+        return 1;
+      case 'reviews':
+        return 2;
+      case 'about':
+        return 0;
+      default:
+        return int.tryParse(raw ?? '') ?? 0;
+    }
+  }
 
   /// Router configuration
   static final GoRouter router = GoRouter(
@@ -169,8 +187,8 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.home,
         name: 'home',
-        // HomePage reads three cubits, not one. The Dashboard normally
-        // owns all three (so it can silent-refresh them when the Home
+        // HomePage reads four cubits, not one. The Dashboard normally
+        // owns all four (so it can silent-refresh them when the Home
         // tab is re-entered); this route is the standalone/deep-link
         // entry, and it has to provide the same set or the page throws
         // looking one of them up.
@@ -179,6 +197,7 @@ class AppRouter {
             BlocProvider(create: (_) => sl<HomeCubit>()),
             BlocProvider(create: (_) => sl<ContinueCoursesCubit>()..load()),
             BlocProvider(create: (_) => sl<WebinarsCubit>()..load()),
+            BlocProvider(create: (_) => sl<LiveNowCubit>()..load()),
           ],
           child: const HomePage(),
         ),
@@ -243,7 +262,11 @@ class AppRouter {
           // Optional title hint (e.g. ctaName from a banner tap).
           // Displayed immediately in the AppBar while the API loads.
           final courseTitle = state.uri.queryParameters['title'];
-          return CourseDetailPage(courseId: courseId, courseTitle: courseTitle);
+          return CourseDetailPage(
+            courseId: courseId,
+            courseTitle: courseTitle,
+            initialTabIndex: _courseTabIndex(state.uri.queryParameters['tab']),
+          );
         },
       ),
       GoRoute(

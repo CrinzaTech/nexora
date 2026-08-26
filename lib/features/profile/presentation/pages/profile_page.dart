@@ -4,6 +4,7 @@ import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/services/content_completion_service.dart';
 import 'package:nexora/core/services/org_code_service.dart';
+import 'package:nexora/core/network/token_refresh_service.dart';
 import 'package:nexora/core/session/session_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -646,6 +647,11 @@ class _ProfilePageState extends State<ProfilePage>
                           // account's token.
                           await sl<ContentCompletionService>()
                               .clearForLogout();
+                          // Revoke the refresh-token family server-side
+                          // before the local wipe — it needs the refresh
+                          // token clearToken is about to delete. Never
+                          // blocks sign-out if it can't reach the backend.
+                          await sl<TokenRefreshService>().revokeSession();
                           await sl<SessionService>().clearToken();
                           OrgCodeService.instance.clear();
                           if (context.mounted) {

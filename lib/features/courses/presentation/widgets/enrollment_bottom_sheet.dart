@@ -378,7 +378,11 @@ class _SheetContent extends StatelessWidget {
                 Screen.getVerticalSize(16),
           ),
           child: SwipeToPayButton(
-            text: 'Proceed to Pay Securely',
+            // Nothing to pay (free course, or a coupon that zeroed the
+            // total) — "Proceed to Pay Securely" would be misleading.
+            text: pricing.totalPayable <= 0
+                ? 'Unlock Course'
+                : 'Proceed to Pay Securely',
             onSwipeComplete: onProceed,
           ),
         ),

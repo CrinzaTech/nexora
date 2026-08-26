@@ -18,6 +18,7 @@ import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_appbar_widget.dart';
 import 'package:nexora/core/widgets/custom_snackbar.dart';
+import 'package:nexora/core/widgets/live_stream_controls.dart';
 import 'package:nexora/core/widgets/moving_watermark.dart';
 import 'package:nexora/features/courses/presentation/bloc/live_class_cubit.dart';
 import 'package:nexora/features/courses/presentation/pages/live_class_chat_panel.dart';
@@ -97,6 +98,13 @@ class _LiveClassViewState extends State<_LiveClassView>
   /// rotation, instead of unmounting and rebuilding it (which would drop the
   /// video surface and restart playback mid-class).
   final GlobalKey _playerKey = GlobalKey();
+
+  /// Owned here, not by the controls: the player is rebuilt on every drop
+  /// to audio-only and every recovery back to video, so a clock living
+  /// inside it would restart the stream timer at zero each time the
+  /// network wobbled.
+  final LiveStreamClock _streamClock = LiveStreamClock();
+
   bool _preparing = false;
   bool _completionFired = false;
   bool _ducked = false;
@@ -331,6 +339,48 @@ class _LiveClassViewState extends State<_LiveClassView>
     }
   }
 
+  bool get _isLandscape =>
+      mounted && MediaQuery.orientationOf(context) == Orientation.landscape;
+
+  /// What the stage's expand button does, in place of the package's own
+  /// fullscreen route.
+  ///
+  /// That route is pushed on the **root** navigator, so it sits outside
+  /// this page's [BlocProvider] — the chat panel and the raise-hand dial
+  /// cannot go inside it without re-providing the cubit and duplicating
+  /// the whole landscape layout. Landscape here already gives the video
+  /// the full screen *and* keeps chat and raise-hand, which is what a
+  /// student in a class actually needs from "fullscreen".
+  Future<void> _toggleLandscape() async {
+    if (!mounted) return;
+    if (_isLandscape) {
+      await _returnToPortrait();
+      return;
+    }
+    // Stays pinned. Releasing it after the rotation settled — the way
+    // this used to — snapped straight back to portrait about a second
+    // later: the app is portrait-locked globally in `main()`, and the
+    // student is still physically holding the phone upright, so the
+    // moment we stop asking for landscape the OS puts it back. Expanded
+    // means expanded until they collapse it, go back, or leave.
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
+
+  /// How far the live control bar has to sit off the bottom of the stage.
+  ///
+  /// This Scaffold's body is not inside a [SafeArea], and in landscape the
+  /// 16:9 stage runs to the physical bottom of the screen — the navigation
+  /// bar lands straight on top of the control bar and swallows it.
+  /// Portrait docks the chat below the stage, so there is nothing to clear.
+  double _stageBottomInset() {
+    if (!mounted) return 0;
+    if (MediaQuery.orientationOf(context) != Orientation.landscape) return 0;
+    return MediaQuery.viewPaddingOf(context).bottom;
+  }
+
   Future<void> _syncPlayer(String hlsUrl) async {
     if (_preparing || _currentUrl == hlsUrl) return;
     _preparing = true;
@@ -359,11 +409,33 @@ class _LiveClassViewState extends State<_LiveClassView>
         controlsConfiguration: BetterPlayerControlsConfiguration(
           enablePlaybackSpeed: false,
           enableSkips: false,
-          showControlsOnInitialize: false,
+          // Read by [LiveStreamControls]: the bar is up when the stage
+          // first comes alive, then fades out on its own a few seconds
+          // later. Starting hidden would mean nobody sees the LIVE state
+          // or the stream timer unless they think to tap the video.
+          showControlsOnInitialize: true,
           progressBarPlayedColor: AppColors.primary,
           progressBarHandleColor: AppColors.primary,
           progressBarBufferedColor: AppColors.primary.withValues(alpha: 0.3),
           progressBarBackgroundColor: AppColors.grey200,
+          // The package draws no progress row at all for a `liveStream`
+          // source — its bottom bar swaps the row for the word "LIVE" and
+          // stops there. [LiveStreamControls] replaces the whole bar with
+          // the layout every streaming site uses: a full-width scrubber
+          // with play / mute / LIVE + stream timer / expand beneath it.
+          // Replacing the controls rather than drawing over them is also
+          // what stops the two colliding — the package centres its icons
+          // in that bar, so they reach right down to the bottom edge.
+          playerTheme: BetterPlayerTheme.custom,
+          customControlsBuilder: (controller, onVisibilityChanged) =>
+              LiveStreamControls(
+                controller: controller,
+                clock: _streamClock,
+                onControlsVisibilityChanged: onVisibilityChanged,
+                bottomInset: _stageBottomInset(),
+                isExpanded: _isLandscape,
+                onToggleExpand: _toggleLandscape,
+              ),
         ),
       ),
     );
@@ -791,16 +863,23 @@ class _LiveClassViewState extends State<_LiveClassView>
       },
       child: Scaffold(
         backgroundColor: AppColors.videoPlayerBgColor,
-        appBar: CustomAppBar(
-          title: widget.title,
-          centerTitle: true,
-          titleColor: AppColors.white,
-          backgroundColor: AppColors.videoPlayerBgColor,
-          // Without this the chevron calls Navigator.pop directly, which
-          // sidesteps PopScope entirely — it was dropping students out of a
-          // live class with no confirmation at all.
-          onBackPressed: _handleBack,
-        ),
+        // Dropped in landscape, which the stage's expand button now treats
+        // as fullscreen — an app bar there costs the 16:9 video a strip of
+        // the height it is asking for. Back is not lost with it: [PopScope]
+        // above catches the gesture and returns to portrait, where the bar
+        // (and its chevron) come back. Matches the webinar room.
+        appBar: isLandscape
+            ? null
+            : CustomAppBar(
+                title: widget.title,
+                centerTitle: true,
+                titleColor: AppColors.white,
+                backgroundColor: AppColors.videoPlayerBgColor,
+                // Without this the chevron calls Navigator.pop directly,
+                // which sidesteps PopScope entirely — it was dropping
+                // students out of a live class with no confirmation at all.
+                onBackPressed: _handleBack,
+              ),
         body: BlocConsumer<LiveClassCubit, LiveClassState>(
           listenWhen: (prev, curr) =>
               prev.hlsUrl != curr.hlsUrl ||
@@ -835,6 +914,9 @@ class _LiveClassViewState extends State<_LiveClassView>
               _disposeControllers();
               _audioHandler?.releaseSession();
               _setWakelock(false);
+              // The broadcast is over (or never started) — the next one
+              // gets its own origin.
+              _streamClock.reset();
             }
             // Audio ducking follows self-speaking. `handPhase.speaking`
             // is the authority when the id comparison can't run (myId
@@ -910,17 +992,15 @@ class _LiveClassViewState extends State<_LiveClassView>
 
   /// Rotate back to portrait, then hand rotation control back to the user.
   Future<void> _returnToPortrait() async {
+    // Stays pinned, which is also the app-wide lock from `main()`. It
+    // used to release once the device had settled so the student could
+    // rotate back into landscape — the stage's expand button is how they
+    // get there now, and releasing meant a phone physically held sideways
+    // immediately rotated back out of portrait again.
     await SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
-    // Pinning portrait is what actually forces the rotation, but leaving it
-    // pinned would trap the student — they could never get back to
-    // landscape. Release once the device has settled into the new
-    // orientation.
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    if (!mounted) return;
-    await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
   }
 
   /// Confirmation before leaving a live class — going back disconnects
@@ -1017,7 +1097,15 @@ class _LiveClassViewState extends State<_LiveClassView>
         // wherever it's parked it's covering something.
         Positioned.fill(
           child: DraggableFab(
-            margin: const EdgeInsets.all(16),
+            // Clears the live control bar along the bottom of the stage —
+            // parked at a flat 16 the dial sat straight on the scrubber
+            // and the expand button.
+            margin: const EdgeInsets.only(
+              left: 16,
+              top: 16,
+              right: 16,
+              bottom: LiveStreamControls.barHeight + 16,
+            ),
             builder: (context, dockedTop) => LiveClassSpeedDial(
               // Parked up top, fanning upward would run off-screen.
               expandDown: dockedTop,

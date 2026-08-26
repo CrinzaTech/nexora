@@ -1,5 +1,6 @@
 import 'package:nexora/core/utils/utils.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
@@ -27,10 +28,20 @@ class LocalNotificationService {
   /// payload is whatever [show] / [schedule] passed in.
   void Function(String? payload)? onTap;
 
+  /// Cold-start variant of [onTap] — fired for a tap that launched the
+  /// process from terminated. Split out because that payload must be
+  /// parked rather than routed: the splash still owns the navigator and
+  /// its `go()` would discard the push. Falls back to [onTap] when unset.
+  void Function(String? payload)? onLaunchTap;
+
   /// Call once at startup, after [SessionService.init] but before any UI
   /// might want to schedule a notification.
-  Future<void> init({void Function(String? payload)? onTap}) async {
+  Future<void> init({
+    void Function(String? payload)? onTap,
+    void Function(String? payload)? onLaunchTap,
+  }) async {
     this.onTap = onTap;
+    this.onLaunchTap = onLaunchTap;
 
     // Required for `zonedSchedule` — sets up the IANA tz database so we
     // can express "10am tomorrow in user's local zone" reliably.
@@ -59,6 +70,28 @@ class LocalNotificationService {
         this.onTap?.call(response.payload);
       },
     );
+
+    // Cold-start tap on a notification WE posted (a foreground-bridged
+    // FCM banner, or one the background isolate raised for a data-only
+    // push). `onDidReceiveNotificationResponse` never fires for a tap
+    // that launched the process — the launch details are the only way
+    // to recover that payload, and without this the deep link is lost.
+    // Deferred a frame so the router exists before it's used.
+    try {
+      final launch = await _plugin.getNotificationAppLaunchDetails();
+      if (launch?.didNotificationLaunchApp ?? false) {
+        final payload = launch?.notificationResponse?.payload;
+        Utils.debugLog(
+          'LocalNotificationService: launched by tap (payload=$payload)',
+        );
+        final launchTap = this.onLaunchTap ?? this.onTap;
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => launchTap?.call(payload),
+        );
+      }
+    } catch (e) {
+      Utils.debugLog('LocalNotificationService: launch details failed — $e');
+    }
 
     // Android 8+ requires the channel to exist before first show.
     final androidPlugin = _plugin

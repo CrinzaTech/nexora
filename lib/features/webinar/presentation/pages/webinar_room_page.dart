@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -15,6 +16,7 @@ import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_action_button.dart';
 import 'package:nexora/core/widgets/custom_appbar_widget.dart';
 import 'package:nexora/core/widgets/custom_network_image.dart';
+import 'package:nexora/core/widgets/live_stream_controls.dart';
 import 'package:nexora/features/courses/presentation/widgets/draggable_fab.dart';
 import 'package:nexora/features/courses/presentation/widgets/live_class_speed_dial.dart';
 import 'package:nexora/features/webinar/data/models/webinar_model.dart';
@@ -111,6 +113,11 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
   String? _currentUrl;
   bool _preparing = false;
 
+  /// Owned here, not by the controls: a signed URL that expires mid-webinar
+  /// rebuilds the whole player, and a clock living inside it would restart
+  /// the stream timer at zero every time it did.
+  final LiveStreamClock _streamClock = LiveStreamClock();
+
   /// Whether the stream is currently quietened for a speaking turn.
   bool _ducked = false;
 
@@ -128,6 +135,14 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
   @override
   void dispose() {
     WakelockPlus.disable();
+    // Restore the app-wide portrait lock from `main()`. Expanding the
+    // stage pins landscape and keeps it pinned, so an attendee who backs
+    // out mid-webinar would otherwise take that lock with them to every
+    // other screen.
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
     _disposePlayer();
     super.dispose();
   }
@@ -138,6 +153,37 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
     _currentUrl = null;
     controller?.dispose(forceDispose: true);
   }
+
+  bool get _isLandscape =>
+      mounted && MediaQuery.orientationOf(context) == Orientation.landscape;
+
+  /// What the stage's expand button does, in place of the package's own
+  /// fullscreen route.
+  ///
+  /// That route is pushed on the **root** navigator, so it sits outside
+  /// this room's [BlocProvider] — the chat panel and the raise-hand dial
+  /// cannot go inside it without re-providing the cubit and duplicating
+  /// the whole landscape layout. Landscape here already drops the app bar
+  /// and hands the whole screen to the stage, and it keeps chat and
+  /// raise-hand with it.
+  Future<void> _toggleLandscape() async {
+    if (!mounted) return;
+    // Stays pinned either way. Releasing it after the rotation settled
+    // snapped straight back: the app is portrait-locked globally in
+    // `main()`, and the attendee is still physically holding the phone
+    // the way they were, so the moment we stop asking the OS puts it
+    // back. This button is the only way in and out of landscape here, so
+    // it has to hold. [dispose] restores the app-wide lock.
+    await SystemChrome.setPreferredOrientations(
+      _isLandscape
+          ? [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]
+          : [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight],
+    );
+  }
+
+  /// Nothing to clear: this room's body already sits inside a [SafeArea]
+  /// in both orientations, so the stage never reaches the navigation bar.
+  double _stageBottomInset() => 0;
 
   Future<void> _syncPlayer(String hlsUrl) async {
     if (_preparing || _currentUrl == hlsUrl) return;
@@ -157,11 +203,33 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
         controlsConfiguration: BetterPlayerControlsConfiguration(
           enablePlaybackSpeed: false,
           enableSkips: false,
-          showControlsOnInitialize: false,
+          // Read by [LiveStreamControls]: the bar is up when the stage
+          // first comes alive, then fades out on its own a few seconds
+          // later. Starting hidden would mean nobody sees the LIVE state
+          // or the stream timer unless they think to tap the video.
+          showControlsOnInitialize: true,
           progressBarPlayedColor: AppColors.primary,
           progressBarHandleColor: AppColors.primary,
           progressBarBufferedColor: AppColors.primary.withValues(alpha: 0.3),
           progressBarBackgroundColor: AppColors.grey200,
+          // The package draws no progress row at all for a `liveStream`
+          // source — its bottom bar swaps the row for the word "LIVE" and
+          // stops there. [LiveStreamControls] replaces the whole bar with
+          // the layout every streaming site uses: a full-width scrubber
+          // with play / mute / LIVE + stream timer / expand beneath it.
+          // Replacing the controls rather than drawing over them is also
+          // what stops the two colliding — the package centres its icons
+          // in that bar, so they reach right down to the bottom edge.
+          playerTheme: BetterPlayerTheme.custom,
+          customControlsBuilder: (controller, onVisibilityChanged) =>
+              LiveStreamControls(
+                controller: controller,
+                clock: _streamClock,
+                onControlsVisibilityChanged: onVisibilityChanged,
+                bottomInset: _stageBottomInset(),
+                isExpanded: _isLandscape,
+                onToggleExpand: _toggleLandscape,
+              ),
         ),
       ),
     );
@@ -433,7 +501,15 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
 
         Positioned.fill(
           child: DraggableFab(
-            margin: const EdgeInsets.all(16),
+            // Clears the live control bar along the bottom of the stage —
+            // parked at a flat 16 the dial sat straight on the scrubber
+            // and the expand button.
+            margin: const EdgeInsets.only(
+              left: 16,
+              top: 16,
+              right: 16,
+              bottom: LiveStreamControls.barHeight + 16,
+            ),
             builder: (context, dockedTop) => LiveClassSpeedDial(
               heroTag: 'webinar-speed-dial',
               // Parked up top, fanning upward would run off-screen.
@@ -550,7 +626,8 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
             if (isMeSpeaking || state.isOtherSpeaking(myId))
               Positioned(
                 left: 12,
-                bottom: 12,
+                // Clear of the live control bar along the bottom edge.
+                bottom: 72,
                 child: WebinarSpeakingChip(
                   name: state.speakingName ?? 'Someone',
                   isMe: isMeSpeaking,

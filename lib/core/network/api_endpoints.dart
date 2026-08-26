@@ -20,6 +20,28 @@ class ApiEndpoints {
   static const String sendOtpV2 = '/api/v1/send-otp-v2';
   static const String verifyOtpV2 = '/api/v1/verify-otp-v2';
 
+  /// Exchange a (rotated) refresh token for a fresh access token.
+  /// POST /api/v1/refresh-token   — **no Authorization header**
+  /// Body:     { "refreshToken": String }
+  /// Response: { "success": bool, "message": String,
+  ///             "data": { "accessToken", "refreshToken", "expiresIn" } }
+  ///
+  /// Deliberately unauthenticated: the access token is expected to be dead
+  /// by the time this is called, so requiring a live one would make the
+  /// endpoint unreachable exactly when it is needed. The refresh token is
+  /// the credential. A 401 here is final — it is the only response that
+  /// justifies signing the learner out.
+  static const String refreshToken = '/api/v1/refresh-token';
+
+  /// Revoke the whole refresh-token family for this login.
+  /// POST /api/v1/logout   — **no Authorization header**
+  /// Body: { "refreshToken": String }
+  ///
+  /// Also unauthenticated, so a learner whose access token already expired
+  /// can still end their session properly. Always answers 200: a token that
+  /// is already gone is a session that is already over.
+  static const String logout = '/api/v1/logout';
+
   /// Validate an org code before the auth flow.
   /// POST /api/v1/validate-org-code
   /// Body: { "orgCode": String }

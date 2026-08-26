@@ -270,9 +270,22 @@ class _OtpFormContent extends StatelessWidget {
       child: BlocListener<OtpCubit, OtpState>(
         listener: (context, state) {
           state.maybeWhen(
-            verified: (token, userId, message, isUserAlreadyExist) async {
+            verified:
+                (
+                  token,
+                  refreshToken,
+                  userId,
+                  message,
+                  isUserAlreadyExist,
+                ) async {
               if (token != null && token.isNotEmpty) {
-                await sl<SessionService>().saveToken(token);
+                // Both tokens in one write: the refresh token is what lets
+                // this session renew itself instead of expiring the learner
+                // back to the login screen a week from now.
+                await sl<SessionService>().saveTokens(
+                  accessToken: token,
+                  refreshToken: refreshToken,
+                );
                 // Gate the dashboard until setup-profile is actually
                 // submitted. Written immediately (before navigation) so
                 // the flag survives an app kill/cache-clear that leaves

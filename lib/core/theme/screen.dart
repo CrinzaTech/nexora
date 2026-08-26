@@ -26,19 +26,34 @@ class Screen {
     return getSize(px);
   }
 
+  /// The device's narrow dimension, whichever way it is being held.
+  ///
+  /// Every measurement below is taken against this (or [_longestSide])
+  /// rather than raw width/height, because the Figma frame this scales
+  /// from is a *portrait* one. Comparing the live width to a 360-wide
+  /// design frame makes each of these swing wildly the moment the device
+  /// turns: on a 360x800 phone the width jumps to 800, so anything keyed
+  /// to it grows 2.2x and anything keyed to the height collapses to 0.44x.
+  ///
+  /// Portrait is unaffected — the shortest side *is* the width there — so
+  /// this only ever changes what landscape gets, which is the live class
+  /// and webinar room stages. Everything else is portrait-locked in
+  /// `main()`.
+  static double get _shortestSide =>
+      _width < _height ? _width * 1.0 : _height * 1.0;
+
+  static double get _longestSide =>
+      _width < _height ? _height * 1.0 : _width * 1.0;
+
   // Calculate unified scaling factor to maintain aspect ratio.
   //
-  // Measured against the shortest/longest side rather than raw width/height
-  // so the result doesn't depend on orientation. Comparing the live width to
-  // a portrait design frame made this collapse in landscape — on a 360x800
-  // device it fell from ~0.99 to ~0.44, shrinking every getSize()'d icon to
-  // less than half (the live class's back arrow became unusably small).
-  // Portrait is unaffected: the shortest side is still the width.
+  // Keyed to the shortest/longest side for the reason above: this used to
+  // read raw width, and on a 360x800 device in landscape it fell from
+  // ~0.99 to ~0.44, shrinking every getSize()'d icon to less than half
+  // (the live class's back arrow became unusably small).
   static double getScaleFactor() {
-    final double shortestSide = _width < _height ? _width * 1.0 : _height * 1.0;
-    final double longestSide = _width < _height ? _height * 1.0 : _width * 1.0;
-    final double scaleWidth = shortestSide / FIGMA_DESIGN_WIDTH;
-    final double scaleHeight = longestSide / FIGMA_DESIGN_HEIGHT;
+    final double scaleWidth = _shortestSide / FIGMA_DESIGN_WIDTH;
+    final double scaleHeight = _longestSide / FIGMA_DESIGN_HEIGHT;
     return scaleWidth < scaleHeight ? scaleWidth : scaleHeight;
   }
 
@@ -56,11 +71,11 @@ class Screen {
 
   // Responsive Sizing Methods
   static double getHorizontalSize(double px) {
-    return ((px * width) / FIGMA_DESIGN_WIDTH);
+    return ((px * _shortestSide) / FIGMA_DESIGN_WIDTH);
   }
 
   static double getVerticalSize(double px) {
-    return ((px * height) / FIGMA_DESIGN_HEIGHT);
+    return ((px * _longestSide) / FIGMA_DESIGN_HEIGHT);
   }
 
   static double getSize(double px) {
@@ -73,7 +88,7 @@ class Screen {
   /// The upper clamp is conservative (56) — on large screens (tablets, foldables)
   /// use [ResponsiveHelper.cappedFontSize] or [getFontSizeCapped] instead.
   static double getFontSize(double px) {
-    return (px * _width / FIGMA_DESIGN_WIDTH).clamp(8.0, 56.0);
+    return (px * _shortestSide / FIGMA_DESIGN_WIDTH).clamp(8.0, 56.0);
   }
 
   /// Font size with a tighter cap for large screens.
@@ -81,7 +96,7 @@ class Screen {
   /// Equivalent to [getFontSize] but limited to 1.5× the design value,
   /// preventing extreme text enlargement on iPad or wide foldables.
   static double getFontSizeCapped(double px) {
-    final scaled = (px * _width / FIGMA_DESIGN_WIDTH);
+    final scaled = (px * _shortestSide / FIGMA_DESIGN_WIDTH);
     final cap = px * 1.5; // Never more than 1.5× the original design size
     return scaled.clamp(8.0, cap > 8.0 ? cap : 56.0);
   }
@@ -90,8 +105,10 @@ class Screen {
   /// on large screens. Defaults to 680 dp (reasonable tablet content width).
   static double getHorizontalSizeCapped(double px, {double maxWidth = 680.0}) {
     final scaled = getHorizontalSize(px);
-    // Cap only when screen is wider than mobile baseline
-    if (_width > 600) {
+    // Cap only when the device is genuinely bigger than the mobile
+    // baseline — not merely turned sideways, which is what reading raw
+    // width made this think.
+    if (_shortestSide > 600) {
       return scaled.clamp(0.0, px * 1.5); // max 1.5× on larger screens
     }
     return scaled;

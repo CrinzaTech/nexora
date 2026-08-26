@@ -178,7 +178,7 @@ class _ContinueCourseCard extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        'Buy Now',
+                        course.isCourseFree ? 'Get Free Access' : 'Buy Now',
                         style: AppTypography.bodyTextLargeSemiBold.copyWith(
                           color: AppColors.alwaysWhite,
                           fontSize: Screen.getFontSize(14),

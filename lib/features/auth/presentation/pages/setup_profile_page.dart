@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/services/content_completion_service.dart';
+import 'package:nexora/core/network/token_refresh_service.dart';
 import 'package:nexora/core/session/session_service.dart';
 import 'package:nexora/core/utils/utils.dart';
 import 'package:nexora/core/widgets/custom_action_button.dart';
@@ -239,6 +240,9 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
         final confirmed = await LogoutDialog.show(context);
         if (confirmed == true && context.mounted) {
           await sl<ContentCompletionService>().clearForLogout();
+          // Revoke server-side first — it needs the refresh token that
+          // clearToken deletes.
+          await sl<TokenRefreshService>().revokeSession();
           await sl<SessionService>().clearToken();
           if (context.mounted) context.go(AppRoutes.login);
         }
@@ -272,6 +276,7 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
                           if (confirmed == true && context.mounted) {
                             await sl<ContentCompletionService>()
                                 .clearForLogout();
+                            await sl<TokenRefreshService>().revokeSession();
                             await sl<SessionService>().clearToken();
                             if (context.mounted) context.go(AppRoutes.login);
                           }

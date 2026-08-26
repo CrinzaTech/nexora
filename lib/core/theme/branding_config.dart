@@ -442,7 +442,7 @@ const crinestaBranding = BrandingConfig(
   //  450°  begin (-1, 0)   end (1,  0)    wraps to 90°
   //  -90°  begin (1,  0)   end (-1, 0)    wraps to 270°
 
-  headerGradientAngle: 0,
+  headerGradientAngle: 0 ,
   headerGradientDark: false,
   headerShine: false,
   

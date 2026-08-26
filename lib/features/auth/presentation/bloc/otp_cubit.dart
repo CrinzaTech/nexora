@@ -44,6 +44,7 @@ class OtpCubit extends SafeCubit<OtpState> {
       (response) => emit(
         OtpState.verified(
           token: response.token,
+          refreshToken: response.refreshToken,
           userId: response.userId,
           message: response.message,
           isUserAlreadyExist: response.isUserAlreadyExist,
@@ -84,6 +85,7 @@ class OtpCubit extends SafeCubit<OtpState> {
       (response) => emit(
         OtpState.verified(
           token: response.token,
+          refreshToken: response.refreshToken,
           userId: response.userId,
           message: response.message,
           isUserAlreadyExist: response.isUserAlreadyExist,

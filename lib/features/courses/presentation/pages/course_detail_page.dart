@@ -32,7 +32,17 @@ class CourseDetailPage extends StatelessWidget {
   /// [Course.courseTitle] once the data arrives.
   final String? courseTitle;
 
-  const CourseDetailPage({super.key, required this.courseId, this.courseTitle});
+  /// Tab to open on: 0 About · 1 Content · 2 Reviews. Notification deep
+  /// links land on Content — a "new content added" push that opened on
+  /// the About blurb would make the user hunt for what changed.
+  final int initialTabIndex;
+
+  const CourseDetailPage({
+    super.key,
+    required this.courseId,
+    this.courseTitle,
+    this.initialTabIndex = 0,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +51,11 @@ class CourseDetailPage extends StatelessWidget {
         BlocProvider(create: (_) => sl<CourseDetailCubit>()..load(courseId)),
         BlocProvider(create: (_) => sl<CourseReviewsCubit>()..load(courseId)),
       ],
-      child: _CourseDetailView(courseId: courseId, courseTitle: courseTitle),
+      child: _CourseDetailView(
+        courseId: courseId,
+        courseTitle: courseTitle,
+        initialTabIndex: initialTabIndex,
+      ),
     );
   }
 }
@@ -49,8 +63,13 @@ class CourseDetailPage extends StatelessWidget {
 class _CourseDetailView extends StatefulWidget {
   final int courseId;
   final String? courseTitle;
+  final int initialTabIndex;
 
-  const _CourseDetailView({required this.courseId, this.courseTitle});
+  const _CourseDetailView({
+    required this.courseId,
+    this.courseTitle,
+    this.initialTabIndex = 0,
+  });
 
   @override
   State<_CourseDetailView> createState() => _CourseDetailViewState();
@@ -75,7 +94,13 @@ class _CourseDetailViewState extends State<_CourseDetailView>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(
+      length: 3,
+      vsync: this,
+      // Clamped, not trusted: the index arrives from a query string that
+      // a push payload can set.
+      initialIndex: widget.initialTabIndex.clamp(0, 2),
+    );
     _displayTitle =
         (widget.courseTitle != null && widget.courseTitle!.isNotEmpty)
         ? widget.courseTitle!
@@ -691,6 +716,9 @@ class _CourseDetailBottomBar extends StatelessWidget {
                   // course has more than one buyable plan, instead of
                   // the user discovering that only on tap.
                   tiers: course.pricing,
+                  // Free courses get "Get Free Access" instead of "Buy
+                  // Now" — the tap enrols directly, no Razorpay.
+                  isCourseFree: course.isCourseFree,
                   showBuyNow: true,
                   showViewDemo: false,
                   showViewDetails: false,

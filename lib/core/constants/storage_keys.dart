@@ -10,6 +10,17 @@ class StorageKeys {
   // ============================================================
   static const String accessToken = 'access_token';
 
+  /// Opaque refresh token minted alongside the access token at
+  /// `verify-otp-v2`. Rotated on every `refresh-token` call — the value
+  /// stored here is always the newest one, because presenting a retired
+  /// token outside the server's grace window trips reuse detection and
+  /// revokes the whole family.
+  ///
+  /// Absent means a session that predates this flow (or a login where the
+  /// backend failed to persist one). Such a session still works until its
+  /// access token expires; it just cannot renew itself.
+  static const String refreshToken = 'refresh_token';
+
   /// 'true'/'false' flag for whether the mandatory post-OTP profile
   /// setup form has been completed. Written to `false` the moment a
   /// new-user token is saved (before setup-profile is shown) so the

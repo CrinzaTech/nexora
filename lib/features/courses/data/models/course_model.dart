@@ -100,6 +100,16 @@ class CourseSummary {
   /// than making a round trip that can only fail.
   final bool hasCertificate;
 
+  /// `true` when the course costs nothing, so list/continue cards can
+  /// label their CTA "Get Free Access" instead of "Buy Now".
+  ///
+  /// List endpoints ship no price breakdown (that only arrives with the
+  /// detail/pricing calls), so this is read defensively off whichever
+  /// free-marker the endpoint happens to send — see [_readIsFree].
+  /// Defaults to `false`, which keeps the existing "Buy Now" copy when
+  /// the backend sends no marker at all.
+  final bool isCourseFree;
+
   const CourseSummary({
     required this.courseId,
     required this.courseTitle,
@@ -114,6 +124,7 @@ class CourseSummary {
     this.accessUntil,
     this.purchasedId,
     this.hasCertificate = false,
+    this.isCourseFree = false,
   });
 
   /// Maps the backend's `0..100` completion percentage to a `0..1`
@@ -159,6 +170,7 @@ class CourseSummary {
     DateTime? accessUntil,
     int? purchasedId,
     bool? hasCertificate,
+    bool? isCourseFree,
   }) {
     return CourseSummary(
       courseId: courseId ?? this.courseId,
@@ -175,6 +187,7 @@ class CourseSummary {
       accessUntil: accessUntil ?? this.accessUntil,
       purchasedId: purchasedId ?? this.purchasedId,
       hasCertificate: hasCertificate ?? this.hasCertificate,
+      isCourseFree: isCourseFree ?? this.isCourseFree,
     );
   }
 
@@ -218,7 +231,38 @@ class CourseSummary {
                   json['certificateAvailable'])
               as bool? ??
           false,
+      isCourseFree: _readIsFree(json),
     );
+  }
+
+  /// Resolves whether a list-endpoint course is free.
+  ///
+  /// The list payloads carry no price breakdown, and the backend hasn't
+  /// settled on one spelling for the flag, so every plausible marker is
+  /// checked in turn:
+  ///  1. an explicit boolean (`isCourseFree` / `isFree` / `isPaid`),
+  ///  2. the catalog's `courseType` string ("free" / "paid"),
+  ///  3. a price field that is present *and* zero.
+  ///
+  /// A missing price is never read as free — absent data means unknown,
+  /// and the card falls back to "Buy Now".
+  static bool _readIsFree(Map<String, dynamic> json) {
+    final explicit = json['isCourseFree'] ?? json['isFree'];
+    if (explicit is bool) return explicit;
+    if (json['isPaid'] is bool) return !(json['isPaid'] as bool);
+
+    final type = json['courseType']?.toString().toLowerCase();
+    if (type == 'free') return true;
+    if (type == 'paid') return false;
+
+    final price =
+        json['calculatedFinalPrice'] ??
+        json['finalPrice'] ??
+        json['discountedPrice'] ??
+        json['price'];
+    if (price is num) return price <= 0;
+
+    return false;
   }
 
   /// Reads `courseCompletionPercentage` from the response. Backend now
@@ -557,6 +601,26 @@ class CourseContent {
 
   /// The content URL for this node, or null for folders.
   String? get primaryUrl => type == CourseContentType.folder ? null : url;
+
+  /// Number of playable/openable nodes inside this folder that the user
+  /// can access without enrolling — i.e. visible, non-folder descendants
+  /// with `isLocked == false`, counted recursively through sub-folders.
+  ///
+  /// Derived entirely from the curriculum tree the detail endpoint
+  /// already returns, so no extra API call is needed. Folders themselves
+  /// are never counted — only the leaf content inside them.
+  int get freeContentCount {
+    var count = 0;
+    for (final child in children) {
+      if (!child.isVisible) continue;
+      if (child.isFolder) {
+        count += child.freeContentCount;
+      } else if (!child.isLocked) {
+        count++;
+      }
+    }
+    return count;
+  }
 
   factory CourseContent.fromJson(Map<String, dynamic> json) {
     // API sends a single `url` field; fall back to the old per-type fields

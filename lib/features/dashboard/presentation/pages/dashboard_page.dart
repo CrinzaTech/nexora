@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/features/courses/presentation/bloc/continue_courses_cubit.dart';
+import 'package:nexora/features/courses/presentation/bloc/live_now_cubit.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinars_cubit.dart';
 import 'package:nexora/features/home/presentation/bloc/home_cubit.dart';
 import 'package:nexora/features/home/presentation/pages/home_page.dart';
@@ -33,6 +34,7 @@ class _DashboardPageState extends State<DashboardPage> {
   // initState (the only existing fetch hook) never re-runs.
   late final HomeCubit _homeCubit;
   late final ContinueCoursesCubit _continueCubit;
+  late final LiveNowCubit _liveNowCubit;
   // Owned here for the same reason as the two above — the Home rail has
   // to pick up a webinar that went live while the learner was on another
   // tab, and HomePage's keep-alive means its initState never re-runs.
@@ -75,6 +77,10 @@ class _DashboardPageState extends State<DashboardPage> {
     _pageController = PageController(initialPage: _currentIndex);
     _homeCubit = sl<HomeCubit>();
     _continueCubit = sl<ContinueCoursesCubit>()..load();
+    // Gathers its own schedule (a request per owned course) and then
+    // re-checks it locally, so it is started once here rather than on
+    // every entry to the Home tab.
+    _liveNowCubit = sl<LiveNowCubit>()..load();
     _webinarsCubit = sl<WebinarsCubit>()..load();
 
     // Cache pages once to avoid recreating BlocProviders on every build.
@@ -85,6 +91,7 @@ class _DashboardPageState extends State<DashboardPage> {
         providers: [
           BlocProvider.value(value: _homeCubit),
           BlocProvider.value(value: _continueCubit),
+          BlocProvider.value(value: _liveNowCubit),
           BlocProvider.value(value: _webinarsCubit),
         ],
         child: const HomePage(key: ValueKey('home')),
@@ -100,6 +107,7 @@ class _DashboardPageState extends State<DashboardPage> {
     _pageController.dispose();
     _homeCubit.close();
     _continueCubit.close();
+    _liveNowCubit.close();
     _webinarsCubit.close();
     super.dispose();
   }

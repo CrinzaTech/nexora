@@ -15,6 +15,10 @@ class OtpState with _$OtpState {
   /// OTP verified successfully
   const factory OtpState.verified({
     required String? token,
+
+    /// Opaque refresh token for [token]. Null when the backend issued
+    /// none — the session then works but cannot renew itself.
+    required String? refreshToken,
     required String? userId,
     required String message,
     @Default(false) bool isUserAlreadyExist,

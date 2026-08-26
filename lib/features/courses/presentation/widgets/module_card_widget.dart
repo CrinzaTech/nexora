@@ -60,6 +60,13 @@ class ModuleCard extends StatelessWidget {
 
   Widget _buildTile(BuildContext context) {
     final rh = ResponsiveHelper.of(context);
+    // Preview-only perk badge: how many unlocked leaf nodes sit inside
+    // this folder. Hidden once the user has enrolled (coursePurchasedId
+    // != 0) because every node is unlocked then and the count would be
+    // meaningless.
+    final freeCount = module.isFolder && coursePurchasedId == 0
+        ? module.freeContentCount
+        : 0;
     return Container(
       margin: EdgeInsets.only(bottom: Screen.getVerticalSize(10)),
       decoration: BoxDecoration(
@@ -303,6 +310,18 @@ class ModuleCard extends StatelessWidget {
                 fontSize: rh.isLargeScreen ? rh.cappedFontSize(14) : Screen.getFontSize(14),
               ),
             ),
+            if (freeCount > 0) ...[
+              SizedBox(height: Screen.getVerticalSize(5)),
+              Text(
+                '$freeCount free access',
+                style: AppTypography.bodyTextSemiBold.copyWith(
+                  color: AppColors.successDark,
+                  fontSize: rh.isLargeScreen
+                      ? rh.cappedFontSize(12)
+                      : Screen.getFontSize(12),
+                ),
+              ),
+            ],
             if ((module.type == CourseContentType.video ||
                     module.type == CourseContentType.youtube) &&
                 module.formattedDuration != null) ...[

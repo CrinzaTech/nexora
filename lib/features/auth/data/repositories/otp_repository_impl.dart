@@ -54,6 +54,7 @@ class OtpRepositoryImpl implements OtpRepository {
           message: response.message,
           isUserAlreadyExist: response.isUserAlreadyExist,
           token: response.accessToken.isNotEmpty ? response.accessToken : null,
+          refreshToken: response.canRenewSession ? response.refreshToken : null,
         ),
       );
     } on DioException catch (e) {
@@ -103,6 +104,7 @@ class OtpRepositoryImpl implements OtpRepository {
     required String otpCode,
     required bool isPhone,
     String? orgId,
+    String? deviceKey,
   }) async {
     try {
       final json = await _apiClient.verifyOtpV2(<String, dynamic>{
@@ -110,6 +112,9 @@ class OtpRepositoryImpl implements OtpRepository {
         'isPhone': isPhone,
         'otp': otpCode,
         if (orgId != null) 'orgId': orgId,
+        // Optional, and omitted rather than sent null: it scopes the
+        // refresh-token family this login opens to one device.
+        if (deviceKey != null) 'deviceKey': deviceKey,
       });
       // v2 response shape mirrors v1 — same deserialiser.
       final response = VerifyOtpResponseModel.fromJson(json);
@@ -124,6 +129,7 @@ class OtpRepositoryImpl implements OtpRepository {
           message: response.message,
           isUserAlreadyExist: response.isUserAlreadyExist,
           token: response.accessToken.isNotEmpty ? response.accessToken : null,
+          refreshToken: response.canRenewSession ? response.refreshToken : null,
         ),
       );
     } on DioException catch (e) {

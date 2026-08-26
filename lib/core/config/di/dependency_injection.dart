@@ -10,6 +10,7 @@ import 'package:nexora/features/payment/domain/usecases/create_order_usecase.dar
 import 'package:nexora/features/payment/domain/usecases/verify_payment_usecase.dart';
 import 'package:nexora/features/payment/presentation/bloc/payment_cubit.dart';
 import 'package:nexora/core/network/dio_client.dart';
+import 'package:nexora/core/network/token_refresh_service.dart';
 import 'package:nexora/features/home/data/repositories/home_repository_impl.dart';
 import 'package:nexora/features/home/domain/repositories/home_repository.dart';
 import 'package:nexora/features/home/domain/usecases/get_home_data_usecase.dart';
@@ -45,6 +46,7 @@ import 'package:nexora/features/courses/presentation/bloc/course_list_cubit.dart
 import 'package:nexora/features/courses/presentation/bloc/course_reviews_cubit.dart';
 import 'package:nexora/features/courses/presentation/bloc/course_filters_cubit.dart';
 import 'package:nexora/features/courses/presentation/bloc/live_class_cubit.dart';
+import 'package:nexora/features/courses/presentation/bloc/live_now_cubit.dart';
 import 'package:nexora/features/courses/presentation/bloc/search_courses_cubit.dart';
 import 'package:nexora/features/chats/data/repositories/chat_group_repository_impl.dart';
 import 'package:nexora/features/chats/data/services/chat_token_provider.dart';
@@ -141,6 +143,14 @@ Future<void> setupLocator() async {
   sl.registerLazySingleton<Dio>(() => createDioClient());
   sl.registerLazySingleton<ApiClient>(() => ApiClient(sl<Dio>()));
 
+  // Silent session renewal. Runs on its own bare Dio — see the class doc:
+  // routing it through sl<Dio>() would put the refresh call behind the
+  // very interceptor that asks for the refresh. Lazy, so the first
+  // resolution happens on the first 401 rather than at startup.
+  sl.registerLazySingleton<TokenRefreshService>(
+    () => TokenRefreshService(sl<SessionService>()),
+  );
+
   // Appearance — singleton so the profile toggle and MaterialApp read
   // and write the same instance. `main.dart` awaits `load()` before
   // runApp so the first frame paints in the persisted theme.
@@ -216,6 +226,12 @@ Future<void> setupLocator() async {
   );
   sl.registerFactory(
     () => ContinueCoursesCubit(getContinueCoursesUseCase: sl()),
+  );
+  sl.registerFactory(
+    () => LiveNowCubit(
+      getMyCoursesUseCase: sl(),
+      getCourseDetailUseCase: sl(),
+    ),
   );
   sl.registerFactory(
     () => MyCoursesCubit(getMyCoursesUseCase: sl(), rewatchCourseUseCase: sl()),

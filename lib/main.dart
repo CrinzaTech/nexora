@@ -129,6 +129,14 @@ void main() {
             debugPrint('Local notification tapped — payload=$payload');
             NotificationRouter.route(FcmService.decodePayload(payload));
           },
+          // Same tap, but it launched the process from terminated. The
+          // splash still owns the navigator, so park the link instead of
+          // routing it — SplashScreen replays it once it has landed on
+          // the dashboard.
+          onLaunchTap: (payload) {
+            debugPrint('Local notification launched app — payload=$payload');
+            NotificationRouter.park(FcmService.decodePayload(payload));
+          },
         ),
       );
       sl.registerLazySingleton<LocalNotificationService>(
@@ -140,6 +148,9 @@ void main() {
       // and cold-start (`getInitialMessage`, deferred to the first frame
       // by FcmService so the router has mounted).
       fcmService.onNotificationTap = NotificationRouter.route;
+      // Cold-start taps get parked, not routed — see NotificationRouter's
+      // "Cold-start parking" note. SplashScreen replays them.
+      fcmService.onColdStartNotificationTap = NotificationRouter.park;
       sl.registerLazySingleton<FcmService>(() => fcmService);
       await _safeInit('fcm', () => fcmService.init());
 

@@ -662,6 +662,7 @@ class _CourseCard extends StatelessWidget {
             showViewDetails: true,
             showViewDemo: false,
             showBuyNow: course.isPurchased == false,
+            isCourseFree: course.isCourseFree,
             onPurchased: () => context
                 .read<CourseListCubit>()
                 .updatePurchasedStatus(course.courseId, true),

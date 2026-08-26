@@ -19,6 +19,7 @@ import 'package:nexora/features/courses/presentation/widgets/view_demo_buy_now_r
 import 'package:nexora/features/home/data/models/home_model.dart';
 import 'package:nexora/core/widgets/scrolling_title.dart';
 import 'package:nexora/features/home/presentation/bloc/home_cubit.dart';
+import 'package:nexora/features/home/presentation/widgets/live_class_section_widget.dart';
 import 'package:nexora/features/home/presentation/widgets/banner_widget.dart';
 import 'package:nexora/features/home/presentation/widgets/category_section_widget.dart';
 import 'package:nexora/features/home/presentation/widgets/featured_courses_widget.dart';
@@ -355,6 +356,15 @@ class _HomePageState extends State<HomePage>
                               children: [
                                 SizedBox(height: Screen.getVerticalSize(25)),
                                 BannerSection(banners: dashboard.banner),
+                                // Top of the page for the same reason the
+                                // webinar rail is near it, only more so: a
+                                // class the learner has already paid for,
+                                // on air this second, is the one thing
+                                // here they lose by not seeing. Costs no
+                                // request — it reads the Continue Learning
+                                // list Home already holds — and collapses
+                                // to nothing when none are live.
+                                const LiveClassSectionWidget(),
                                 // Above the course rails on purpose: a
                                 // webinar is time-bound, and one that is
                                 // live right now is the most perishable
@@ -1162,6 +1172,12 @@ class _ContinuePurchaseCard extends StatelessWidget {
                               showViewDetails: false,
                               showViewDemo: false,
                               showBuyNow: true,
+                              isCourseFree: course.isCourseFree,
+                              // The continue-course payload carries no
+                              // price, so this card can't tell a free
+                              // course from a paid one — a neutral
+                              // enrol CTA reads correctly either way.
+                              buyLabel: 'Enroll Now',
                               buttonHeight: 50,
                               onPurchased: () => context
                                   .read<ContinueCoursesCubit>()
