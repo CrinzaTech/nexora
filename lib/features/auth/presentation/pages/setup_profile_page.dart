@@ -10,6 +10,8 @@ import 'package:nexora/core/widgets/custom_action_button.dart';
 import 'package:nexora/core/widgets/custom_snackbar.dart';
 import 'package:nexora/core/widgets/custom_text_form_field.dart';
 import 'package:nexora/core/widgets/logout_dialog.dart';
+import 'package:nexora/features/auth/data/services/google_account_picker_service.dart';
+import 'package:nexora/features/auth/presentation/widgets/google_email_picker_field.dart';
 import 'package:nexora/features/auth/presentation/widgets/phone_input_field.dart';
 import 'package:nexora/features/profile/domain/usecases/update_profile_usecase.dart';
 import 'package:flutter/material.dart';
@@ -59,9 +61,22 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
   // Lives at top-level state so the controller's text survives
   // rebuilds even when the field is conditionally rendered.
   final _phoneController = TextEditingController();
+  // Country picked alongside [_phoneController] in the email-signup
+  // branch (phone-signup users already have a verified [widget.countryCode]
+  // instead). Defaults to whatever PhoneInputField itself defaults to.
+  Country _phoneCountry = const Country(
+    name: 'India',
+    code: 'IN',
+    dialCode: '+91',
+    flag: '🇮🇳',
+  );
   DateTime? _selectedDate;
   String? _selectedGender;
   File? _profileImage;
+  // Loading flag for the Google account picker specifically — kept
+  // separate from the "Continue" button's own start/stopLoading so
+  // picking an email doesn't visually disable the rest of the form.
+  bool _isPickingGoogleEmail = false;
 
   /// Guards against a second `pickImage` while the first is still
   /// opening. The platform channel behind [ImagePicker] is a
@@ -109,6 +124,33 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
     } finally {
       _isPickingImage = false;
     }
+  }
+
+  /// Opens the native Google account picker so a phone-signup user can
+  /// pick their email in one tap instead of typing it (and risking a
+  /// typo the backend then has to bounce OTPs against).
+  Future<void> _handlePickGoogleEmail() async {
+    if (!mounted || _isPickingGoogleEmail) return;
+    setState(() => _isPickingGoogleEmail = true);
+
+    String? email;
+    try {
+      email = await sl<GoogleAccountPickerService>().pickEmail();
+    } catch (e) {
+      if (mounted) {
+        CustomSnackbar.error(
+          context,
+          title: 'Error',
+          message: 'Could not get your Google account: ${e.toString()}',
+        );
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isPickingGoogleEmail = false;
+      if (email != null) _emailController.text = email;
+    });
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -167,6 +209,18 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
   ) async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Phone-signup users have no typed email field anymore — the only
+    // source is a Google pick, so check it explicitly here instead of
+    // via a FormField validator.
+    if (widget.isPhone && _emailController.text.trim().isEmpty) {
+      CustomSnackbar.error(
+        context,
+        title: 'Email Required',
+        message: 'Please pick an email with Google to continue.',
+      );
+      return;
+    }
+
     // DOB + profile photo are optional now — only gender stays
     // required because the API still expects a non-null gender enum.
     // Image / dob arguments to the use case are null-safe (see
@@ -194,6 +248,14 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
     final emailToSend = widget.isPhone
         ? _emailController.text.trim()
         : widget.email;
+    // Dial code without the leading '+' (e.g. "234" for Nigeria), sent
+    // alongside phoneToSend so the backend knows which country it
+    // belongs to. Phone-signup already carries a verified dial code in
+    // widget.countryCode; email-signup uses whatever the user picked
+    // in the PhoneInputField's country selector.
+    final stdCodeToSend = widget.isPhone
+        ? widget.countryCode.replaceFirst('+', '')
+        : _phoneCountry.dialCode.replaceFirst('+', '');
 
     final result = await sl<UpdateProfileUseCase>()(
       name: _nameController.text.trim(),
@@ -202,6 +264,7 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
       dob: _selectedDate != null ? _formatDateForApi(_selectedDate!) : null,
       gender: _genderToInt(_selectedGender!),
       userProfileImage: _profileImage,
+      stdCode: phoneToSend.isEmpty ? null : stdCodeToSend,
     );
 
     stopLoading();
@@ -336,35 +399,29 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
                                 SizedBox(height: Screen.getVerticalSize(16)),
 
                                 // Email — locked + pre-filled when the user
-                                // signed up via email (it's already verified),
-                                // editable + required when they signed up
-                                // via phone.
+                                // signed up via email (it's already
+                                // verified); a Google account picker (no
+                                // typed field) when they signed up via
+                                // phone, so there's nothing left to typo.
                                 _FormLabel(
                                   label: widget.isPhone
                                       ? 'Email Address'
                                       : 'Email Address (verified)',
                                 ),
                                 SizedBox(height: Screen.getVerticalSize(8)),
-                                CustomTextFormField(
-                                  controller: _emailController,
-                                  hintText: 'Enter here',
-                                  keyboardType: TextInputType.emailAddress,
-                                  enabled: widget.isPhone,
-                                  validator: (value) {
-                                    // Skip validation entirely on the locked
-                                    // branch — the value comes from the
-                                    // verified-email pipeline so it's
-                                    // trustworthy by construction.
-                                    if (!widget.isPhone) return null;
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter your email';
-                                    }
-                                    if (!value.contains('@')) {
-                                      return 'Please enter a valid email';
-                                    }
-                                    return null;
-                                  },
-                                ),
+                                if (widget.isPhone)
+                                  GoogleEmailPickerField(
+                                    email: _emailController.text,
+                                    isLoading: _isPickingGoogleEmail,
+                                    onPick: _handlePickGoogleEmail,
+                                  )
+                                else
+                                  CustomTextFormField(
+                                    controller: _emailController,
+                                    hintText: 'Enter here',
+                                    keyboardType: TextInputType.emailAddress,
+                                    enabled: false,
+                                  ),
                                 SizedBox(height: Screen.getVerticalSize(16)),
 
                                 // Phone — only collected for the email-signup
@@ -373,7 +430,13 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
                                 if (!widget.isPhone) ...[
                                   const _FormLabel(label: 'Phone Number'),
                                   SizedBox(height: Screen.getVerticalSize(8)),
-                                  PhoneInputField(controller: _phoneController),
+                                  PhoneInputField(
+                                    controller: _phoneController,
+                                    initialCountry: _phoneCountry,
+                                    onCountryChanged: (country) {
+                                      setState(() => _phoneCountry = country);
+                                    },
+                                  ),
                                   SizedBox(height: Screen.getVerticalSize(16)),
                                 ],
 
@@ -638,9 +701,7 @@ class _GenderOption extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isSelected
-                      ? AppColors.primary
-                      : AppColors.grey300,
+                  color: isSelected ? AppColors.primary : AppColors.grey300,
                   width: isSelected ? 5 : 1.5,
                 ),
               ),

@@ -86,6 +86,22 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
   Timer? _speakingEchoTimer;
   static const Duration _speakingEchoGrace = Duration(seconds: 4);
 
+  /// Holds the LiveKit room open (mic released, listening only) for a
+  /// moment after a speaking turn ends, so the attendee keeps hearing
+  /// the host live while the delayed HLS copy of the turn — their own
+  /// voice included — plays out silently. Must stay equal to the page's
+  /// `_duckReleaseDelay`: the page unmutes the stream when this
+  /// disconnects LiveKit. The 8s covers glass-to-glass HLS latency
+  /// (~2.1s segments × ~3 in the playlist window + 2.5–4.5s player
+  /// buffer) — re-derive it if the segment length or the player's
+  /// bufferingConfiguration changes.
+  Timer? _micLingerTimer;
+  static const Duration _postSpeakLinger = Duration(seconds: 8);
+
+  /// Hard cap on the pause drain (≥ HLS latency + a segment + buffer).
+  Timer? _drainGuard;
+  static const Duration _maxDrain = Duration(seconds: 12);
+
   /// This learner's own `app_users.id`, decoded from the access token, so
   /// their own chat bubbles align right. `senderId` on the wire is the
   /// same id.
@@ -237,6 +253,27 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
 
     result.fold(
       (failure) {
+        // The 410 body now names the state. Deny-list: `Ended` /
+        // `Cancelled` are terminal; `Paused`, `Scheduled`, `Ready`, `Live`
+        // or anything added later is "no media yet" → back to the lobby
+        // and keep polling. (No notice here — this runs on every poll
+        // tick; `classPaused` already announced the pause once.)
+        final sessionStatus = failure.maybeWhen(
+          sessionStatus: (_, status) => status.toLowerCase(),
+          orElse: () => null,
+        );
+        if (sessionStatus != null) {
+          _stopPolling();
+          if (sessionStatus == 'cancelled') {
+            emit(state.copyWith(phase: WebinarPhase.cancelled));
+          } else if (sessionStatus == 'ended') {
+            emit(state.copyWith(phase: WebinarPhase.ended));
+          } else {
+            emit(state.copyWith(phase: WebinarPhase.lobby));
+            _startPolling();
+          }
+          return;
+        }
         switch (_statusOf(failure)) {
           case 409:
             // "Not started yet" — the state call and the stream disagree
@@ -252,9 +289,69 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
       },
       (hlsUrl) {
         _stopPolling();
-        emit(state.copyWith(phase: WebinarPhase.live, hlsUrl: hlsUrl));
+        emit(
+          state.copyWith(
+            phase: WebinarPhase.live,
+            hlsUrl: hlsUrl,
+            pauseDraining: false,
+          ),
+        );
       },
     );
+  }
+
+  // ── Pause drain ──────────────────────────────────────────────────
+
+  /// The host pressed Stop while the attendee's player still holds the
+  /// last ~7s. Keep it playing to the end of the stream (the server now
+  /// closes the playlist with `#EXT-X-ENDLIST` instead of deleting it);
+  /// [finishDrain] moves to the lobby when the player finishes, stalls
+  /// for >3s, or the guard expires.
+  void _beginDrain() {
+    if (state.phase != WebinarPhase.live || state.pauseDraining) return;
+    _drainGuard?.cancel();
+    _drainGuard = Timer(_maxDrain, () {
+      _drainGuard = null;
+      finishDrain();
+    });
+    emit(state.copyWith(pauseDraining: true));
+  }
+
+  void _cancelDrain() {
+    _drainGuard?.cancel();
+    _drainGuard = null;
+  }
+
+  /// Tail heard (or unfetchable, or timed out) — now the lobby, whose
+  /// poll brings the player back the moment the stream is back.
+  void finishDrain() {
+    if (!state.pauseDraining) return;
+    _cancelDrain();
+    _toPausedLobby();
+  }
+
+  /// The page's player reached the end of the stream: while draining,
+  /// that is the moment the attendee has heard everything; otherwise the
+  /// playlist was closed out and the player got there first.
+  void onPlayerFinished() {
+    if (state.pauseDraining) {
+      finishDrain();
+    } else if (state.phase == WebinarPhase.live) {
+      _toPausedLobby();
+    }
+  }
+
+  void _toPausedLobby() {
+    emit(
+      state.copyWith(
+        phase: WebinarPhase.lobby,
+        pauseDraining: false,
+        transientNotice:
+            "The host paused the stream. You'll rejoin automatically "
+            'when it resumes.',
+      ),
+    );
+    _startPolling();
   }
 
   /// Re-resolve a fresh signed URL — the player asks for this when its
@@ -281,12 +378,15 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
     result.fold(
       // Chat failing is not the class failing — the lesson still plays.
       (_) {},
-      (messages) => emit(
+      (messages) {
+        emit(
         state.copyWith(
           messages: _merge(state.messages, messages),
           hasMoreChat: messages.length >= _chatPageSize,
         ),
-      ),
+        );
+        _absorbPolls(messages);
+      },
     );
   }
 
@@ -306,13 +406,16 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
 
     result.fold(
       (_) => emit(state.copyWith(isLoadingMoreChat: false)),
-      (older) => emit(
+      (older) {
+        emit(
         state.copyWith(
           messages: _merge(state.messages, older),
           hasMoreChat: older.length >= _chatPageSize,
           isLoadingMoreChat: false,
         ),
-      ),
+        );
+        _absorbPolls(older);
+      },
     );
   }
 
@@ -350,9 +453,32 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
     switch (event) {
       case ChatMessageEvent(:final message):
         emit(state.copyWith(messages: _merge(state.messages, [message])));
+        if (message.poll != null) _upsertPoll(message.poll!);
+      case PollVoteAcceptedEvent(:final pollId, :final optionIds):
+        _patchPoll(pollId, (p) => p.copyWith(myOptionIds: optionIds));
+      case PollRevealedEvent(:final poll):
+        _upsertPoll(poll);
+      case PollCancelledEvent(:final pollId):
+        _patchPoll(pollId, (p) => p.copyWith(status: 'cancelled'));
       case ClassStartedEvent():
-        // The host went live; skip the wait for the next poll tick.
-        if (state.phase == WebinarPhase.lobby) unawaited(_resolvePlayback());
+        if (state.pauseDraining) {
+          // Restart during the drain — a restart wins: drop the tail and
+          // rebuild on the new stream. The page drops the old controller
+          // on the lobby phase (never resumed — that is how the tail used
+          // to leak out after a restart); the resolve brings it back live.
+          _cancelDrain();
+          emit(state.copyWith(phase: WebinarPhase.lobby, pauseDraining: false));
+          unawaited(_resolvePlayback());
+        } else if (state.phase == WebinarPhase.lobby) {
+          // The host went live; skip the wait for the next poll tick.
+          unawaited(_resolvePlayback());
+        }
+      case ClassPausedEvent():
+        // The host's broadcast dropped — not the end of the webinar, and
+        // the attendee is ~7s behind: the last words are still in the
+        // player buffer. Keep playing under a banner until the player
+        // reaches the end of the stream; the lobby takes over then.
+        if (state.phase == WebinarPhase.live) _beginDrain();
       case ClassEndedEvent():
         _stopPolling();
         emit(state.copyWith(phase: WebinarPhase.ended));
@@ -404,15 +530,15 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
         unawaited(_onMicGranted(event));
 
       case MicExpiredEvent():
-        // The grant window elapsed before the mic went live.
+        // The grant window elapsed before the mic went live — nothing of
+        // the turn is in flight on HLS, so tear down immediately.
         unawaited(_endSpeaking());
         emit(state.copyWith(transientNotice: 'Your turn to speak timed out.'));
 
       case MicReleasedEvent():
-        // The host ended the turn, or moderation changed while it was
-        // held. Tear the mic down rather than leaving it publishing to a
-        // room that has stopped listening.
-        unawaited(_endSpeaking());
+        // The host ended the turn — same as tapping "finish": release
+        // the mic now, but keep listening while the echo plays out.
+        unawaited(_endSpeaking(lingerToCoverEcho: true));
 
       case NowSpeakingEvent(:final studentId, :final name):
         _speakingEchoTimer?.cancel();
@@ -432,7 +558,7 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
       case SpeakerEndedEvent():
         final wasMine = state.isSelfSpeaking(myId);
         emit(state.copyWith(speakingUserId: null, speakingName: null));
-        if (wasMine) unawaited(_endSpeaking());
+        if (wasMine) unawaited(_endSpeaking(lingerToCoverEcho: true));
 
       case FlagUpdatedEvent(
         :final studentId,
@@ -458,7 +584,11 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
           unawaited(_endSpeaking());
         }
 
-      case ActionDeniedEvent(:final reason):
+      case ActionDeniedEvent(:final reason, :final pollId):
+        if (reason == 'poll_not_found' && pollId != null) {
+          final map = Map<int, LivePoll>.from(state.polls)..remove(pollId);
+          emit(state.copyWith(polls: map));
+        }
         emit(state.copyWith(transientNotice: _denialMessage(reason)));
 
       case KickedEvent(:final reason):
@@ -505,6 +635,14 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
   /// attendee can act on rather than showing the raw string.
   String _denialMessage(String reason) {
     switch (reason.trim().toLowerCase()) {
+      case 'poll_closed':
+        return 'Voting has closed.';
+      case 'poll_already_voted':
+        return 'You already answered this poll.';
+      case 'poll_invalid':
+        return 'Choose an option.';
+      case 'poll_not_found':
+        return 'This poll is no longer available.';
       case 'chat_blocked':
         return 'The host has turned off chat for you.';
       case 'hand_blocked':
@@ -576,7 +714,8 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
     try {
       await _hub?.stopSpeaking();
     } catch (_) {}
-    await _endSpeaking();
+    // Normal turn end — the echo of the turn is still in flight on HLS.
+    await _endSpeaking(lingerToCoverEcho: true);
   }
 
   /// The host granted the mic. Permission is requested **now**, not at
@@ -584,6 +723,11 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
   /// arrive is a prompt almost none of them need, and one they will
   /// mostly deny — which would then block the few who do want to speak.
   Future<void> _onMicGranted(MicGrantedEvent event) async {
+    // A fresh grant during the post-turn linger window: cancel the
+    // pending disconnect so it can't tear down the room this new turn is
+    // about to (re)connect.
+    _micLingerTimer?.cancel();
+    _micLingerTimer = null;
     if (state.flags.micBlocked) return;
     emit(state.copyWith(handPhase: WebinarHandPhase.granted));
 
@@ -644,10 +788,25 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
     });
   }
 
-  Future<void> _endSpeaking() async {
+  /// Ends the speaking turn's audio. With [lingerToCoverEcho] the mic is
+  /// released now but the room stays open for [_postSpeakLinger] so the
+  /// host remains audible in real time while the delayed HLS echo of the
+  /// turn plays out muted; without it everything tears down immediately
+  /// (moderation, leaving the room, or a turn that never went on air).
+  Future<void> _endSpeaking({bool lingerToCoverEcho = false}) async {
     _speakingEchoTimer?.cancel();
     _speakingEchoTimer = null;
-    await audioService.disconnect();
+    _micLingerTimer?.cancel();
+    _micLingerTimer = null;
+    if (lingerToCoverEcho && audioService.isConnected) {
+      await audioService.muteAndKeepListening();
+      _micLingerTimer = Timer(_postSpeakLinger, () {
+        _micLingerTimer = null;
+        unawaited(audioService.disconnect());
+      });
+    } else {
+      await audioService.disconnect();
+    }
     if (isClosed) return;
     emit(state.copyWith(handPhase: WebinarHandPhase.idle, queuePosition: null));
   }
@@ -658,6 +817,70 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
   /// backfill deliver the same message, and `senderId` arrives as a
   /// string over the socket and a number over REST (already normalised
   /// by [LiveChatMessage.fromJson]).
+  // ── Polls ────────────────────────────────────────────────────────
+
+  /// Seed the map from chat rows (history and live pushes both carry the
+  /// poll). Webinars have no polls route of their own — the chat backfill
+  /// is how a rejoining attendee gets a poll back.
+  void _absorbPolls(List<LiveChatMessage> messages) {
+    Map<int, LivePoll>? map;
+    for (final m in messages) {
+      final poll = m.poll;
+      if (poll == null) continue;
+      map ??= Map<int, LivePoll>.from(state.polls);
+      map[poll.id] = _mergePoll(map[poll.id], poll);
+    }
+    if (map != null) emit(state.copyWith(polls: map));
+  }
+
+  /// A timed deadline passed with no reveal in sight — refresh the latest
+  /// page, which carries the poll re-shaped with results.
+  Future<void> refreshPolls() => _loadInitialChat();
+
+  LivePoll _mergePoll(LivePoll? existing, LivePoll incoming) {
+    if (existing == null) return incoming;
+    if (incoming.myOptionIds.isEmpty && existing.myOptionIds.isNotEmpty) {
+      return incoming.copyWith(myOptionIds: existing.myOptionIds);
+    }
+    return incoming;
+  }
+
+  void _upsertPoll(LivePoll poll) {
+    emit(
+      state.copyWith(
+        polls: {...state.polls, poll.id: _mergePoll(state.polls[poll.id], poll)},
+      ),
+    );
+  }
+
+  void _patchPoll(int pollId, LivePoll Function(LivePoll) patch) {
+    final poll = state.polls[pollId];
+    if (poll == null) return;
+    emit(state.copyWith(polls: {...state.polls, pollId: patch(poll)}));
+  }
+
+  Future<void> submitVote(int pollId, List<int> optionIds) async {
+    final poll = state.polls[pollId];
+    if (poll == null) return;
+    if (optionIds.isEmpty || (!poll.isMultiple && optionIds.length != 1)) {
+      emit(state.copyWith(transientNotice: 'Choose an option.'));
+      return;
+    }
+    if (!(_hub?.isConnected ?? false)) {
+      emit(
+        state.copyWith(
+          transientNotice: 'Not connected to the webinar. Try again in a moment.',
+        ),
+      );
+      return;
+    }
+    try {
+      await _hub?.submitVote(pollId, optionIds);
+    } catch (_) {
+      emit(state.copyWith(transientNotice: "Couldn't submit your answer."));
+    }
+  }
+
   List<LiveChatMessage> _merge(
     List<LiveChatMessage> existing,
     List<LiveChatMessage> incoming,
@@ -737,6 +960,8 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
   Future<void> close() async {
     _stopPolling();
     _speakingEchoTimer?.cancel();
+    _micLingerTimer?.cancel();
+    _cancelDrain();
     // Releases the microphone and restores the OS audio session. Leaving
     // this out would keep publishing after the attendee left the page.
     await audioService.disconnect();

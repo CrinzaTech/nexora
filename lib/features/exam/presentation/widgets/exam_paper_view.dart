@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
+import 'package:nexora/core/widgets/draggable_fab.dart';
 import 'package:nexora/features/exam/data/models/exam_models.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_atoms.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_question_input.dart';
+import 'package:nexora/features/exam/presentation/widgets/exam_question_palette.dart';
 
 /// The normal-mode paper, paginated one section at a time.
 ///
@@ -18,7 +20,13 @@ class ExamPaperView extends StatefulWidget {
   final ExamPaperResponse paper;
   final Map<int, ExamAnswerDraft> answers;
   final bool autosaveStopped;
+
+  /// Top-level question ids parked for a second look.
+  final Set<int> pinnedQuestionIds;
+
   final void Function(int questionId, ExamAnswerDraft draft) onUpdateAnswer;
+  final ValueChanged<int> onTogglePin;
+  final VoidCallback onClearPins;
   final VoidCallback onSubmit;
 
   const ExamPaperView({
@@ -26,7 +34,10 @@ class ExamPaperView extends StatefulWidget {
     required this.paper,
     required this.answers,
     required this.autosaveStopped,
+    required this.pinnedQuestionIds,
     required this.onUpdateAnswer,
+    required this.onTogglePin,
+    required this.onClearPins,
     required this.onSubmit,
   });
 
@@ -38,6 +49,10 @@ class _ExamPaperViewState extends State<ExamPaperView> {
   int _sectionIndex = 0;
   final ScrollController _scrollController = ScrollController();
 
+  /// One key per top-level question, so the palette can scroll straight to
+  /// it. Keyed by question id because the section on screen changes.
+  final Map<int, GlobalKey> _questionKeys = {};
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -45,6 +60,9 @@ class _ExamPaperViewState extends State<ExamPaperView> {
   }
 
   List<ExamSection> get _sections => widget.paper.sections;
+
+  GlobalKey _keyFor(int questionId) =>
+      _questionKeys.putIfAbsent(questionId, () => GlobalKey());
 
   /// 1-based number of the first top-level question in [sectionIndex],
   /// used to keep numbering continuous across sections.
@@ -56,17 +74,103 @@ class _ExamPaperViewState extends State<ExamPaperView> {
     return total;
   }
 
+  /// Counted over top-level questions so it lines up with the denominator
+  /// (`paper.totalQuestions`) and with the palette's own tally.
   int get _answeredCount {
     var count = 0;
-    for (final entry in widget.answers.entries) {
-      if (!entry.value.isEmpty) count++;
+    for (final q in widget.paper.allQuestions) {
+      if (_statusOf(q) == ExamPaletteStatus.answered) count++;
     }
     return count;
+  }
+
+  bool _isAnswered(int questionId) =>
+      !(widget.answers[questionId] ?? const ExamAnswerDraft()).isEmpty;
+
+  /// A comprehension block has no answer of its own — it reports on its
+  /// children, and counts as done only once every one of them is filled in.
+  ExamPaletteStatus _statusOf(ExamQuestion q) {
+    if (q.isComprehension) {
+      if (q.children.isEmpty) return ExamPaletteStatus.unanswered;
+      final done = q.children.where((c) => _isAnswered(c.id)).length;
+      if (done == 0) return ExamPaletteStatus.unanswered;
+      if (done == q.children.length) return ExamPaletteStatus.answered;
+      return ExamPaletteStatus.partial;
+    }
+    return _isAnswered(q.id)
+        ? ExamPaletteStatus.answered
+        : ExamPaletteStatus.unanswered;
+  }
+
+  /// Palette cells in paper order — the same 1..N numbering the question
+  /// badges use, running continuously across sections.
+  List<ExamPaletteEntry> _paletteEntries() {
+    final out = <ExamPaletteEntry>[];
+    for (final section in _sections) {
+      for (final q in section.questions) {
+        out.add(
+          ExamPaletteEntry(
+            number: out.length + 1,
+            status: _statusOf(q),
+            pinned: widget.pinnedQuestionIds.contains(q.id),
+          ),
+        );
+      }
+    }
+    return out;
+  }
+
+  /// Which section a global (0-based) question index lives in, and the
+  /// question itself.
+  (int, ExamQuestion)? _locate(int globalIndex) {
+    var seen = 0;
+    for (var s = 0; s < _sections.length; s++) {
+      final questions = _sections[s].questions;
+      if (globalIndex < seen + questions.length) {
+        return (s, questions[globalIndex - seen]);
+      }
+      seen += questions.length;
+    }
+    return null;
   }
 
   void _goTo(int index) {
     setState(() => _sectionIndex = index.clamp(0, _sections.length - 1));
     if (_scrollController.hasClients) _scrollController.jumpTo(0);
+  }
+
+  /// Paging to the right section and then scrolling the question into view.
+  Future<void> _jumpToQuestion(int globalIndex) async {
+    final located = _locate(globalIndex);
+    if (located == null) return;
+    final (sectionIndex, question) = located;
+
+    if (sectionIndex != _sectionIndex) {
+      // The scroll view is keyed by section, so it remounts at offset 0 and
+      // the target's render object only exists after the next frame.
+      setState(() => _sectionIndex = sectionIndex);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+    }
+
+    final ctx = _questionKeys[question.id]?.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    await Scrollable.ensureVisible(
+      ctx,
+      alignment: 0.05,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  Future<void> _openPalette() async {
+    final index = await showExamQuestionPalette(
+      context,
+      entries: _paletteEntries(),
+      reviewMode: false,
+    );
+    if (index == null || !mounted) return;
+    await _jumpToQuestion(index);
   }
 
   @override
@@ -86,48 +190,81 @@ class _ExamPaperViewState extends State<ExamPaperView> {
         Expanded(
           child: section == null
               ? const SizedBox.shrink()
-              : ExamDraftScope(
-                  resolver: (id) =>
-                      widget.answers[id] ?? const ExamAnswerDraft(),
-                  child: ListView(
-                    key: ValueKey(_sectionIndex),
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSizes.paddingM,
-                      AppSizes.paddingS,
-                      AppSizes.paddingM,
-                      AppSizes.paddingM,
-                    ),
-                    children: [
-                      if (!multi) _summaryCard(),
-                      if (!multi) const SizedBox(height: AppSizes.paddingS),
-                      ExamSectionHeader(
-                        name: section.name,
-                        trailing: '${section.questions.length}',
+              : Stack(
+                  children: [
+                    Positioned.fill(
+                      child: ExamDraftScope(
+                        resolver: (id) =>
+                            widget.answers[id] ?? const ExamAnswerDraft(),
+                        // A plain scroll view rather than a lazy list: every
+                        // question needs a laid-out render object for the
+                        // palette to scroll straight to it.
+                        child: SingleChildScrollView(
+                          key: ValueKey(_sectionIndex),
+                          controller: _scrollController,
+                          padding: const EdgeInsets.fromLTRB(
+                            AppSizes.paddingM,
+                            AppSizes.paddingS,
+                            AppSizes.paddingM,
+                            AppSizes.paddingM,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (!multi) _summaryCard(),
+                              if (!multi)
+                                const SizedBox(height: AppSizes.paddingS),
+                              ExamSectionHeader(
+                                name: section.name,
+                                trailing: '${section.questions.length}',
+                              ),
+                              if ((section.instructions ?? '')
+                                  .trim()
+                                  .isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    bottom: AppSizes.paddingS,
+                                  ),
+                                  child: ExamInstructionCallout(
+                                    section.instructions!,
+                                    label: 'Section instructions',
+                                  ),
+                                ),
+                              for (var i = 0; i < section.questions.length; i++)
+                                Padding(
+                                  key: _keyFor(section.questions[i].id),
+                                  padding: const EdgeInsets.only(
+                                    bottom: AppSizes.paddingM,
+                                  ),
+                                  child: ExamQuestionInput(
+                                    question: section.questions[i],
+                                    number: startNumber + i + 1,
+                                    draft: widget
+                                            .answers[section.questions[i].id] ??
+                                        const ExamAnswerDraft(),
+                                    onChanged: widget.onUpdateAnswer,
+                                    isPinned: widget.pinnedQuestionIds
+                                        .contains(section.questions[i].id),
+                                    onTogglePin: () => widget.onTogglePin(
+                                      section.questions[i].id,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
-                      if ((section.instructions ?? '').trim().isNotEmpty)
-                        Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: AppSizes.paddingS),
-                          child: ExamInstructionCallout(
-                            section.instructions!,
-                            label: 'Section instructions',
-                          ),
+                    ),
+                    Positioned.fill(
+                      child: DraggableFab(
+                        margin: const EdgeInsets.all(AppSizes.paddingM),
+                        builder: (context, _) => ExamStatsFab(
+                          pinnedCount: widget.pinnedQuestionIds.length,
+                          onTap: _openPalette,
                         ),
-                      for (var i = 0; i < section.questions.length; i++)
-                        Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: AppSizes.paddingM),
-                          child: ExamQuestionInput(
-                            question: section.questions[i],
-                            number: startNumber + i + 1,
-                            draft: widget.answers[section.questions[i].id] ??
-                                const ExamAnswerDraft(),
-                            onChanged: widget.onUpdateAnswer,
-                          ),
-                        ),
-                    ],
-                  ),
+                      ),
+                    ),
+                  ],
                 ),
         ),
         _navBar(context, isLast: isLast, hasBack: _sectionIndex > 0),
@@ -306,7 +443,7 @@ class _ExamPaperViewState extends State<ExamPaperView> {
                 ? _primaryButton(
                     label: 'Submit Exam',
                     icon: Icons.check_circle_outline,
-                    onPressed: () => _confirmSubmit(context),
+                    onPressed: _confirmSubmit,
                   )
                 : _primaryButton(
                     label: 'Next Section',
@@ -353,43 +490,117 @@ class _ExamPaperViewState extends State<ExamPaperView> {
     );
   }
 
-  Future<void> _confirmSubmit(BuildContext context) async {
-    final unanswered = widget.paper.totalQuestions - _answeredCount;
+  Future<void> _confirmSubmit() async {
+    // Pins are a promise to come back. Make good on it before the paper
+    // closes, rather than letting Submit quietly discard them.
+    if (widget.pinnedQuestionIds.isNotEmpty) {
+      final entries = _paletteEntries();
+      final pinnedEntries = <ExamPaletteEntry>[];
+      final pinnedIndexes = <int>[];
+      for (var i = 0; i < entries.length; i++) {
+        if (entries[i].pinned) {
+          pinnedEntries.add(entries[i]);
+          pinnedIndexes.add(i);
+        }
+      }
+      final outcome = await showExamPinnedGate(
+        context,
+        pinnedEntries: pinnedEntries,
+        pinnedIndexes: pinnedIndexes,
+      );
+      if (!mounted) return;
+      // Dismissed or "Skip" — stay on the paper.
+      if (outcome == null) return;
+      if (outcome.jumpToIndex != null) {
+        await _jumpToQuestion(outcome.jumpToIndex!);
+        return;
+      }
+      widget.onClearPins();
+    }
+
+    if (!mounted) return;
+    final answered = _answeredCount;
+    final unanswered = widget.paper.totalQuestions - answered;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusL),
-        ),
-        title: Text(
-          'Submit exam?',
-          style: AppTypography.bodyTextXtraLargeSemiBold,
-        ),
-        content: Text(
-          unanswered > 0
-              ? 'You have $unanswered unanswered question(s). Once submitted you '
-                  "can't change your answers."
-              : "Once submitted you can't change your answers.",
-          style: AppTypography.bodyTextMedium.copyWith(
-            color: AppColors.textSecondary,
-          ),
-        ),
+      barrierColor: AppColors.overlayMedium,
+      builder: (ctx) => ExamDialogShell(
+        icon: unanswered > 0
+            ? Icons.error_outline_rounded
+            : Icons.check_circle_outline_rounded,
+        accent: unanswered > 0 ? AppColors.warning : AppColors.primary,
+        title: 'Submit exam?',
+        message: unanswered > 0
+            ? "You still have unanswered questions. Once submitted you can't "
+                'change your answers.'
+            : "You've answered everything. Once submitted you can't change "
+                'your answers.',
+        extra: _submitSummary(answered: answered, unanswered: unanswered),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Keep working'),
-          ),
-          ElevatedButton(
+          ExamDialogAction(
+            label: 'Submit exam',
+            icon: Icons.check_circle_outline_rounded,
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.alwaysWhite,
-            ),
-            child: const Text('Submit'),
+          ),
+          ExamDialogGhostAction(
+            label: 'Keep working',
+            onPressed: () => Navigator.of(ctx).pop(false),
           ),
         ],
       ),
     );
     if (confirmed == true) widget.onSubmit();
+  }
+
+  Widget _submitSummary({required int answered, required int unanswered}) {
+    return Row(
+      children: [
+        Expanded(
+          child: _summaryTile(
+            value: '$answered',
+            label: 'Answered',
+            color: AppColors.success,
+          ),
+        ),
+        const SizedBox(width: AppSizes.paddingS),
+        Expanded(
+          child: _summaryTile(
+            value: '$unanswered',
+            label: 'Unanswered',
+            color: unanswered > 0 ? AppColors.warning : AppColors.grey400,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _summaryTile({
+    required String value,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppSizes.radiusM),
+        border: Border.all(color: color.withValues(alpha: 0.20)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: AppTypography.bodyTextXtraLargeBold.copyWith(color: color),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: AppTypography.bodyTextSmallMedium.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -182,6 +182,8 @@ class CourseRepositoryImpl implements CourseRepository {
           : null;
       return Right(LivePlayback.fromData(hlsUrl, audioUrl: audioUrl));
     } on DioException catch (e) {
+      final withStatus = liveSessionStatusFailure(e);
+      if (withStatus != null) return Left(withStatus);
       return Left(mapDioExceptionToFailure(e));
     } catch (e) {
       return Left(Failure.unknown(message: e.toString()));
@@ -204,6 +206,32 @@ class CourseRepositoryImpl implements CourseRepository {
         );
       }
       return Right(token);
+    } on DioException catch (e) {
+      return Left(mapDioExceptionToFailure(e));
+    } catch (e) {
+      return Left(Failure.unknown(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<LivePoll>>> getLiveClassPolls(
+    String roomId,
+  ) async {
+    try {
+      final json = await _apiClient.getLiveClassPolls(roomId);
+      final data = json['data'];
+      final raw = data is Map
+          ? (data['polls'] ?? data['items'] ?? data['data'])
+          : data;
+      final polls = <LivePoll>[];
+      if (raw is List) {
+        for (final item in raw) {
+          if (item is Map) {
+            polls.add(LivePoll.fromJson(Map<String, dynamic>.from(item)));
+          }
+        }
+      }
+      return Right(polls);
     } on DioException catch (e) {
       return Left(mapDioExceptionToFailure(e));
     } catch (e) {

@@ -4,6 +4,7 @@ import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_images.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_snackbar.dart';
+import 'package:nexora/features/auth/data/services/google_account_picker_service.dart';
 import 'package:nexora/features/auth/domain/usecases/send_otp_v2_usecase.dart';
 import 'package:nexora/features/auth/presentation/widgets/login_form_content.dart';
 import 'package:nexora/features/auth/presentation/widgets/phone_input_field.dart';
@@ -57,14 +58,68 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _handleSendOTP() async {
     if (!mounted) return;
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-
-    setState(() => _isLoading = true);
 
     final isPhone = _mode == LoginMode.phone;
-    final recipient = isPhone
-        ? _phoneController.text.trim()
-        : _emailController.text.trim();
+    if (isPhone) {
+      if (!(_formKey.currentState?.validate() ?? false)) return;
+      await _sendOtp(recipient: _phoneController.text.trim(), isPhone: true);
+      return;
+    }
+
+    // Email mode has no typed field to validate — the recipient only
+    // ever comes from a Google account pick, so just guard it's set.
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      CustomSnackbar.error(
+        context,
+        title: 'Error',
+        message: 'Please pick an email with Google first.',
+      );
+      return;
+    }
+    await _sendOtp(recipient: email, isPhone: false);
+  }
+
+  /// Opens the native Google account picker so the user can pick a
+  /// verified email in one tap instead of typing it (and risking a
+  /// typo). Only fills [_emailController] with the pick — sending the
+  /// OTP is a separate, explicit "Send OTP" tap.
+  Future<void> _handleGooglePickEmail() async {
+    if (!mounted || _isLoading) return;
+    setState(() => _isLoading = true);
+
+    String? email;
+    try {
+      email = await sl<GoogleAccountPickerService>().pickEmail();
+    } catch (e) {
+      if (mounted) {
+        CustomSnackbar.error(
+          context,
+          title: 'Error',
+          message: 'Could not get your Google account: ${e.toString()}',
+        );
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      if (email != null) {
+        _mode = LoginMode.email;
+        _emailController.text = email;
+      }
+    });
+  }
+
+  /// Shared OTP-send path for both the manual form and the Google
+  /// account picker.
+  Future<void> _sendOtp({
+    required String recipient,
+    required bool isPhone,
+  }) async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+
     // Dial code without the leading '+', e.g. "91" from "+91".
     final stdCode = _selectedCountry.dialCode.replaceFirst('+', '');
     final dialCode = _selectedCountry.dialCode;
@@ -150,41 +205,43 @@ class _LoginPageState extends State<LoginPage> {
       },
       child: Scaffold(
         body: Stack(
-        children: [
-          Positioned.fill(
-            child: Image.asset(AppImages.loginBackground, fit: BoxFit.cover),
-          ),
-          Positioned.fill(
-            child: LoginFormContent(
-              formKey: _formKey,
-              phoneController: _phoneController,
-              emailController: _emailController,
-              selectedCountry: _selectedCountry,
-              mode: _mode,
-              isLoading: _isLoading,
-              onCountrySelected: (country) {
-                setState(() => _selectedCountry = country);
-              },
-              onToggleMode: _toggleMode,
-              onSendOTPPressed: _handleSendOTP,
-            ),
-          ),
-          // Full-screen loading overlay — shown while the OTP is being
-          // requested from the backend.
-          if (_isLoading)
+          children: [
             Positioned.fill(
-              child: Container(
-                color: Colors.black.withValues(alpha: 0.45),
-                child: Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.primary,
-                    strokeWidth: 3,
+              child: Image.asset(AppImages.loginBackground, fit: BoxFit.cover),
+            ),
+            Positioned.fill(
+              child: LoginFormContent(
+                formKey: _formKey,
+                phoneController: _phoneController,
+                emailController: _emailController,
+                selectedCountry: _selectedCountry,
+                mode: _mode,
+                isLoading: _isLoading,
+                onCountrySelected: (country) {
+                  setState(() => _selectedCountry = country);
+                },
+                onToggleMode: _toggleMode,
+                onSendOTPPressed: _handleSendOTP,
+                onGooglePickEmailPressed: _handleGooglePickEmail,
+              ),
+            ),
+            // Full-screen loading overlay — shown while the OTP is being
+            // requested from the backend.
+            if (_isLoading)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.primary,
+                      strokeWidth: 3,
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
-    ));
+    );
   }
 }

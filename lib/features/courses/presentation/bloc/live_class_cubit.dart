@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:nexora/core/error/failures.dart';
@@ -13,6 +14,7 @@ import 'package:nexora/features/courses/data/services/live_class_audio_service.d
 import 'package:nexora/features/courses/data/services/live_class_hub_service.dart';
 import 'package:nexora/features/courses/domain/usecases/get_live_class_chat_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/get_live_class_playback_usecase.dart';
+import 'package:nexora/features/courses/domain/usecases/get_live_class_polls_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/get_stream_token_usecase.dart';
 
 part 'live_class_state.dart';
@@ -26,6 +28,7 @@ class LiveClassCubit extends Cubit<LiveClassState> {
   final GetLiveClassPlaybackUseCase getLiveClassPlaybackUseCase;
   final GetStreamTokenUseCase getStreamTokenUseCase;
   final GetLiveClassChatUseCase getLiveClassChatUseCase;
+  final GetLiveClassPollsUseCase getLiveClassPollsUseCase;
   final LiveClassAudioService audioService;
   final SessionService sessionService;
 
@@ -33,6 +36,7 @@ class LiveClassCubit extends Cubit<LiveClassState> {
     required this.getLiveClassPlaybackUseCase,
     required this.getStreamTokenUseCase,
     required this.getLiveClassChatUseCase,
+    required this.getLiveClassPollsUseCase,
     required this.audioService,
     required this.sessionService,
   }) : super(const LiveClassState());
@@ -49,9 +53,52 @@ class LiveClassCubit extends Cubit<LiveClassState> {
   Timer? _speakingEchoTimer;
   static const _speakingEchoGrace = Duration(seconds: 4);
 
+  /// Holds the LiveKit room open (mic released, listening only) for a
+  /// moment after a speaking turn ends, so the student keeps hearing the
+  /// educator live while the delayed HLS copy of the turn — their own
+  /// voice included — plays out silently. Must stay equal to the page's
+  /// `_duckReleaseDelay`: the page unmutes the stream when this
+  /// disconnects LiveKit. The 8s covers glass-to-glass HLS latency
+  /// (~2.1s segments × ~3 in the playlist window + 2.5–4.5s player
+  /// buffer) — re-derive it if the segment length or the player's
+  /// bufferingConfiguration changes.
+  Timer? _micLingerTimer;
+  static const _postSpeakLinger = Duration(seconds: 8);
+
   /// Polls for the stream actually going live while the student waits.
   Timer? _readinessTimer;
   static const _readinessInterval = Duration(seconds: 5);
+
+  /// Watches the playlist while the class is LIVE. The hub only says
+  /// `classEnded` when the host *ends* the class — a host who pauses or
+  /// stops the broadcast sends nothing, the playlist just freezes, and
+  /// the player sat on a spinner for good. Two consecutive dead reads
+  /// (~20s) drop the student back to the waiting screen, whose readiness
+  /// poll then pulls them in again the moment segments reappear.
+  Timer? _livenessTimer;
+  static const _livenessInterval = Duration(seconds: 10);
+  /// Raised from 2. At a 10s interval, 2 strikes declared the host gone
+  /// after only 20s — short enough that ordinary mobile flakiness, or a
+  /// CDN serving one stale playlist, showed students a "host paused"
+  /// screen mid-class. Observed firing three times in 90 seconds while
+  /// the educator was broadcasting normally. 4 strikes = ~40s, still
+  /// well inside a minute for a genuine pause.
+  static const _deadStrikeLimit = 4;
+  int _deadStrikes = 0;
+  String? _lastFingerprint;
+  bool _livenessProbeInFlight = false;
+  DateTime? _lastVerifyAt;
+
+  /// The playlist the watchdog last caught frozen. The readiness poll
+  /// refuses to go live on it again byte-for-byte — seeing the same
+  /// segments is not a restart, whatever the headers say.
+  String? _frozenFingerprint;
+
+  /// Hard cap on the pause drain: ≥ HLS glass-to-glass latency (~8s) + a
+  /// segment + buffer. A student who has heard nothing for this long has
+  /// nothing left to drain.
+  Timer? _drainGuard;
+  static const _maxDrain = Duration(seconds: 12);
 
   /// This student's own `app_user.id`, decoded from their access token —
   /// used to tell "about me" hub events apart from others'.
@@ -87,8 +134,8 @@ class LiveClassCubit extends Cubit<LiveClassState> {
     // 2) Open the hub (chat + lifecycle + moderation).
     await _connectHub(token);
 
-    // 3) Resolve playback and backfill chat in parallel.
-    await Future.wait([_loadPlayback(), _loadInitialChat()]);
+    // 3) Resolve playback, backfill chat and pick up any open poll.
+    await Future.wait([_loadPlayback(), _loadInitialChat(), _loadPolls()]);
   }
 
   Future<void> _connectHub(String token) async {
@@ -127,6 +174,31 @@ class LiveClassCubit extends Cubit<LiveClassState> {
 
     final failure = result.fold((f) => f, (_) => null);
     if (failure != null) {
+      // The playback 410 now says WHICH "no media" case it is. Deny-list,
+      // not allow-list: only `Ended` / `Cancelled` are terminal (ended
+      // screen). `Paused`, `Scheduled`, `Ready`, `Live`, any value added
+      // later — all mean "no media yet" → the waiting screen, showing the
+      // server's own message ("The host has paused the stream." reads
+      // very differently from "hasn't started yet"). A 410 with no status
+      // at all (older backend) takes the plain path below.
+      final sessionStatus = failure.maybeWhen(
+        sessionStatus: (message, status) => (message, status),
+        orElse: () => null,
+      );
+      if (sessionStatus != null) {
+        final (message, status) = sessionStatus;
+        if (_isTerminalStatus(status)) {
+          await _onSessionClosed(status);
+          return;
+        }
+        emit(state.copyWith(
+          phase: LiveViewPhase.waiting,
+          waitingMessage: message.isEmpty ? null : message,
+          broadcastInterrupted: status.toLowerCase() == 'paused',
+        ));
+        _startReadinessPolling();
+        return;
+      }
       final status = _statusOf(failure);
       // 410 = not started / link expired → treat as "waiting" (we'll
       // auto-join on classStarted) rather than a hard error.
@@ -170,6 +242,34 @@ class LiveClassCubit extends Cubit<LiveClassState> {
       phase: LiveViewPhase.live,
       hlsUrl: playback.hlsUrl,
       audioUrl: playback.audioUrl,
+      broadcastInterrupted: false,
+      waitingMessage: null,
+      pauseDraining: false,
+    ));
+    _startLivenessWatchdog();
+  }
+
+  static bool _isTerminalStatus(String status) {
+    final normalized = status.toLowerCase();
+    return normalized == 'ended' || normalized == 'cancelled';
+  }
+
+  /// The server said the session is over (`Ended`) or was called off
+  /// (`Cancelled`) when we asked for playback — same teardown as the hub's
+  /// own `classEnded` / `classCancelled`, which a student opening the
+  /// class from a stale course screen never receives.
+  Future<void> _onSessionClosed(String status) async {
+    _readinessTimer?.cancel();
+    _livenessTimer?.cancel();
+    _livenessTimer = null;
+    final cancelled = status.toLowerCase() == 'cancelled';
+    // ignore: avoid_print
+    print('[ClassHub] playback refused: session $status');
+    await _endAudio();
+    await _teardownHub();
+    emit(state.copyWith(
+      phase: cancelled ? LiveViewPhase.cancelled : LiveViewPhase.ended,
+      broadcastInterrupted: false,
     ));
   }
 
@@ -187,41 +287,19 @@ class LiveClassCubit extends Cubit<LiveClassState> {
     });
   }
 
-  /// True when the playlist behind [url] is actually serving media.
-  ///
-  /// A master playlist only lists renditions, so follow them and look for a
-  /// real segment (`#EXTINF`). SRS writes the master as soon as the class
-  /// exists and leaves it there after the class ends — the variants are what
-  /// come and go — so "the master fetched fine" proves nothing on its own.
-  Future<bool> _isStreamReady(String url, {int depth = 0}) async {
-    if (depth > 1) return false;
-    final body = await _fetchPlaylist(url);
-    if (body == null) return false;
-
-    if (body.contains('#EXT-X-STREAM-INF')) {
-      // Any live rendition is enough. Checking only the first would block
-      // entry whenever the 720p passthrough is missing but the transcoded
-      // ladder is fine — capped so a long ladder can't stall the probe.
-      for (final variant in _variantUrls(url, body).take(3)) {
-        if (await _isStreamReady(variant, depth: depth + 1)) return true;
-      }
+  /// True when the playlist behind [url] is actually serving media —
+  /// a rendition with segments that is still being written. Anything
+  /// less (no variants, no `#EXTINF`, or a playlist nobody has touched
+  /// for a few target durations) is "not yet", and the poll retries.
+  Future<bool> _isStreamReady(String url) async {
+    final (health, fingerprint) = await _probeStreamHealth(url);
+    if (health != _StreamHealth.alive) return false;
+    // Same segments the watchdog caught frozen: the writer is still
+    // gone. Guards the case where the server sends no Last-Modified.
+    if (fingerprint != null && fingerprint == _frozenFingerprint) {
       return false;
     }
-    return body.contains('#EXTINF');
-  }
-
-  Future<String?> _fetchPlaylist(String url) async {
-    try {
-      final res = await http
-          .get(Uri.parse(url))
-          .timeout(const Duration(seconds: 6));
-      if (res.statusCode != 200) return null;
-      final body = res.body;
-      return body.contains('#EXTM3U') ? body : null;
-    } catch (_) {
-      // Unreachable / timed out — not ready; the poll will retry.
-      return null;
-    }
+    return true;
   }
 
   /// Rendition URLs from a master playlist: the first non-comment line after
@@ -241,6 +319,258 @@ class LiveClassCubit extends Cubit<LiveClassState> {
       }
     }
     return urls;
+  }
+
+  // ── Liveness while live ──────────────────────────────────────────
+
+  void _startLivenessWatchdog() {
+    _livenessTimer?.cancel();
+    _deadStrikes = 0;
+    _lastFingerprint = null;
+    _frozenFingerprint = null;
+    _livenessTimer = Timer.periodic(_livenessInterval, (_) {
+      unawaited(_livenessTick());
+    });
+  }
+
+  Future<void> _livenessTick() async {
+    if (isClosed || state.phase != LiveViewPhase.live) {
+      _livenessTimer?.cancel();
+      _livenessTimer = null;
+      return;
+    }
+    final url = state.hlsUrl;
+    if (url == null || url.isEmpty || _livenessProbeInFlight) return;
+    _livenessProbeInFlight = true;
+    try {
+      final (health, fingerprint) = await _probeStreamHealth(url);
+      if (isClosed || state.phase != LiveViewPhase.live) return;
+      switch (health) {
+        case _StreamHealth.alive:
+          // A playlist that is reachable but hasn't moved between two
+          // reads 10s apart (segments are ~2s) is a publisher that went
+          // away and left its files behind — as dead as a 404.
+          if (fingerprint != null && fingerprint == _lastFingerprint) {
+            _deadStrikes++;
+          } else {
+            _deadStrikes = 0;
+          }
+          _lastFingerprint = fingerprint;
+        case _StreamHealth.dead:
+          _deadStrikes++;
+        case _StreamHealth.ended:
+          // `classPaused` never reached us (hub down) but the playlist is
+          // closed out: same thing — drain the tail, then wait.
+          _beginDrain();
+          return;
+        case _StreamHealth.unreachable:
+          // The student's own network — inconclusive, never a strike.
+          break;
+      }
+      if (_deadStrikes >= _deadStrikeLimit) _onBroadcastLost();
+    } finally {
+      _livenessProbeInFlight = false;
+    }
+  }
+
+  /// The page's escalation path: the player has errored out or stalled
+  /// past its limits. Before that gets blamed on the network, check
+  /// whether there is still a broadcast to play — a host who stopped the
+  /// stream looks exactly like this from the player's side. Throttled so
+  /// the 3s health tick can call it freely.
+  Future<void> verifyBroadcast() async {
+    if (isClosed || state.phase != LiveViewPhase.live) return;
+    // The drain has its own stall rule (page-side, 3s) and hard cap.
+    if (state.pauseDraining) return;
+    final now = DateTime.now();
+    final last = _lastVerifyAt;
+    if (last != null && now.difference(last) < const Duration(seconds: 8)) {
+      return;
+    }
+    _lastVerifyAt = now;
+    final url = state.hlsUrl;
+    if (url == null || url.isEmpty) return;
+    final (health, _) = await _probeStreamHealth(url);
+    if (isClosed || state.phase != LiveViewPhase.live) return;
+    // `ended` here too: the player has already errored/stalled past its
+    // limits, so there is nothing left to drain.
+    if (health == _StreamHealth.dead || health == _StreamHealth.ended) {
+      _onBroadcastLost();
+    }
+  }
+
+  // ── Pause drain ──────────────────────────────────────────────────
+
+  /// The host pressed Stop — but the student is ~7s behind, and the last
+  /// sentence is still listed in the playlist and sitting in the player
+  /// buffer. Cutting to the waiting screen now would throw it away (and,
+  /// worse, an old controller that outlived the cut could play it later,
+  /// after the restart). So: keep the player exactly as it is under a
+  /// banner and let it run to the end of the stream. [finishDrain] ends
+  /// it — on the player finishing, on a >3s stall while draining, or on
+  /// the [_maxDrain] guard.
+  void _beginDrain() {
+    if (state.phase != LiveViewPhase.live || state.pauseDraining) return;
+    // The watchdog would read the closed-out playlist as dead and cut to
+    // waiting under us; the guard is the timeout while draining.
+    _livenessTimer?.cancel();
+    _livenessTimer = null;
+    _drainGuard?.cancel();
+    _drainGuard = Timer(_maxDrain, () {
+      _drainGuard = null;
+      finishDrain();
+    });
+    // ignore: avoid_print
+    print('[ClassHub] host pausing → draining the buffered tail');
+    emit(state.copyWith(pauseDraining: true));
+  }
+
+  /// The tail has been heard (player reached the end), can't be fetched
+  /// (stalled), or the guard expired — now the waiting screen.
+  void finishDrain() {
+    if (!state.pauseDraining) return;
+    _onBroadcastLost();
+  }
+
+  /// The page's player reached the end of the stream. While draining
+  /// that is the precise moment the student has heard everything; outside
+  /// a drain it means the playlist was closed out and the player got there
+  /// before the watchdog did — nothing left to play either way.
+  void onPlayerFinished() {
+    if (state.pauseDraining) {
+      finishDrain();
+    } else if (state.phase == LiveViewPhase.live) {
+      _onBroadcastLost();
+    }
+  }
+
+  /// Back to the waiting screen, flagged as an interruption. The page
+  /// tears the player down on the phase change, and the readiness poll
+  /// re-resolves playback (fresh signed URL) and returns to `live` — a
+  /// full player rebuild at the new live edge — once segments are back.
+  void _onBroadcastLost() {
+    _livenessTimer?.cancel();
+    _livenessTimer = null;
+    _drainGuard?.cancel();
+    _drainGuard = null;
+    _deadStrikes = 0;
+    _frozenFingerprint = _lastFingerprint;
+    // ignore: avoid_print
+    print('[ClassHub] broadcast lost → waiting for the host to resume');
+    emit(state.copyWith(
+      phase: LiveViewPhase.waiting,
+      broadcastInterrupted: true,
+      pauseDraining: false,
+      // Generic paused copy until the next poll brings the server's own.
+      waitingMessage: null,
+      // The player is gone with the phase; a mode still stuck on `audio`
+      // from an earlier fallback would stop the page rebuilding video
+      // when we come back.
+      playbackMode: PlaybackMode.video,
+    ));
+    _startReadinessPolling();
+  }
+
+  /// Like [_isStreamReady] but tells "no broadcast" apart from "can't
+  /// reach the server", and returns a fingerprint of the live variant
+  /// (media sequence + newest segment) so a frozen playlist is detectable.
+  Future<(_StreamHealth, String?)> _probeStreamHealth(
+    String url, {
+    int depth = 0,
+  }) async {
+    if (depth > 1) return (_StreamHealth.dead, null);
+    final http.Response res;
+    try {
+      res = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 6));
+    } catch (_) {
+      return (_StreamHealth.unreachable, null);
+    }
+    // 404/410: SRS cleaned the playlist up on unpublish, or the signed
+    // link expired — either way nothing plays from this URL.
+    if (res.statusCode != 200) return (_StreamHealth.dead, null);
+    final body = res.body;
+    if (!body.contains('#EXTM3U')) return (_StreamHealth.dead, null);
+
+    if (body.contains('#EXT-X-STREAM-INF')) {
+      var sawUnreachable = false;
+      var sawEnded = false;
+      for (final variant in _variantUrls(url, body).take(3)) {
+        final (health, fp) = await _probeStreamHealth(variant, depth: depth + 1);
+        if (health == _StreamHealth.alive) return (health, fp);
+        if (health == _StreamHealth.unreachable) sawUnreachable = true;
+        if (health == _StreamHealth.ended) sawEnded = true;
+      }
+      return (
+        sawEnded
+            ? _StreamHealth.ended
+            : sawUnreachable
+                ? _StreamHealth.unreachable
+                : _StreamHealth.dead,
+        null,
+      );
+    }
+    if (!body.contains('#EXTINF')) return (_StreamHealth.dead, null);
+    // Closed out with ENDLIST: the host stopped, and the server left the
+    // tail playable so the student hears the last words. Its own verdict
+    // — the watchdog drains on it rather than cutting to waiting.
+    if (body.contains('#EXT-X-ENDLIST')) {
+      return (_StreamHealth.ended, _fingerprint(body));
+    }
+    if (_isAbandoned(res, body)) return (_StreamHealth.dead, null);
+    return (_StreamHealth.alive, _fingerprint(body));
+  }
+
+  /// A media playlist that nobody has rewritten for a few target
+  /// durations. This is what the stream host serves after the educator
+  /// stops: SRS leaves the last playlist and its window of segments on
+  /// disk, nginx keeps answering 200 for them, there is no
+  /// `#EXT-X-ENDLIST` — so on content alone it is indistinguishable from
+  /// a live stream, and a player handed it plays the last few seconds
+  /// of the old broadcast. `Last-Modified` against the server's own
+  /// `Date` (no client clock involved) is what tells them apart. A live
+  /// writer touches the playlist every segment (~1–2s); the threshold is
+  /// 3× target duration + 3s. Missing headers → can't tell → not stale
+  /// here; [_frozenFingerprint] covers that server.
+  bool _isAbandoned(http.Response res, String body) {
+    final written = _httpDate(res.headers['last-modified']);
+    final serverNow = _httpDate(res.headers['date']);
+    if (written == null || serverNow == null) return false;
+    final target = int.tryParse(
+          RegExp(r'#EXT-X-TARGETDURATION:(\d+)').firstMatch(body)?.group(1) ??
+              '',
+        ) ??
+        2;
+    final staleAfter = Duration(seconds: 3 * target.clamp(1, 10) + 3);
+    return serverNow.difference(written) > staleAfter;
+  }
+
+  /// RFC 1123 (`Wed, 26 Aug 2026 14:54:20 GMT`). Not `HttpDate` from
+  /// dart:io — this code also builds for web.
+  static DateTime? _httpDate(String? value) {
+    if (value == null) return null;
+    try {
+      return DateFormat("EEE, dd MMM yyyy HH:mm:ss 'GMT'", 'en_US')
+          .parseUtc(value.trim());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _fingerprint(String mediaPlaylist) {
+    final lines = mediaPlaylist.split('\n');
+    String sequence = '';
+    String lastSegment = '';
+    for (final raw in lines) {
+      final line = raw.trim();
+      if (line.startsWith('#EXT-X-MEDIA-SEQUENCE')) {
+        sequence = line;
+      } else if (line.isNotEmpty && !line.startsWith('#')) {
+        lastSegment = line;
+      }
+    }
+    return '$sequence|$lastSegment';
   }
 
   /// Called by the page as it drives the video↔audio handoff so the UI
@@ -328,6 +658,7 @@ class LiveClassCubit extends Cubit<LiveClassState> {
           messages: _sortNewestFirst(messages),
           chatHasMore: messages.length >= 30,
         ));
+        _absorbPolls(messages);
       },
     );
   }
@@ -348,8 +679,98 @@ class LiveClassCubit extends Cubit<LiveClassState> {
           chatLoadingMore: false,
           chatHasMore: older.length >= 30,
         ));
+        _absorbPolls(older);
       },
     );
+  }
+
+  // ── Polls ────────────────────────────────────────────────────────
+
+  /// Server-shaped polls are authoritative for this viewer (own answer
+  /// filled in, counts if visible) — take them as-is.
+  Future<void> _loadPolls() async {
+    final result = await getLiveClassPollsUseCase(_roomId);
+    if (isClosed) return;
+    result.fold(
+      (failure) {
+        // An older server has no polls route; chat rows still seed them.
+        // ignore: avoid_print
+        print('[ClassPoll] list failed → ${failure.message}');
+      },
+      (polls) {
+        if (polls.isEmpty) return;
+        final map = Map<int, LivePoll>.from(state.polls);
+        for (final p in polls) {
+          map[p.id] = p;
+        }
+        emit(state.copyWith(polls: map));
+      },
+    );
+  }
+
+  /// Re-fetch — the card asks for this when a timed deadline passes with
+  /// no `pollRevealed` in sight (hub hiccup).
+  Future<void> refreshPolls() => _loadPolls();
+
+  /// Seed the map from chat rows (history and live pushes both carry the
+  /// poll). A row never overrides a fuller copy already held.
+  void _absorbPolls(List<LiveChatMessage> messages) {
+    Map<int, LivePoll>? map;
+    for (final m in messages) {
+      final poll = m.poll;
+      if (poll == null) continue;
+      map ??= Map<int, LivePoll>.from(state.polls);
+      map[poll.id] = _mergePoll(map[poll.id], poll);
+    }
+    if (map != null) emit(state.copyWith(polls: map));
+  }
+
+  /// Incoming copies (a reveal, a re-fetched row) don't always carry this
+  /// student's own choice — never lose it.
+  LivePoll _mergePoll(LivePoll? existing, LivePoll incoming) {
+    if (existing == null) return incoming;
+    if (incoming.myOptionIds.isEmpty && existing.myOptionIds.isNotEmpty) {
+      return incoming.copyWith(myOptionIds: existing.myOptionIds);
+    }
+    return incoming;
+  }
+
+  void _upsertPoll(LivePoll poll) {
+    emit(state.copyWith(
+      polls: {...state.polls, poll.id: _mergePoll(state.polls[poll.id], poll)},
+    ));
+  }
+
+  void _patchPoll(int pollId, LivePoll Function(LivePoll) patch) {
+    final poll = state.polls[pollId];
+    if (poll == null) return;
+    emit(state.copyWith(polls: {...state.polls, pollId: patch(poll)}));
+  }
+
+  /// Single-choice: exactly one id. Multiple: every ticked id, in one
+  /// call — there is no second submission. The server enforces the same
+  /// rules; the local check just saves a round trip for the obvious ones.
+  Future<void> submitVote(int pollId, List<int> optionIds) async {
+    final poll = state.polls[pollId];
+    if (poll == null) return;
+    if (optionIds.isEmpty || (!poll.isMultiple && optionIds.length != 1)) {
+      emit(state.copyWith(transientNotice: 'Choose an option.'));
+      return;
+    }
+    if (!(_hub?.isConnected ?? false)) {
+      emit(state.copyWith(
+        hubConnected: false,
+        transientNotice: 'Not connected to the class. Try again in a moment.',
+      ));
+      return;
+    }
+    try {
+      await _hub?.submitVote(pollId, optionIds);
+    } catch (e) {
+      emit(state.copyWith(transientNotice: "Couldn't submit your answer."));
+      // ignore: avoid_print
+      print('[ClassPoll] SubmitVote error → $e');
+    }
   }
 
   Future<void> sendChat(String body) async {
@@ -417,12 +838,18 @@ class LiveClassCubit extends Cubit<LiveClassState> {
   /// User tapped "finish speaking".
   Future<void> stopSpeaking() async {
     await _hub?.stopSpeaking();
-    await _endAudio();
+    // Normal turn end — the echo of the turn is still in flight on HLS.
+    await _endAudio(lingerToCoverEcho: true);
   }
 
   /// Handles a mic grant: request permission NOW, connect LiveKit, and
   /// signal the hub the instant the local track is live.
   Future<void> _onMicGranted(MicGrantedEvent e) async {
+    // A fresh grant during the post-turn linger window: cancel the
+    // pending disconnect so it can't tear down the room this new turn is
+    // about to (re)connect.
+    _micLingerTimer?.cancel();
+    _micLingerTimer = null;
     // A mic-blocked student is never granted server-side; guard anyway.
     if (state.flags.micBlocked) return;
     emit(state.copyWith(handPhase: HandPhase.granted));
@@ -478,10 +905,26 @@ class LiveClassCubit extends Cubit<LiveClassState> {
     });
   }
 
-  Future<void> _endAudio() async {
+  /// Ends the speaking turn's audio. With [lingerToCoverEcho] the mic is
+  /// released now but the room stays open for [_postSpeakLinger] so the
+  /// educator remains audible in real time while the delayed HLS echo of
+  /// the turn plays out muted; without it everything tears down
+  /// immediately (moderation, leaving the room, or a turn that never
+  /// went on air).
+  Future<void> _endAudio({bool lingerToCoverEcho = false}) async {
     _speakingEchoTimer?.cancel();
     _speakingEchoTimer = null;
-    await audioService.disconnect();
+    _micLingerTimer?.cancel();
+    _micLingerTimer = null;
+    if (lingerToCoverEcho && audioService.isConnected) {
+      await audioService.muteAndKeepListening();
+      _micLingerTimer = Timer(_postSpeakLinger, () {
+        _micLingerTimer = null;
+        unawaited(audioService.disconnect());
+      });
+    } else {
+      await audioService.disconnect();
+    }
     emit(state.copyWith(handPhase: HandPhase.idle, queuePosition: null));
   }
 
@@ -501,10 +944,11 @@ class LiveClassCubit extends Cubit<LiveClassState> {
 
       case HubReconnectedEvent():
         // Groups don't survive reconnect; the hub already rejoined —
-        // re-sync playback + chat so nothing is stale.
+        // re-sync playback + chat + polls so nothing is stale.
         emit(state.copyWith(hubConnected: _hub?.isConnected ?? false));
         await _loadPlayback();
         await _loadInitialChat();
+        await _loadPolls();
         break;
 
       case ChatMessageEvent(:final message):
@@ -542,6 +986,8 @@ class LiveClassCubit extends Cubit<LiveClassState> {
         break;
 
       case MicExpiredEvent():
+        // The turn never went on air — nothing of it is in flight on
+        // HLS, so tear down immediately.
         await _endAudio();
         emit(state.copyWith(
           transientNotice: 'Mic timed out. Raise your hand again.',
@@ -549,7 +995,9 @@ class LiveClassCubit extends Cubit<LiveClassState> {
         break;
 
       case MicReleasedEvent():
-        await _endAudio();
+        // The educator ended the turn — same as tapping "finish": the
+        // echo is still in flight.
+        await _endAudio(lingerToCoverEcho: true);
         break;
 
       case NowSpeakingEvent(:final studentId, :final name):
@@ -575,7 +1023,7 @@ class LiveClassCubit extends Cubit<LiveClassState> {
       case SpeakerEndedEvent():
         final wasMine = isSelfSpeaking;
         emit(state.copyWith(speakingStudentId: null, speakingName: null));
-        if (wasMine) await _endAudio();
+        if (wasMine) await _endAudio(lingerToCoverEcho: true);
         break;
 
       case FlagUpdatedEvent():
@@ -589,11 +1037,45 @@ class LiveClassCubit extends Cubit<LiveClassState> {
         break;
 
       case ClassStartedEvent():
+        if (state.phase == LiveViewPhase.live) {
+          // The host went live AGAIN on the same room while we're still
+          // rendering the old broadcast. The page only rebuilds the
+          // player on a phase/URL change, and the re-minted signed URL is
+          // usually byte-identical — so without this the event was
+          // swallowed and the player kept buffering the dead stream.
+          // Cycle through `waiting` so it is torn down and rebuilt at the
+          // new live edge once segments exist.
+          _livenessTimer?.cancel();
+          _livenessTimer = null;
+          // A restart wins over a drain in progress: drop whatever is
+          // left of the tail rather than play stale audio over a live
+          // class. The old controller is torn down with the phase change
+          // — never resumed, which is how the tail leaked out before.
+          _drainGuard?.cancel();
+          _drainGuard = null;
+          emit(state.copyWith(
+            phase: LiveViewPhase.waiting,
+            broadcastInterrupted: true,
+            pauseDraining: false,
+            playbackMode: PlaybackMode.video,
+          ));
+        }
         // Always re-resolve: the signed URL may have expired while waiting,
         // and _loadPlayback gates on the stream actually serving segments.
         // SRS needs a moment to cut the first ones after the publisher
         // connects, so going live on this event alone showed a black player.
         await _loadPlayback();
+        break;
+
+      case ClassPausedEvent():
+        // The educator's broadcast stopped reaching the media server —
+        // the class is NOT over. Do NOT cut to waiting: this real-time
+        // signal lands in a world ~7s behind, and the host's last words
+        // are still in the player buffer. Drain them first (see
+        // [_beginDrain]); the waiting screen follows when the player
+        // finishes. A restart inside the drain (`classStarted`) wins and
+        // rebuilds the player on the new stream.
+        if (state.phase == LiveViewPhase.live) _beginDrain();
         break;
 
       case ClassEndedEvent():
@@ -608,7 +1090,25 @@ class LiveClassCubit extends Cubit<LiveClassState> {
         emit(state.copyWith(phase: LiveViewPhase.cancelled));
         break;
 
-      case ActionDeniedEvent(:final reason):
+      case PollVoteAcceptedEvent(:final pollId, :final optionIds):
+        _patchPoll(pollId, (p) => p.copyWith(myOptionIds: optionIds));
+        break;
+
+      case PollRevealedEvent(:final poll):
+        // Counts + correct marks; own choice kept from state (the event
+        // doesn't carry it).
+        _upsertPoll(poll);
+        break;
+
+      case PollCancelledEvent(:final pollId):
+        _patchPoll(pollId, (p) => p.copyWith(status: 'cancelled'));
+        break;
+
+      case ActionDeniedEvent(:final reason, :final pollId):
+        if (reason == 'poll_not_found' && pollId != null) {
+          final map = Map<int, LivePoll>.from(state.polls)..remove(pollId);
+          emit(state.copyWith(polls: map));
+        }
         emit(state.copyWith(transientNotice: _denyMessage(reason)));
         break;
     }
@@ -647,6 +1147,7 @@ class LiveClassCubit extends Cubit<LiveClassState> {
       'mode=${state.chatMode} myId=$myId hiddenByPrivate=$hiddenByPrivate',
     );
     if (hiddenByPrivate) return;
+    if (message.poll != null) _upsertPoll(message.poll!);
     // De-dupe by id ONLY when the id is real (>0). If the backend omits
     // an id (parses to 0), never treat every 0-id message as the same
     // one — that would collapse all messages into a single row.
@@ -674,6 +1175,14 @@ class LiveClassCubit extends Cubit<LiveClassState> {
 
   String _denyMessage(String reason) {
     switch (reason) {
+      case 'poll_closed':
+        return 'Voting has closed.';
+      case 'poll_already_voted':
+        return 'You already answered this poll.';
+      case 'poll_invalid':
+        return 'Choose an option.';
+      case 'poll_not_found':
+        return 'This poll is no longer available.';
       case 'chat_blocked':
         return 'Chat is disabled by the host.';
       case 'hand_blocked':
@@ -688,9 +1197,29 @@ class LiveClassCubit extends Cubit<LiveClassState> {
   @override
   Future<void> close() async {
     _speakingEchoTimer?.cancel();
+    _micLingerTimer?.cancel();
     _readinessTimer?.cancel();
+    _livenessTimer?.cancel();
+    _drainGuard?.cancel();
     await _endAudio();
     await _teardownHub();
     return super.close();
   }
+}
+
+/// Outcome of one playlist read by [LiveClassCubit._probeStreamHealth].
+enum _StreamHealth {
+  /// A variant is serving segments.
+  alive,
+
+  /// Reachable, but nothing is being broadcast (404/410, or playlists
+  /// with no segments).
+  dead,
+
+  /// Closed out with `#EXT-X-ENDLIST`: the host stopped and the tail is
+  /// still playable — drain it, then treat as dead.
+  ended,
+
+  /// Timed out / no route — says nothing about the broadcast.
+  unreachable,
 }

@@ -8,13 +8,13 @@ import 'package:nexora/core/theme/responsive_helper.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/utils/utils.dart';
 
-import 'package:nexora/core/widgets/custom_network_image.dart';
 import 'package:nexora/core/widgets/scrolling_title.dart';
 import 'package:nexora/core/widgets/swipe_to_pay_button.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/presentation/bloc/course_pricing_cubit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:nexora/features/courses/presentation/widgets/course_cover.dart';
 
 /// Order-summary bottom sheet that confirms enrolment details before
 /// launching Razorpay.
@@ -421,22 +421,12 @@ class _CourseCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          ClipRRect(
+          CourseCoverImage(
+            url: pricing.courseImageUrl,
+            width: imageWidth,
+            height: imageHeight,
             borderRadius: BorderRadius.circular(AppSizes.radiusS),
-            child: CustomNetworkImage(
-              url: pricing.courseImageUrl,
-              width: imageWidth,
-              height: imageHeight,
-              errorWidget: Container(
-                width: imageWidth,
-                height: imageHeight,
-                color: AppColors.grey100,
-                child: Icon(
-                  Icons.image_outlined,
-                  color: AppColors.grey300,
-                ),
-              ),
-            ),
+            fallbackIconSize: Screen.getSize(22),
           ),
           SizedBox(width: Screen.getHorizontalSize(14)),
           Expanded(

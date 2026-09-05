@@ -18,11 +18,15 @@ class ExamState with _$ExamState {
   /// Actively taking a normal-mode paper. [answers] is a fresh map each
   /// emit so state equality triggers a rebuild. [autosaveStopped] flips
   /// once the deadline+grace has passed (client stops autosaving).
+  ///
+  /// [pinnedQuestionIds] holds top-level question ids the student parked to
+  /// revisit. Client-only — never sent to the server, and normal mode only.
   const factory ExamState.taking({
     required ExamPaperResponse paper,
     required Map<int, ExamAnswerDraft> answers,
     DateTime? deadlineUtc,
     @Default(false) bool autosaveStopped,
+    @Default(<int>{}) Set<int> pinnedQuestionIds,
   }) = _Taking;
 
   /// Competitive mode: a single current question. [draft] is the

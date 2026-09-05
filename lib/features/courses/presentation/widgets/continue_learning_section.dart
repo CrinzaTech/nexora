@@ -1,13 +1,13 @@
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_theme.dart';
-import 'package:nexora/core/widgets/custom_network_image.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/presentation/bloc/continue_courses_cubit.dart';
 import 'package:nexora/core/theme/app_decorations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:nexora/features/courses/presentation/widgets/course_cover.dart';
 
 /// "Continue your purchase" section for the home page — vertical list of
 /// the user's recently-viewed / in-progress courses with a Buy Now CTA.
@@ -121,25 +121,13 @@ class _ContinueCourseCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Course thumbnail — square, fixed size
-            ClipRRect(
+            // Course thumbnail — square frame, whole banner inside it.
+            CourseCoverImage(
+              url: course.courseImageUrl,
+              height: Screen.getVerticalSize(110),
+              width: Screen.getHorizontalSize(110),
               borderRadius: BorderRadius.circular(AppSizes.radiusM),
-              child: CustomNetworkImage(
-                url: course.courseImageUrl,
-                height: Screen.getVerticalSize(110),
-                width: Screen.getHorizontalSize(110),
-                fit: BoxFit.cover,
-                errorWidget: Container(
-                  height: Screen.getVerticalSize(110),
-                  width: Screen.getHorizontalSize(110),
-                  color: AppColors.grey100,
-                  alignment: Alignment.center,
-                  child: Icon(
-                    Icons.image_not_supported_outlined,
-                    color: AppColors.grey300,
-                  ),
-                ),
-              ),
+              fallbackIconSize: Screen.getSize(26),
             ),
             SizedBox(width: Screen.getHorizontalSize(14)),
 

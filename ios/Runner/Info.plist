@@ -67,5 +67,18 @@
 			<string>itms-apps</string>
 			<string>itms</string>
 		</array>
+		<!-- Lets iOS route the Google Sign-In redirect back into this app.
+		     Value is REVERSED_CLIENT_ID from GoogleService-Info.plist —
+		     regenerate this entry if that file is ever re-downloaded with
+		     a different client ID. -->
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>com.googleusercontent.apps.592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte</string>
+				</array>
+			</dict>
+		</array>
 	</dict>
 </plist>

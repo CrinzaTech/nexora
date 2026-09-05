@@ -145,6 +145,15 @@ class LiveChatMessage {
   final String body;
   final DateTime createdAt;
 
+  /// `text` (default) or `poll`. Render by kind; an old server sends no
+  /// kind at all and every message is text.
+  final String kind;
+  final int? pollId;
+
+  /// The poll as shaped for this viewer, carried on the row itself. The
+  /// cubit keeps the live copy in its poll map; this is the seed.
+  final LivePoll? poll;
+
   const LiveChatMessage({
     required this.id,
     required this.senderId,
@@ -152,7 +161,12 @@ class LiveChatMessage {
     required this.senderName,
     required this.body,
     required this.createdAt,
+    this.kind = 'text',
+    this.pollId,
+    this.poll,
   });
+
+  bool get isPoll => kind.toLowerCase() == 'poll' || poll != null;
 
   /// True for any non-student sender. The backend role for the teacher
   /// may be spelled `educator`, `teacher`, `host`, `instructor`,
@@ -216,6 +230,209 @@ class LiveChatMessage {
               ? DateTime.tryParse(createdRaw)?.toLocal()
               : null) ??
           DateTime.now(),
+      kind: readStr(['kind', 'Kind']) ?? 'text',
+      pollId: readNum(['pollId', 'PollId'])?.toInt(),
+      poll: (json['poll'] ?? json['Poll']) is Map
+          ? LivePoll.fromJson(
+              Map<String, dynamic>.from((json['poll'] ?? json['Poll']) as Map),
+            )
+          : null,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Polls / choice questions posted into the chat by the educator.
+// ─────────────────────────────────────────────────────────────────────
+
+dynamic _pick(Map<String, dynamic> json, List<String> keys) {
+  for (final k in keys) {
+    if (json.containsKey(k) && json[k] != null) return json[k];
+    // The API is not consistent about casing across paths.
+    final cap = k[0].toUpperCase() + k.substring(1);
+    if (json.containsKey(cap) && json[cap] != null) return json[cap];
+  }
+  return null;
+}
+
+int? _pickInt(Map<String, dynamic> json, List<String> keys) {
+  final v = _pick(json, keys);
+  if (v is num) return v.toInt();
+  if (v is String) return int.tryParse(v);
+  return null;
+}
+
+bool? _pickBool(Map<String, dynamic> json, List<String> keys) {
+  final v = _pick(json, keys);
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  if (v is String) {
+    final s = v.toLowerCase();
+    if (s == 'true') return true;
+    if (s == 'false') return false;
+  }
+  return null;
+}
+
+class LivePollOption {
+  final int id;
+  final int position;
+  final String label;
+
+  /// Set only once results are visible AND the poll has a correct answer.
+  final bool? isCorrect;
+
+  /// Set only once results are visible to this viewer.
+  final int? votes;
+
+  const LivePollOption({
+    required this.id,
+    required this.position,
+    required this.label,
+    this.isCorrect,
+    this.votes,
+  });
+
+  factory LivePollOption.fromJson(Map<String, dynamic> json) {
+    return LivePollOption(
+      id: _pickInt(json, ['id', 'optionId']) ?? 0,
+      position: _pickInt(json, ['position', 'order']) ?? 0,
+      label: _pick(json, ['label', 'text'])?.toString() ?? '',
+      isCorrect: _pickBool(json, ['isCorrect']),
+      votes: _pickInt(json, ['votes', 'count']),
+    );
+  }
+}
+
+/// A poll as shaped for THIS viewer: students only get counts and correct
+/// marks once results are visible; `myOptionIds` is their own answer.
+class LivePoll {
+  final int id;
+  final String roomId;
+  final String question;
+
+  /// `single` (pick exactly one) or `multiple` (any number).
+  final String pollType;
+
+  /// `timed` (results public at [revealAt]) or `manual` (when the host
+  /// shares them).
+  final String revealMode;
+  final int? revealAfterMin;
+
+  /// Countdown target for timed polls; voting closes at the same moment.
+  final DateTime? revealAt;
+
+  /// `open` | `revealed` | `cancelled`.
+  final String status;
+  final DateTime? createdAt;
+  final DateTime? revealedAt;
+  final bool hasCorrectAnswer;
+
+  /// Whether this viewer may see counts (students: only after reveal).
+  final bool resultsVisible;
+
+  /// Distinct students who answered — null until [resultsVisible].
+  final int? attempted;
+
+  /// This student's own choice(s); empty = not answered yet.
+  final List<int> myOptionIds;
+  final List<LivePollOption> options;
+
+  const LivePoll({
+    required this.id,
+    required this.roomId,
+    required this.question,
+    required this.pollType,
+    required this.revealMode,
+    this.revealAfterMin,
+    this.revealAt,
+    required this.status,
+    this.createdAt,
+    this.revealedAt,
+    this.hasCorrectAnswer = false,
+    this.resultsVisible = false,
+    this.attempted,
+    this.myOptionIds = const [],
+    this.options = const [],
+  });
+
+  bool get isMultiple => pollType.toLowerCase() == 'multiple';
+  bool get isTimed => revealMode.toLowerCase() == 'timed';
+  bool get isRevealed => status.toLowerCase() == 'revealed';
+  bool get isCancelled => status.toLowerCase() == 'cancelled';
+  bool get isOpen => status.toLowerCase() == 'open';
+  bool get hasAnswered => myOptionIds.isNotEmpty;
+
+  /// A timed poll whose deadline passed but whose `pollRevealed` hasn't
+  /// reached us yet (hub hiccup) — voting is closed server-side anyway.
+  bool get deadlinePassed {
+    final at = revealAt;
+    return at != null && !DateTime.now().isBefore(at);
+  }
+
+  bool get canVote => isOpen && !hasAnswered && !deadlinePassed;
+
+  LivePoll copyWith({String? status, List<int>? myOptionIds}) {
+    return LivePoll(
+      id: id,
+      roomId: roomId,
+      question: question,
+      pollType: pollType,
+      revealMode: revealMode,
+      revealAfterMin: revealAfterMin,
+      revealAt: revealAt,
+      status: status ?? this.status,
+      createdAt: createdAt,
+      revealedAt: revealedAt,
+      hasCorrectAnswer: hasCorrectAnswer,
+      resultsVisible: resultsVisible,
+      attempted: attempted,
+      myOptionIds: myOptionIds ?? this.myOptionIds,
+      options: options,
+    );
+  }
+
+  factory LivePoll.fromJson(Map<String, dynamic> json) {
+    DateTime? date(List<String> keys) {
+      final raw = _pick(json, keys);
+      if (raw == null) return null;
+      return DateTime.tryParse(raw.toString())?.toLocal();
+    }
+
+    final rawOptions = _pick(json, ['options']);
+    final options = <LivePollOption>[];
+    if (rawOptions is List) {
+      for (final o in rawOptions) {
+        if (o is Map) {
+          options.add(LivePollOption.fromJson(Map<String, dynamic>.from(o)));
+        }
+      }
+      options.sort((a, b) => a.position.compareTo(b.position));
+    }
+    final rawMine = _pick(json, ['myOptionIds']);
+    final mine = <int>[];
+    if (rawMine is List) {
+      for (final v in rawMine) {
+        final n = v is num ? v.toInt() : int.tryParse(v.toString());
+        if (n != null) mine.add(n);
+      }
+    }
+    return LivePoll(
+      id: _pickInt(json, ['id', 'pollId']) ?? 0,
+      roomId: _pick(json, ['roomId'])?.toString() ?? '',
+      question: _pick(json, ['question', 'body'])?.toString() ?? '',
+      pollType: _pick(json, ['pollType', 'type'])?.toString() ?? 'single',
+      revealMode: _pick(json, ['revealMode'])?.toString() ?? 'manual',
+      revealAfterMin: _pickInt(json, ['revealAfterMin']),
+      revealAt: date(['revealAt']),
+      status: _pick(json, ['status'])?.toString() ?? 'open',
+      createdAt: date(['createdAt']),
+      revealedAt: date(['revealedAt']),
+      hasCorrectAnswer: _pickBool(json, ['hasCorrectAnswer']) ?? false,
+      resultsVisible: _pickBool(json, ['resultsVisible']) ?? false,
+      attempted: _pickInt(json, ['attempted']),
+      myOptionIds: mine,
+      options: options,
     );
   }
 }

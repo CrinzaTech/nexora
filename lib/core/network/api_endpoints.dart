@@ -133,6 +133,13 @@ class ApiEndpoints {
   static const String liveClassChat =
       '/api/stream/live-classes/{roomId}/chat';
 
+  /// Every poll in a live class room, oldest first, shaped for this viewer
+  /// (own answer filled in; counts only once results are visible). Used on
+  /// (re)join to find an open poll without paging chat.
+  /// GET /api/stream/live-classes/{roomId}/polls
+  static const String liveClassPolls =
+      '/api/stream/live-classes/{roomId}/polls';
+
   // ============================================================
   // EXAM (student-only exam-taking flow — normal mode)
   //
@@ -163,6 +170,13 @@ class ApiEndpoints {
   // org's own website, opened in a webview from `shareLink`.
   // See WEBINAR_API.md.
   // ============================================================
+  /// Home "Live classes" rail — running-now + upcoming course live classes
+  /// the educator allowed this learner to see.
+  /// GET /api/v1/Dashboard/live-sessions?pageNo=&pageSize=  (pageSize clamped to 50)
+  /// Ended/cancelled/hidden/paid-only-without-purchase are already excluded
+  /// server-side, and the ordering (live first, then soonest) is authoritative.
+  static const String homeLiveSessions = '/api/v1/Dashboard/live-sessions';
+
   /// Live + upcoming webinars for the dashboard rail.
   /// GET /api/v1/webinars?pageNo=&pageSize=  (pageSize clamped to 50)
   /// Finished, cancelled and link-closed webinars are already excluded

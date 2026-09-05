@@ -8,6 +8,7 @@ import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/features/courses/data/models/live_class_models.dart';
+import 'package:nexora/features/courses/presentation/widgets/live_poll_card.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinar_room_cubit.dart';
 
 /// Webinar chat — newest message on top (reverse list); scrolling to the
@@ -75,7 +76,10 @@ class _WebinarChatPanelState extends State<WebinarChatPanel> {
             child: BlocBuilder<WebinarRoomCubit, WebinarRoomState>(
               buildWhen: (p, c) =>
                   p.messages != c.messages ||
-                  p.isLoadingMoreChat != c.isLoadingMoreChat,
+                  p.isLoadingMoreChat != c.isLoadingMoreChat ||
+                  // A vote ack / reveal / cancel changes the poll map, not
+                  // the messages — the card in the list must re-render.
+                  p.polls != c.polls,
               builder: (context, state) {
                 if (state.messages.isEmpty) {
                   return Center(
@@ -111,6 +115,17 @@ class _WebinarChatPanelState extends State<WebinarChatPanel> {
                       );
                     }
                     final msg = state.messages[index];
+                    if (msg.isPoll) {
+                      // Rendered from the cubit's poll map so a vote /
+                      // reveal / cancel re-renders the card in place; the
+                      // row's own copy seeds it. No copy at all → the
+                      // question shows as a plain educator message.
+                      final poll = (msg.pollId != null
+                              ? state.polls[msg.pollId]
+                              : null) ??
+                          msg.poll;
+                      if (poll != null) return _pollBubble(msg, poll);
+                    }
                     return _bubble(msg, msg.senderId == widget.myId);
                   },
                 );
@@ -244,6 +259,50 @@ class _WebinarChatPanelState extends State<WebinarChatPanel> {
           ),
         );
       },
+    );
+  }
+
+  /// A poll the host posted — sender line as on a bubble, then the card.
+  Widget _pollBubble(LiveChatMessage msg, LivePoll poll) {
+    final cubit = context.read<WebinarRoomCubit>();
+    return Padding(
+      padding: EdgeInsets.only(bottom: Screen.getVerticalSize(8)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  msg.senderName,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.labelSmall.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              SizedBox(width: Screen.getHorizontalSize(4)),
+              _hostTag(),
+              SizedBox(width: Screen.getHorizontalSize(6)),
+              Text(
+                DateFormat('h:mm a').format(msg.createdAt),
+                style: AppTypography.labelSmall.copyWith(
+                  color: AppColors.mutedTextPrimary,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: Screen.getVerticalSize(2)),
+          LivePollCard(
+            key: ValueKey('poll-${poll.id}'),
+            poll: poll,
+            onSubmit: (ids) => cubit.submitVote(poll.id, ids),
+            onDeadline: cubit.refreshPolls,
+          ),
+        ],
+      ),
     );
   }
 

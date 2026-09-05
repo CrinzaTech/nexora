@@ -1,13 +1,13 @@
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_theme.dart';
 import 'package:nexora/core/utils/utils.dart';
-import 'package:nexora/core/widgets/custom_network_image.dart';
 import 'package:nexora/core/widgets/rating_and_review_row_widget.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/presentation/bloc/search_courses_cubit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:nexora/features/courses/presentation/widgets/course_cover.dart';
 
 /// Vertical search-results list driven by [SearchCoursesCubit].
 ///
@@ -167,18 +167,12 @@ class _SearchResultCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            CustomNetworkImage(
+            CourseCoverImage(
               url: course.courseImageUrl,
               width: Screen.getHorizontalSize(80),
               height: Screen.getVerticalSize(80),
               borderRadius: BorderRadius.circular(AppSizes.radiusM),
-              errorWidget: Container(
-                width: Screen.getHorizontalSize(80),
-                height: Screen.getVerticalSize(80),
-                color: AppColors.grey100,
-                alignment: Alignment.center,
-                child: const Icon(Icons.image_not_supported_outlined),
-              ),
+              fallbackIconSize: Screen.getSize(22),
             ),
             SizedBox(width: Screen.getHorizontalSize(12)),
             Expanded(

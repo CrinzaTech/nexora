@@ -344,6 +344,9 @@ class ContentCompletionService {
       network: (_) => _Attempt.offline,
       cache: (_) => _Attempt.retryable,
       unknown: (_) => _Attempt.retryable,
+      // Never raised by the completion endpoint; a session that is over
+      // can't be retried into existence.
+      sessionStatus: (_, __) => _Attempt.permanent,
       server: (_, statusCode) {
         if (statusCode == null) return _Attempt.retryable;
         if (statusCode == 401 || statusCode == 403) return _Attempt.retryable;

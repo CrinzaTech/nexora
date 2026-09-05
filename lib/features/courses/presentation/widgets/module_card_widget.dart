@@ -9,6 +9,7 @@ import 'package:nexora/core/theme/responsive_helper.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_snackbar.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
+import 'package:nexora/features/courses/data/services/live_status_probe.dart';
 import 'package:nexora/features/courses/presentation/folder_navigation_cache.dart';
 import 'dart:async';
 
@@ -33,12 +34,17 @@ class ModuleCard extends StatelessWidget {
   final int coursePurchasedId;
   final bool activateWatermark;
 
+  /// Deep-linked to (the Home "Live classes" rail): a brief tinted pulse
+  /// so the learner's eye lands on this row. No other behaviour change.
+  final bool highlighted;
+
   const ModuleCard({
     super.key,
     required this.module,
     required this.courseId,
     this.coursePurchasedId = 0,
     this.activateWatermark = false,
+    this.highlighted = false,
   });
 
   @override
@@ -46,19 +52,45 @@ class ModuleCard extends StatelessWidget {
     if (module.isVisible == false) {
       return const SizedBox.shrink();
     }
+    Widget tile(BuildContext context) {
+      if (!highlighted) return _buildTile(context);
+      // Primary at ~8%, fading out over 1.5s.
+      return TweenAnimationBuilder<double>(
+        tween: Tween(begin: 1, end: 0),
+        duration: const Duration(milliseconds: 1500),
+        curve: Curves.easeOut,
+        builder: (context, t, _) => _buildTile(context, tint: t),
+      );
+    }
+
     // Live-class rows are time-dependent (upcoming → live → ended) but
     // the ListView is built once — rebuild them on a slow tick so the
     // "LIVE NOW" badge appears/expires without a manual refresh.
     if (module.isLiveClass) {
       return _PeriodicRebuild(
         interval: const Duration(seconds: 30),
-        builder: (context) => _buildTile(context),
+        // A probe verdict landing corrects the badge immediately
+        // instead of waiting for the next tick.
+        listenable: sl<LiveStatusProbe>(),
+        builder: tile,
       );
     }
-    return _buildTile(context);
+    return tile(context);
   }
 
-  Widget _buildTile(BuildContext context) {
+  /// The schedule window is open but the stream server says nothing is
+  /// being broadcast — the host hasn't started yet, or the admin ended
+  /// the class early. The curriculum API carries no live status, so the
+  /// stream itself is the only truth the badge can check. Optimistic on
+  /// `unknown` (never probed / network error): the schedule-derived
+  /// badge stands until the probe says otherwise.
+  bool get _offAir =>
+      module.isLiveNow &&
+      (module.url ?? '').isNotEmpty &&
+      sl<LiveStatusProbe>().statusOf(module.url!) ==
+          LiveBroadcastStatus.notBroadcasting;
+
+  Widget _buildTile(BuildContext context, {double tint = 0}) {
     final rh = ResponsiveHelper.of(context);
     // Preview-only perk badge: how many unlocked leaf nodes sit inside
     // this folder. Hidden once the user has enrolled (coursePurchasedId
@@ -70,9 +102,14 @@ class ModuleCard extends StatelessWidget {
     return Container(
       margin: EdgeInsets.only(bottom: Screen.getVerticalSize(10)),
       decoration: BoxDecoration(
+        color: tint > 0
+            ? AppColors.primary.withValues(alpha: 0.08 * tint)
+            : null,
         border: Border.all(
           width: 1.5,
-          color: AppColors.mutedTextPrimary.withValues(alpha: 0.25),
+          color: tint > 0
+              ? AppColors.primary.withValues(alpha: 0.25 + 0.5 * tint)
+              : AppColors.mutedTextPrimary.withValues(alpha: 0.25),
         ),
         borderRadius: BorderRadius.circular(AppSizes.radiusL),
         boxShadow: [
@@ -213,8 +250,10 @@ class ModuleCard extends StatelessWidget {
             if (module.isEnded) {
               CustomSnackbar.info(
                 context,
-                title: 'Class ended',
-                message: 'This class has ended.',
+                title: module.isCancelled ? 'Class cancelled' : 'Class ended',
+                message: module.isCancelled
+                    ? 'This class was cancelled.'
+                    : 'This class has ended.',
               );
             } else if (module.isUpcoming) {
               // Joining is blocked until the scheduled start time — the
@@ -297,7 +336,7 @@ class ModuleCard extends StatelessWidget {
         ),
         leading: SizedBox.square(
           dimension: Screen.getVerticalSize(50),
-          child: _getLeading(module),
+          child: _getLeading(module, offAir: module.isLiveClass && _offAir),
         ),
         title: Column(
           mainAxisSize: MainAxisSize.max,
@@ -376,7 +415,7 @@ class ModuleCard extends StatelessWidget {
             ],
           ],
         ),
-        trailing: _getTrailing(module),
+        trailing: _getTrailing(module, offAir: module.isLiveClass && _offAir),
       ),
     );
   }
@@ -387,6 +426,15 @@ class ModuleCard extends StatelessWidget {
     final fontSize =
         rh.isLargeScreen ? rh.cappedFontSize(12) : Screen.getFontSize(12);
     if (module.isLiveNow) {
+      if (_offAir) {
+        return Text(
+          module.isPausedByHost ? 'Paused by host' : 'Waiting for host',
+          style: AppTypography.bodyTextMedium.copyWith(
+            color: AppColors.mutedTextPrimary,
+            fontSize: fontSize,
+          ),
+        );
+      }
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -412,7 +460,9 @@ class ModuleCard extends StatelessWidget {
       );
     }
     return Text(
-      module.isEnded ? 'Ended' : 'Live Class',
+      module.isCancelled
+          ? 'Cancelled'
+          : (module.isEnded ? 'Ended' : 'Live Class'),
       style: AppTypography.bodyTextMedium.copyWith(
         color: AppColors.mutedTextPrimary,
         fontSize: fontSize,
@@ -437,11 +487,18 @@ class ModuleCard extends StatelessWidget {
 
 /// Rebuilds [builder] every [interval] — used so time-dependent rows
 /// (live-class badges) refresh inside a ListView that is built once.
+/// [listenable] additionally rebuilds the row the moment it fires, so an
+/// async signal (a broadcast-probe verdict) doesn't wait for the tick.
 class _PeriodicRebuild extends StatefulWidget {
   final Duration interval;
   final WidgetBuilder builder;
+  final Listenable? listenable;
 
-  const _PeriodicRebuild({required this.interval, required this.builder});
+  const _PeriodicRebuild({
+    required this.interval,
+    required this.builder,
+    this.listenable,
+  });
 
   @override
   State<_PeriodicRebuild> createState() => _PeriodicRebuildState();
@@ -456,10 +513,16 @@ class _PeriodicRebuildState extends State<_PeriodicRebuild> {
     _timer = Timer.periodic(widget.interval, (_) {
       if (mounted) setState(() {});
     });
+    widget.listenable?.addListener(_onSignal);
+  }
+
+  void _onSignal() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    widget.listenable?.removeListener(_onSignal);
     _timer?.cancel();
     super.dispose();
   }
@@ -468,7 +531,7 @@ class _PeriodicRebuildState extends State<_PeriodicRebuild> {
   Widget build(BuildContext context) => widget.builder(context);
 }
 
-Widget _getLeading(CourseContent module) {
+Widget _getLeading(CourseContent module, {bool offAir = false}) {
   switch (module.type) {
     case CourseContentType.folder:
       return Image.asset(
@@ -509,19 +572,19 @@ Widget _getLeading(CourseContent module) {
         color: AppColors.primary,
       );
     case CourseContentType.liveClass:
-      // Broadcast icon, tinted red while the class is on air and muted
-      // once it has ended.
+      // Broadcast icon, tinted red only while the class is actually on
+      // air and muted once it has ended.
       return Icon(
         Icons.sensors,
         size: Screen.getSize(20),
-        color: module.isLiveNow
+        color: module.isLiveNow && !offAir
             ? AppColors.error
             : (module.isEnded ? AppColors.mutedTextPrimary : AppColors.primary),
       );
   }
 }
 
-Widget? _getTrailing(CourseContent module) {
+Widget? _getTrailing(CourseContent module, {bool offAir = false}) {
   if (module.isLocked) {
     return Image.asset(
       AppImages.passwordIcon,
@@ -549,6 +612,17 @@ Widget? _getTrailing(CourseContent module) {
     );
   }
   if (module.type == CourseContentType.liveClass && module.isLiveNow) {
+    if (offAir) {
+      // In the scheduled window but nothing is broadcasting — the host
+      // hasn't started, or the class was ended early. The row stays
+      // tappable (it opens the waiting room), but a red "Join" pill on
+      // a class that isn't on air is a lie.
+      return Icon(
+        Icons.schedule,
+        size: Screen.getSize(20),
+        color: AppColors.mutedTextPrimary,
+      );
+    }
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: AppSizes.paddingS,

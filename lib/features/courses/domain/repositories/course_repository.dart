@@ -55,6 +55,9 @@ abstract class CourseRepository {
   /// Chat backfill for a live room, newest first. [beforeId] pages
   /// backwards (pass the oldest id currently on screen); [limit]
   /// defaults server-side to ~30.
+  /// Every poll in the room, oldest first, shaped for this viewer.
+  Future<Either<Failure, List<LivePoll>>> getLiveClassPolls(String roomId);
+
   Future<Either<Failure, List<LiveChatMessage>>> getLiveClassChat(
     String roomId, {
     int? beforeId,

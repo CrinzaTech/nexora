@@ -14,14 +14,19 @@ import 'package:nexora/core/widgets/star_rating.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/presentation/bloc/course_detail_cubit.dart';
 import 'package:nexora/features/courses/presentation/bloc/course_reviews_cubit.dart';
+import 'package:nexora/core/router/app_routes.dart';
+import 'package:nexora/features/courses/presentation/folder_navigation_cache.dart';
 import 'package:nexora/features/courses/presentation/widgets/module_card_widget.dart';
 import 'package:nexora/features/courses/presentation/widgets/write_review_dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../widgets/view_demo_buy_now_row_widget.dart';
+import 'package:nexora/features/courses/presentation/widgets/course_cover.dart';
+import 'package:nexora/core/widgets/whole_image.dart';
 
 /// Course Detail Screen — loads full course data from `/api/v1/course/{courseId}`.
 class CourseDetailPage extends StatelessWidget {
@@ -37,11 +42,23 @@ class CourseDetailPage extends StatelessWidget {
   /// the About blurb would make the user hunt for what changed.
   final int initialTabIndex;
 
+  /// From the Home "Live classes" rail: the live-class node to scroll to
+  /// and highlight once the course loads (purchased courses only), with
+  /// the folders above it — outermost first — walked into on the way.
+  /// [focusRoomId] is the fallback lookup (the node's `url`) if the id
+  /// doesn't match the loaded tree.
+  final String? focusNodeId;
+  final String? focusRoomId;
+  final List<String> focusParentNodeIds;
+
   const CourseDetailPage({
     super.key,
     required this.courseId,
     this.courseTitle,
     this.initialTabIndex = 0,
+    this.focusNodeId,
+    this.focusRoomId,
+    this.focusParentNodeIds = const [],
   });
 
   @override
@@ -55,6 +72,9 @@ class CourseDetailPage extends StatelessWidget {
         courseId: courseId,
         courseTitle: courseTitle,
         initialTabIndex: initialTabIndex,
+        focusNodeId: focusNodeId,
+        focusRoomId: focusRoomId,
+        focusParentNodeIds: focusParentNodeIds,
       ),
     );
   }
@@ -64,11 +84,17 @@ class _CourseDetailView extends StatefulWidget {
   final int courseId;
   final String? courseTitle;
   final int initialTabIndex;
+  final String? focusNodeId;
+  final String? focusRoomId;
+  final List<String> focusParentNodeIds;
 
   const _CourseDetailView({
     required this.courseId,
     this.courseTitle,
     this.initialTabIndex = 0,
+    this.focusNodeId,
+    this.focusRoomId,
+    this.focusParentNodeIds = const [],
   });
 
   @override
@@ -91,6 +117,11 @@ class _CourseDetailViewState extends State<_CourseDetailView>
   /// to the authoritative [Course.courseTitle] once the API responds.
   late String _displayTitle;
 
+  /// The node the Content tab should scroll to and highlight — set once
+  /// the course has loaded and the focus request has been resolved.
+  String? _tabFocusNodeId;
+  bool _focusHandled = false;
+
   @override
   void initState() {
     super.initState();
@@ -105,6 +136,71 @@ class _CourseDetailViewState extends State<_CourseDetailView>
         (widget.courseTitle != null && widget.courseTitle!.isNotEmpty)
         ? widget.courseTitle!
         : 'Course Details';
+  }
+
+  /// Resolve the rail's focus request against the loaded tree — once.
+  ///
+  /// Purchased only: if the purchase lapsed between the rail and here
+  /// (refund, expiry) the request is ignored and the bottom bar's Buy Now
+  /// stands. Nested nodes walk their folders in order, exactly as the
+  /// module card does; an id the tree no longer contains stops the walk
+  /// and leaves the learner on the Content tab. Never opens the player.
+  void _handleFocus(Course course) {
+    if (_focusHandled) return;
+    final nodeId = widget.focusNodeId;
+    if (nodeId == null || nodeId.isEmpty) return;
+    _focusHandled = true;
+    if (!course.isPurchased) return;
+    final nodes = course.courseNodes;
+    final content = nodes?.content ?? const <CourseContent>[];
+    if (content.isEmpty) return;
+
+    final roomId = widget.focusRoomId;
+    final target = _findNode(content, (n) => n.nodeId == nodeId) ??
+        (roomId == null || roomId.isEmpty
+            ? null
+            : _findNode(content, (n) => n.isLiveClass && n.url == roomId));
+    final targetId = target?.nodeId ?? nodeId;
+
+    final folders = <CourseContent>[];
+    for (final id in widget.focusParentNodeIds) {
+      final folder = _findNode(content, (n) => n.nodeId == id && n.isFolder);
+      if (folder == null) break;
+      folders.add(folder);
+    }
+    if (folders.isEmpty) {
+      setState(() => _tabFocusNodeId = targetId);
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final activateWatermark = nodes?.activateWatermark ?? false;
+      for (var i = 0; i < folders.length; i++) {
+        final folder = folders[i];
+        final last = i == folders.length - 1;
+        FolderNavigationCache.put(folder);
+        context.push(
+          '${AppRoutes.folderContent}'
+          '?folderId=${Uri.encodeComponent(folder.nodeId)}'
+          '&courseId=${course.courseId}'
+          '&coursePurchasedId=${course.coursePurchasedId}'
+          '&activateWatermark=$activateWatermark'
+          '${last ? '&focusNodeId=${Uri.encodeComponent(targetId)}' : ''}',
+        );
+      }
+    });
+  }
+
+  static CourseContent? _findNode(
+    List<CourseContent> content,
+    bool Function(CourseContent) test,
+  ) {
+    for (final node in content) {
+      if (test(node)) return node;
+      final inner = _findNode(node.children, test);
+      if (inner != null) return inner;
+    }
+    return null;
   }
 
   @override
@@ -145,6 +241,7 @@ class _CourseDetailViewState extends State<_CourseDetailView>
                   course.courseTitle != _displayTitle) {
                 setState(() => _displayTitle = course.courseTitle);
               }
+              _handleFocus(course);
             },
             orElse: () {},
           );
@@ -156,6 +253,7 @@ class _CourseDetailViewState extends State<_CourseDetailView>
               loaded: (course) => _CourseDetailBody(
                 course: course,
                 tabController: _tabController,
+                focusNodeId: _tabFocusNodeId,
               ),
               error: (message) => _ErrorView(
                 message: message,
@@ -174,8 +272,13 @@ class _CourseDetailViewState extends State<_CourseDetailView>
 class _CourseDetailBody extends StatelessWidget {
   final Course course;
   final TabController tabController;
+  final String? focusNodeId;
 
-  const _CourseDetailBody({required this.course, required this.tabController});
+  const _CourseDetailBody({
+    required this.course,
+    required this.tabController,
+    this.focusNodeId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -191,22 +294,7 @@ class _CourseDetailBody extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CustomNetworkImage(
-                    url: course.courseImageUrl,
-                    width: double.infinity,
-                    height: rh.isLargeScreen ? Screen.getVerticalSize(280) : Screen.getVerticalSize(210),
-                    borderRadius: BorderRadius.circular(AppSizes.radiusL),
-                    errorWidget: Container(
-                      height: rh.isLargeScreen ? Screen.getVerticalSize(280) : Screen.getVerticalSize(210),
-                    color: AppColors.grey100,
-                    child: Center(
-                      child: Icon(
-                        Icons.image_outlined,
-                        color: AppColors.grey300,
-                      ),
-                    ),
-                  ),
-                ),
+                _CourseBanner(course: course),
                 SizedBox(height: Screen.getVerticalSize(20)),
                 ScrollingTitle(
                   text: course.courseTitle,
@@ -260,10 +348,50 @@ class _CourseDetailBody extends StatelessWidget {
         controller: tabController,
         children: [
           _AboutTab(course: course),
-          _CurriculumTab(course: course),
+          _CurriculumTab(course: course, focusNodeId: focusNodeId),
           _ReviewsTab(courseId: course.courseId),
         ],
       ),
+    );
+  }
+}
+
+/// The banner at the top of the detail page.
+///
+/// Shown whole — an educator's upload is rarely the shape of this box,
+/// and cropping it to fill used to cut off the edges they designed —
+/// and tappable: it opens full-screen with pinch and double-tap zoom.
+/// The expand button is what says so; a banner carries none of the
+/// "tap me" convention an avatar does.
+class _CourseBanner extends StatelessWidget {
+  final Course course;
+
+  const _CourseBanner({required this.course});
+
+  @override
+  Widget build(BuildContext context) {
+    final rh = ResponsiveHelper.of(context);
+    final hasImage = course.courseImageUrl.isNotEmpty;
+
+    return Stack(
+      children: [
+        GestureDetector(
+          onTap: hasImage
+              ? () => showCourseCover(context, course.courseImageUrl)
+              : null,
+          child: CourseCoverImage(
+            url: course.courseImageUrl,
+            width: double.infinity,
+            height: rh.isLargeScreen
+                ? Screen.getVerticalSize(280)
+                : Screen.getVerticalSize(210),
+            borderRadius: BorderRadius.circular(AppSizes.radiusL),
+            fallbackIconSize: Screen.getSize(40),
+          ),
+        ),
+        if (hasImage)
+          const Positioned(right: 12, bottom: 12, child: ImageExpandButton()),
+      ],
     );
   }
 }
@@ -524,13 +652,55 @@ class _AboutTab extends StatelessWidget {
   }
 }
 
-class _CurriculumTab extends StatelessWidget {
+class _CurriculumTab extends StatefulWidget {
   final Course course;
 
-  const _CurriculumTab({required this.course});
+  /// A top-level node to scroll to and highlight (Home "Live classes"
+  /// rail). Nested nodes are handled by walking into their folder
+  /// instead — see `_handleFocus`.
+  final String? focusNodeId;
+
+  const _CurriculumTab({required this.course, this.focusNodeId});
+
+  @override
+  State<_CurriculumTab> createState() => _CurriculumTabState();
+}
+
+class _CurriculumTabState extends State<_CurriculumTab> {
+  final GlobalKey _focusKey = GlobalKey();
+  String? _scrolledTo;
+
+  @override
+  void didUpdateWidget(covariant _CurriculumTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _scheduleScroll();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleScroll();
+  }
+
+  void _scheduleScroll() {
+    final id = widget.focusNodeId;
+    if (id == null || id == _scrolledTo) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _focusKey.currentContext;
+      if (ctx == null || !mounted) return;
+      _scrolledTo = id;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.2,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOut,
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final course = widget.course;
     final rh = ResponsiveHelper.of(context);
     final content = course.courseNodes?.content ?? const <CourseContent>[];
     if (content.isEmpty) {
@@ -550,14 +720,18 @@ class _CurriculumTab extends StatelessWidget {
         vertical: Screen.getVerticalSize(20)
       ),
       children: [
-        ...content.map(
-          (node) => ModuleCard(
+        ...content.map((node) {
+          final focused =
+              widget.focusNodeId != null && node.nodeId == widget.focusNodeId;
+          return ModuleCard(
+            key: focused ? _focusKey : null,
             module: node,
             courseId: course.courseId,
             coursePurchasedId: course.coursePurchasedId,
             activateWatermark: course.courseNodes?.activateWatermark ?? false,
-          ),
-        ),
+            highlighted: focused,
+          );
+        }),
         SizedBox(height: Screen.getVerticalSize(80)),
       ],
     );

@@ -78,3 +78,38 @@ String? _extractServerMessage(Response? response) {
   } catch (_) {}
   return null;
 }
+
+/// The live-session playback endpoint's 410 carries a machine-readable
+/// session status alongside the message:
+///
+/// ```json
+/// { "success": false, "message": "The host has paused the stream.", "status": "Paused" }
+/// ```
+///
+/// Surfaced as [Failure.sessionStatus] whenever a 410 body has one, whatever
+/// the value — the *caller* decides which statuses are terminal (deny-list:
+/// `Ended` / `Cancelled`) and treats everything else, known or not, as "no
+/// media yet". Returns null for any other response, including a 410 with no
+/// `status` (an older backend), which then maps as a plain server failure.
+Failure? liveSessionStatusFailure(DioException e) {
+  if (e.response?.statusCode != 410) return null;
+  final data = e.response?.data;
+  if (data is! Map) return null;
+  // The contract says `status` / `message`, but the deployed error path
+  // serialises PascalCase (`{"Success":false,"Message":…,"Status":"Paused"}`)
+  // while the 200 path is camelCase — same inconsistency
+  // [_extractServerMessage] already tolerates. Accept both, or a terminal
+  // `Status: "Ended"` silently degrades to the waiting screen.
+  final status = _firstString(data, const ['status', 'Status']);
+  if (status == null) return null;
+  final message = _firstString(data, const ['message', 'Message']);
+  return Failure.sessionStatus(message: message ?? '', status: status);
+}
+
+String? _firstString(Map data, List<String> keys) {
+  for (final key in keys) {
+    final value = data[key];
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+  }
+  return null;
+}

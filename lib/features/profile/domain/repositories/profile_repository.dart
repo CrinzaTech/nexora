@@ -16,6 +16,9 @@ abstract class ProfileRepository {
     int? gender,
     File? userProfileImage,
     String? fcmToken,
+    // Dial code without the leading '+' (e.g. "234" for Nigeria) for
+    // the country selected alongside [phoneNumber].
+    String? stdCode,
   });
 
   /// Pushes just the device's FCM token to the dedicated

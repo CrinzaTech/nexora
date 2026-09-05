@@ -107,6 +107,9 @@ class ProfileCubit extends SafeCubit<ProfileState> {
     String? dob,
     int? gender,
     File? userProfileImage,
+    // Dial code without the leading '+' (e.g. "234" for Nigeria) for
+    // the country selected alongside [phoneNumber].
+    String? stdCode,
   }) async {
     final current = state.maybeWhen(
       loaded: (profile) => profile,
@@ -122,6 +125,7 @@ class ProfileCubit extends SafeCubit<ProfileState> {
       dob: dob,
       gender: gender,
       userProfileImage: userProfileImage,
+      stdCode: stdCode,
     );
 
     result.fold((failure) => emit(ProfileState.error(failure.message)), (

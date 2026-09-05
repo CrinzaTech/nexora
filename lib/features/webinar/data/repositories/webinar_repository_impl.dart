@@ -92,6 +92,9 @@ class WebinarRepositoryImpl implements WebinarRepository {
       // different to the room — the status code rides along on the
       // Failure so the cubit can go back to polling, show the ended
       // screen, or stop, rather than treating them all as "error".
+      // A 410 that names its session status is surfaced as such.
+      final withStatus = liveSessionStatusFailure(e);
+      if (withStatus != null) return Left(withStatus);
       return Left(mapDioExceptionToFailure(e));
     } catch (e) {
       return Left(Failure.unknown(message: e.toString()));

@@ -8,7 +8,6 @@ import 'package:nexora/core/theme/responsive_helper.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_action_button.dart';
 import 'package:nexora/core/widgets/custom_appbar_widget.dart';
-import 'package:nexora/core/widgets/custom_network_image.dart';
 import 'package:nexora/core/widgets/custom_text_form_field.dart';
 import 'package:nexora/features/certificate/presentation/certificate_download_action.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
@@ -19,6 +18,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_images.dart';
+import 'package:nexora/features/courses/presentation/widgets/course_cover.dart';
 
 /// Bottom padding each tab's list reserves so the last card clears the
 /// floating navbar. Mirrors `Utils.defaultBottomSpace`'s height, but as
@@ -572,24 +572,12 @@ class _CourseCardShell extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
+              CourseCoverImage(
+                url: course.courseImageUrl,
+                width: Screen.getHorizontalSize(100),
+                height: Screen.getVerticalSize(100),
                 borderRadius: BorderRadius.circular(AppSizes.radiusM),
-                child: CustomNetworkImage(
-                  url: course.courseImageUrl,
-                  width: Screen.getHorizontalSize(100),
-                  height: Screen.getVerticalSize(100),
-                  fit: BoxFit.cover,
-                  errorWidget: Container(
-                    width: Screen.getHorizontalSize(100),
-                    height: Screen.getVerticalSize(100),
-                    color: AppColors.grey100,
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.image_not_supported_outlined,
-                      color: AppColors.grey300,
-                    ),
-                  ),
-                ),
+                fallbackIconSize: Screen.getSize(26),
               ),
               SizedBox(width: Screen.getHorizontalSize(14)),
               Expanded(

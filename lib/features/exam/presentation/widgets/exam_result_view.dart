@@ -8,12 +8,14 @@ import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/features/exam/data/models/exam_models.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_atoms.dart';
+import 'package:nexora/core/widgets/draggable_fab.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_html_text.dart';
+import 'package:nexora/features/exam/presentation/widgets/exam_question_palette.dart';
 
 /// Full result screen: score ring, tally tiles, and per-question review.
 /// Handles the "results held" state when [ExamResultResponse.resultsVisible]
 /// is false.
-class ExamResultView extends StatelessWidget {
+class ExamResultView extends StatefulWidget {
   final ExamResultResponse result;
   final VoidCallback onReattempt;
   final VoidCallback onOpenHistory;
@@ -24,6 +26,61 @@ class ExamResultView extends StatelessWidget {
     required this.onReattempt,
     required this.onOpenHistory,
   });
+
+  @override
+  State<ExamResultView> createState() => _ExamResultViewState();
+}
+
+class _ExamResultViewState extends State<ExamResultView> {
+  ExamResultResponse get result => widget.result;
+  VoidCallback get onReattempt => widget.onReattempt;
+  VoidCallback get onOpenHistory => widget.onOpenHistory;
+
+  /// One key per top-level question so the palette can scroll to it.
+  final Map<int, GlobalKey> _questionKeys = {};
+
+  GlobalKey _keyFor(int questionId) =>
+      _questionKeys.putIfAbsent(questionId, () => GlobalKey());
+
+  /// Graded standing of one question. Partial credit still counts as wrong
+  /// here — the point of the grid is "which ones should I go look at".
+  ExamPaletteStatus _statusOf(ExamResultQuestion q) {
+    if (q.isSkipped) return ExamPaletteStatus.skipped;
+    if (q.isComprehension) {
+      if (q.children.isEmpty) return ExamPaletteStatus.skipped;
+      final correct = q.children.where((c) => c.isCorrect == true).length;
+      return correct == q.children.length
+          ? ExamPaletteStatus.correct
+          : ExamPaletteStatus.wrong;
+    }
+    return q.isCorrect == true
+        ? ExamPaletteStatus.correct
+        : ExamPaletteStatus.wrong;
+  }
+
+  List<ExamResultQuestion> get _allQuestions =>
+      result.sections.expand((s) => s.questions).toList(growable: false);
+
+  Future<void> _openPalette() async {
+    final questions = _allQuestions;
+    final index = await showExamQuestionPalette(
+      context,
+      entries: [
+        for (var i = 0; i < questions.length; i++)
+          ExamPaletteEntry(number: i + 1, status: _statusOf(questions[i])),
+      ],
+      reviewMode: true,
+    );
+    if (index == null || !mounted) return;
+    final ctx = _questionKeys[questions[index].id]?.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    await Scrollable.ensureVisible(
+      ctx,
+      alignment: 0.05,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+  }
 
   /// Sum of per-question time (competitive mode only; normal mode reports
   /// null per question, so this stays 0). Walks comprehension children too.
@@ -44,29 +101,51 @@ class ExamResultView extends StatelessWidget {
     if (!result.resultsVisible) return _held();
 
     var runningNumber = 0;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSizes.paddingM,
-        AppSizes.paddingM,
-        AppSizes.paddingM,
-        AppSizes.paddingXL,
-      ),
+    return Stack(
       children: [
-        _scoreCard(),
-        const SizedBox(height: AppSizes.paddingM),
-        _tallyRow(),
-        const SizedBox(height: AppSizes.paddingS),
-        for (final section in result.sections) ...[
-          const SizedBox(height: AppSizes.paddingS),
-          ExamSectionHeader(name: section.name),
-          for (final q in section.questions)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSizes.paddingM),
-              child: ResultQuestionCard(question: q, number: '${++runningNumber}'),
+        Positioned.fill(
+          // Not a lazy list: the palette needs every question laid out so it
+          // can scroll straight to the one that was tapped.
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSizes.paddingM,
+              AppSizes.paddingM,
+              AppSizes.paddingM,
+              AppSizes.paddingXL,
             ),
-        ],
-        const SizedBox(height: AppSizes.paddingS),
-        _actions(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _scoreCard(),
+                const SizedBox(height: AppSizes.paddingM),
+                _tallyRow(),
+                const SizedBox(height: AppSizes.paddingS),
+                for (final section in result.sections) ...[
+                  const SizedBox(height: AppSizes.paddingS),
+                  ExamSectionHeader(name: section.name),
+                  for (final q in section.questions)
+                    Padding(
+                      key: _keyFor(q.id),
+                      padding: const EdgeInsets.only(bottom: AppSizes.paddingM),
+                      child: ResultQuestionCard(
+                        question: q,
+                        number: '${++runningNumber}',
+                      ),
+                    ),
+                ],
+                const SizedBox(height: AppSizes.paddingS),
+                _actions(),
+              ],
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: DraggableFab(
+            margin: const EdgeInsets.all(AppSizes.paddingM),
+            builder: (context, _) =>
+                ExamStatsFab(pinnedCount: 0, onTap: _openPalette),
+          ),
+        ),
       ],
     );
   }

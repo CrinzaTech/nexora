@@ -22,10 +22,12 @@ class LiveAudioConnectException implements Exception {
 }
 
 /// Audio-only LiveKit wrapper for the raise-hand → speak flow. Students
-/// only ever *publish microphone* — never video, never subscribe to
-/// other participants (they already hear the educator through the HLS
-/// stream). One instance per speaking turn: [connectAndPublish] then
-/// [disconnect]; create a fresh one for the next turn.
+/// *publish microphone* only — never video — and subscribe to the
+/// educator's real-time voice for the duration of the turn (the HLS
+/// stream is fully muted while they speak, so LiveKit is the only way
+/// to hear the educator without delay). One instance per speaking turn:
+/// [connectAndPublish] then [disconnect]; create a fresh one for the
+/// next turn.
 class LiveClassAudioService {
   Room? _room;
 
@@ -41,8 +43,7 @@ class LiveClassAudioService {
     required String token,
   }) async {
     await disconnect();
-    // Audio-only: no adaptive stream / dynacast (video features), and we
-    // don't auto-subscribe — nothing to hear here but our own mic.
+    // Audio-only: no adaptive stream / dynacast (video features).
     final room = Room(
       roomOptions: const RoomOptions(
         adaptiveStream: false,
@@ -58,7 +59,14 @@ class LiveClassAudioService {
         await room.connect(
           url,
           token,
-          connectOptions: const ConnectOptions(autoSubscribe: false),
+          // Subscribe to everything: the only other publisher in the room
+          // is the educator's studio mic, so this is subscribing to
+          // exactly the educator's real-time voice. Remote audio plays
+          // through the native layer automatically once subscribed, and
+          // the session set up in [_configureForSpeaking] already allows
+          // simultaneous playback + capture (with the hardware echo
+          // canceller covering the speaker→mic loop).
+          connectOptions: const ConnectOptions(autoSubscribe: true),
         );
       } catch (e) {
         // Signalling never came up — always a server/network fault, never
@@ -161,6 +169,20 @@ class LiveClassAudioService {
       }
     } catch (e) {
       debugPrint('$_kTag audio session restore failed: $e');
+    }
+  }
+
+  /// Releases the mic but keeps the room connected, listening only.
+  /// Used for the post-turn linger: the student keeps hearing the
+  /// educator live while the delayed HLS copy of their turn plays out
+  /// silently; [disconnect] follows once that window closes.
+  Future<void> muteAndKeepListening() async {
+    final room = _room;
+    if (room == null) return;
+    try {
+      await room.localParticipant?.setMicrophoneEnabled(false);
+    } catch (e) {
+      debugPrint('$_kTag muteAndKeepListening failed: $e');
     }
   }
 

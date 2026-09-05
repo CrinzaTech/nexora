@@ -9,7 +9,6 @@ import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/core/widgets/custom_appbar_widget.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/utils/utils.dart';
-import 'package:nexora/core/widgets/custom_network_image.dart';
 import 'package:nexora/core/widgets/inner_shadow_painter.dart';
 import 'package:nexora/core/widgets/rating_and_review_row_widget.dart';
 import 'package:nexora/core/widgets/scrolling_title.dart';
@@ -23,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:nexora/features/courses/presentation/widgets/course_cover.dart';
 
 /// Dynamic Catalog Screen
 /// Displays horizontal category chips loaded dynamically,
@@ -625,18 +625,12 @@ class _CourseCard extends StatelessWidget {
         children: [
           GestureDetector(
             onTap: onTap,
-            child: CustomNetworkImage(
+            // Whole banner, never a crop — see [CourseCoverImage].
+            child: CourseCoverImage(
               url: course.courseImageUrl,
               height: Screen.getVerticalSize(160),
               width: double.infinity,
               borderRadius: BorderRadius.circular(AppSizes.radiusL),
-              errorWidget: Container(
-                height: Screen.getVerticalSize(160),
-                color: AppColors.grey100,
-                child: Center(
-                  child: Icon(Icons.image_outlined, color: AppColors.grey300),
-                ),
-              ),
             ),
           ),
           SizedBox(height: Screen.getVerticalSize(10)),

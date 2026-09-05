@@ -93,6 +93,14 @@ class ClassStartedEvent extends LiveClassHubEvent {
   const ClassStartedEvent();
 }
 
+/// The educator's broadcast stopped reaching the media server — Stop
+/// clicked, studio tab closed, uplink dropped. Fired off the server's own
+/// unpublish signal. The class is NOT over (that is still `classEnded`);
+/// a re-publish of the same room follows with `classStarted`.
+class ClassPausedEvent extends LiveClassHubEvent {
+  const ClassPausedEvent();
+}
+
 class ClassEndedEvent extends LiveClassHubEvent {
   const ClassEndedEvent();
 }
@@ -106,7 +114,31 @@ class ClassCancelledEvent extends LiveClassHubEvent {
 /// examples: `chat_blocked`, `hand_blocked`, `mic_blocked`.
 class ActionDeniedEvent extends LiveClassHubEvent {
   final String reason;
-  const ActionDeniedEvent(this.reason);
+
+  /// Set when the denial is about a poll vote (`poll_closed`,
+  /// `poll_already_voted`, `poll_invalid`, `poll_not_found`).
+  final int? pollId;
+  const ActionDeniedEvent(this.reason, {this.pollId});
+}
+
+/// The server accepted this student's vote — lock the card.
+class PollVoteAcceptedEvent extends LiveClassHubEvent {
+  final int pollId;
+  final List<int> optionIds;
+  const PollVoteAcceptedEvent({required this.pollId, required this.optionIds});
+}
+
+/// Results are now visible: the payload is the full poll with counts (and
+/// correct marks when there is an answer key). It does NOT carry this
+/// student's own choice — the cubit keeps that from its own state.
+class PollRevealedEvent extends LiveClassHubEvent {
+  final LivePoll poll;
+  const PollRevealedEvent(this.poll);
+}
+
+class PollCancelledEvent extends LiveClassHubEvent {
+  final int pollId;
+  const PollCancelledEvent(this.pollId);
 }
 
 /// Emitted by the service itself (not the wire) after an automatic
@@ -200,10 +232,14 @@ class LiveClassHubService {
     connection.on('flagUpdated', _onFlagUpdated);
     connection.on('kicked', _onKicked);
     connection.on('classStarted', (_) => _emit(const ClassStartedEvent()));
+    connection.on('classPaused', (_) => _emit(const ClassPausedEvent()));
     connection.on('classEnded', (_) => _emit(const ClassEndedEvent()));
     connection.on('classCancelled', (_) => _emit(const ClassCancelledEvent()));
     connection.on('classDeleted', (_) => _emit(const ClassCancelledEvent()));
     connection.on('actionDenied', _onActionDenied);
+    connection.on('pollVoteAccepted', _onPollVoteAccepted);
+    connection.on('pollRevealed', _onPollRevealed);
+    connection.on('pollCancelled', _onPollCancelled);
 
     // Groups don't survive an auto-reconnect — rejoin, then tell the
     // cubit to re-sync from a fresh roomState.
@@ -253,6 +289,11 @@ class LiveClassHubService {
   // ── Client → server invokes ──────────────────────────────────────
 
   Future<void> sendChat(String body) => _invoke('SendChat', [body]);
+
+  /// Vote on a poll. Single-choice: exactly one id; multiple: every ticked
+  /// id in this one call (there is no second submission).
+  Future<void> submitVote(int pollId, List<int> optionIds) =>
+      _invoke('SubmitVote', [pollId, optionIds]);
   Future<void> raiseHand() => _invoke('RaiseHand', const []);
   Future<void> lowerHand() => _invoke('LowerHand', const []);
   Future<void> stopSpeaking() => _invoke('StopSpeaking', const []);
@@ -461,6 +502,52 @@ class LiveClassHubService {
 
   void _onActionDenied(List<Object?>? args) {
     final map = _map(args);
-    _emit(ActionDeniedEvent(map?['reason']?.toString() ?? ''));
+    debugPrint('$_kTag <- actionDenied raw=$args');
+    final pollId = _intOf(_field(map, 'pollId'));
+    _emit(ActionDeniedEvent(
+      _field(map, 'reason')?.toString() ?? '',
+      pollId: pollId,
+    ));
+  }
+
+  int? _intOf(Object? v) =>
+      v is num ? v.toInt() : int.tryParse(v?.toString() ?? '');
+
+  /// The API has served PascalCase on some paths — read either.
+  Object? _field(Map<String, dynamic>? map, String key) =>
+      map?[key] ?? map?[key[0].toUpperCase() + key.substring(1)];
+
+  void _onPollVoteAccepted(List<Object?>? args) {
+    debugPrint('$_kTag <- pollVoteAccepted raw=$args');
+    final map = _map(args);
+    final pollId = _intOf(_field(map, 'pollId'));
+    if (pollId == null) return;
+    final raw = _field(map, 'optionIds');
+    final ids = <int>[];
+    if (raw is List) {
+      for (final v in raw) {
+        final n = _intOf(v);
+        if (n != null) ids.add(n);
+      }
+    }
+    _emit(PollVoteAcceptedEvent(pollId: pollId, optionIds: ids));
+  }
+
+  void _onPollRevealed(List<Object?>? args) {
+    debugPrint('$_kTag <- pollRevealed raw=$args');
+    final map = _map(args);
+    final raw = map?['poll'] ?? map?['Poll'];
+    // Tolerate the poll arriving flat rather than nested under `poll`.
+    final pollMap = raw is Map
+        ? Map<String, dynamic>.from(raw)
+        : (map != null && map['options'] != null ? map : null);
+    if (pollMap == null) return;
+    _emit(PollRevealedEvent(LivePoll.fromJson(pollMap)));
+  }
+
+  void _onPollCancelled(List<Object?>? args) {
+    debugPrint('$_kTag <- pollCancelled raw=$args');
+    final pollId = _intOf(_field(_map(args), 'pollId'));
+    if (pollId != null) _emit(PollCancelledEvent(pollId));
   }
 }

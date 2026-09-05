@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:better_player_plus/better_player_plus.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -11,6 +13,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:nexora/features/courses/data/services/live_class_audio_playback_service.dart';
 
 import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/core/config/live_playback.dart';
 import 'package:nexora/core/services/content_completion_service.dart';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_sizes.dart';
@@ -20,9 +23,10 @@ import 'package:nexora/core/widgets/custom_appbar_widget.dart';
 import 'package:nexora/core/widgets/custom_snackbar.dart';
 import 'package:nexora/core/widgets/live_stream_controls.dart';
 import 'package:nexora/core/widgets/moving_watermark.dart';
+import 'package:nexora/core/widgets/pause_drain_banner.dart';
 import 'package:nexora/features/courses/presentation/bloc/live_class_cubit.dart';
 import 'package:nexora/features/courses/presentation/pages/live_class_chat_panel.dart';
-import 'package:nexora/features/courses/presentation/widgets/draggable_fab.dart';
+import 'package:nexora/core/widgets/draggable_fab.dart';
 import 'package:nexora/features/courses/presentation/widgets/hand_raise_bar.dart';
 import 'package:nexora/features/courses/presentation/widgets/live_class_speed_dial.dart';
 import 'package:nexora/features/profile/presentation/bloc/profile_cubit.dart';
@@ -109,6 +113,15 @@ class _LiveClassViewState extends State<_LiveClassView>
   bool _completionFired = false;
   bool _ducked = false;
 
+  /// Delays the unmute after a speaking turn so the delayed HLS copy of
+  /// the turn — the student's own voice included — plays out silently.
+  /// Must stay equal to the cubit's `_postSpeakLinger`: LiveKit (carrying
+  /// the educator live) disconnects when that fires, and this unmute has
+  /// to land at the same moment — unmuting first replays the echo tail,
+  /// disconnecting first leaves the student in silence.
+  Timer? _duckReleaseTimer;
+  static const _duckReleaseDelay = Duration(seconds: 8);
+
   String _userName = '';
   String _phoneNumber = '';
 
@@ -123,6 +136,15 @@ class _LiveClassViewState extends State<_LiveClassView>
   static const _singleStallLimit = Duration(seconds: 12);
   static const _stallWindow = Duration(seconds: 30);
   static const _stallCountLimit = 3;
+
+  /// A rebuffer shorter than this is normal live-HLS behaviour, not a
+  /// sign of a bad connection, and must not count toward the fallback.
+  static const _minCountedStall = Duration(milliseconds: 1200);
+
+  /// While draining the host's last words after a pause, a stall this
+  /// long means the tail can't be fetched (network hiccup, or a server
+  /// that deleted the playlist) — don't wait for the 12s guard.
+  static const _drainStallLimit = Duration(seconds: 3);
 
   // Recovery tracking (audio → video).
   Timer? _recoveryTimer;
@@ -145,6 +167,80 @@ class _LiveClassViewState extends State<_LiveClassView>
   /// suppressed until it has had a chance to fill its buffer.
   DateTime? _videoReadyAt;
   static const _videoWarmup = Duration(seconds: 12);
+
+  /// First `play` on the current controller. Realignment stays out of the
+  /// way until the native live configuration has had time to settle on
+  /// its target — correcting during start-up is what produced the
+  /// oversized offset this code used to cause.
+  DateTime? _playbackStartedAt;
+  static const _realignStartupGrace = Duration(seconds: 15);
+
+  /// One live-offset placement per controller. The seek itself happens
+  /// natively so the live edge is read fresh — the Dart-side duration is
+  /// a one-time snapshot and computing against it landed the player
+  /// `startup-elapsed + target` behind live.
+  bool _joinPlaced = false;
+  bool _joinPlaceInFlight = false;
+  int _joinPlaceTries = 0;
+  static const _joinPlaceMaxTries = 20;
+
+  // ── Join-time live offset: handled natively, NOT here ────────────
+  //
+  // There used to be a Dart-side seek to `duration - kLiveTargetOffsetMs`
+  // on join. It was the cause of the latency regression the sync feature
+  // appeared to introduce, and it is deleted.
+  //
+  // `value.duration` is written exactly ONCE, from the `initialized`
+  // event, and never updated. The seek could only run after the player
+  // was actually playing — i.e. after the playlist fetch, the first
+  // segment fetch and `bufferForPlaybackMs`, which is several seconds
+  // later. By then the live edge had moved on, but `duration` had not, so
+  // the seek landed `elapsed + target` behind live instead of `target`:
+  //
+  //     no offset set   → ExoPlayer's own default ≈ 3s  → measured  6-7s
+  //     target 4000ms   → 4s + ~4s startup elapsed      → measured 10-12s
+  //     target 8000ms   → 8s + ~4s startup elapsed      → measured 13-16s
+  //
+  // Every reported figure fits that, and the constant ~4s excess is the
+  // startup gap, not a pipeline or CDN cost.
+  //
+  // `MediaItem.LiveConfiguration.targetOffsetMs` (Android) and
+  // `configuredTimeOffsetFromLive` (iOS) already choose the start
+  // position AND hold it, measured against the player's own live edge
+  // rather than a stale snapshot. That is the whole job. iOS never ran
+  // this seek anyway — AVPlayer reports no duration for live — so
+  // removing it also makes the two platforms behave the same.
+
+  /// The student pressed pause on this controller. With `handleLifecycle`
+  /// off the package never pauses on its own (no visibility / lifecycle
+  /// handling), so a `pause` event is the student's intent and the only
+  /// thing that stops [_ensurePlaying] from re-asserting playback.
+  bool _userPaused = false;
+
+  // ── Post-interruption realignment ────────────────────────────────
+
+  /// Drift smaller than this is left to ExoPlayer's own speed control,
+  /// which holds the native target offset continuously by nudging
+  /// playback rate inside the 0.97–1.06 band. A seek is only for the big
+  /// jump a long interruption leaves behind. Forward-only.
+  static const _realignDeadband = Duration(seconds: 3);
+
+  /// A seek on a live HLS stream costs a rebuffer, so two realignments
+  /// close together feed each other. Nothing may seek again inside this
+  /// window, whatever asks for it.
+  DateTime? _lastRealignAt;
+  /// 20s left the player stranded for a third of a minute after a stall
+  /// opened a gap the rate control could never close.
+  static const _realignCooldown = Duration(seconds: 25);
+
+  /// An interruption that cannot be corrected on the spot — app resume,
+  /// where the player needs a moment to come back before a seek means
+  /// anything. The next progress tick consumes it: exactly one attempt,
+  /// then it is gone, so this never becomes the periodic mid-playback
+  /// correction that causes stutter.
+  String? _pendingRealign;
+  DateTime? _pendingRealignAt;
+  static const _pendingRealignWindow = Duration(seconds: 8);
 
   /// Last audio↔video transition; a second one inside the cooldown is
   /// ignored so the modes can't oscillate.
@@ -271,6 +367,14 @@ class _LiveClassViewState extends State<_LiveClassView>
             // re-checks `_backgrounded` when it lands and recovers itself.
             _startRecoveryMonitor();
             _attemptRecovery(force: true);
+          } else if (_mode == PlaybackMode.video) {
+            // No handoff happened (a short trip out and back), so the
+            // player kept its own position across the suspension while
+            // live time moved on — that is drift, and every device
+            // accumulates a different amount of it. `refreshPlayback`
+            // above only rebuilds when the signed URL actually changed;
+            // this covers the far more common case where it did not.
+            _requestRealign('app resume');
           }
         }
       case AppLifecycleState.detached:
@@ -297,6 +401,7 @@ class _LiveClassViewState extends State<_LiveClassView>
     WidgetsBinding.instance.removeObserver(this);
     _healthTimer?.cancel();
     _recoveryTimer?.cancel();
+    _duckReleaseTimer?.cancel();
     // Let the screen sleep normally again once we leave the class.
     WakelockPlus.disable();
     // Restore the app-wide portrait lock from main(). Entering the player's
@@ -327,6 +432,15 @@ class _LiveClassViewState extends State<_LiveClassView>
     final controller = _playerController;
     _playerController = null;
     _currentUrl = null;
+    _playbackStartedAt = null;
+    _joinPlaced = false;
+    _joinPlaceInFlight = false;
+    _joinPlaceTries = 0;
+    _qualityCap = null;
+    _liveSpeed = 1.0;
+    _lastRealignAt = null;
+    _pendingRealign = null;
+    _pendingRealignAt = null;
     _bufferStart = null;
     _stalls.clear();
     if (controller != null) {
@@ -441,6 +555,18 @@ class _LiveClassViewState extends State<_LiveClassView>
     );
     _playerController = controller;
     _currentUrl = hlsUrl;
+    // Every fresh controller gets exactly one join-offset adjustment and
+    // starts out playing.
+    _playbackStartedAt = null;
+    _joinPlaced = false;
+    _joinPlaceInFlight = false;
+    _joinPlaceTries = 0;
+    _qualityCap = null;
+    _liveSpeed = 1.0;
+    _userPaused = false;
+    _lastRealignAt = null;
+    _pendingRealign = null;
+    _pendingRealignAt = null;
     controller.addEventsListener(_onPlayerEvent);
     try {
       await controller.setupDataSource(
@@ -457,6 +583,9 @@ class _LiveClassViewState extends State<_LiveClassView>
           // playlist is then parsed as a raw media file and every
           // extractor rejects it (UnrecognizedInputFormatException).
           videoFormat: BetterPlayerVideoFormat.hls,
+          // Every viewer holds the same distance behind the live edge, so
+          // staggered joiners see the same moment of the class.
+          liveTargetOffsetMs: kLiveTargetOffsetMs,
           // Gives the player its own MediaSession. Android pauses an
           // app's AudioTrack on backgrounding unless the playback is tied
           // to a media session — the logs showed our track being paused
@@ -485,10 +614,32 @@ class _LiveClassViewState extends State<_LiveClassView>
           // keyframe interval is actually 1s — then a 6s window holds six
           // segments and the aggressive values work as intended.
           bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-            minBufferMs: 4500,
+            // Sized against the live target, not independently: the
+            // player can never hold more buffer than the distance to the
+            // live edge, so a 4s offset with the old 4000/4000 pair asked
+            // it to buffer the entire window before resuming from a stall
+            // — which reads as a frozen player.
+            //
+            // ⚠️ ORDER IS ENFORCED. ExoPlayer's DefaultLoadControl.Builder
+            // asserts, and THROWS on construction if violated:
+            //     bufferForPlaybackMs              <= minBufferMs
+            //     bufferForPlaybackAfterRebufferMs <= minBufferMs
+            //     minBufferMs                      <= maxBufferMs
+            // A throw here is not a degraded stream — the controller never
+            // gets built, so the class cannot be joined at all. Keeping
+            // minBufferMs equal to bufferForPlaybackAfterRebufferMs (as the
+            // original 4000/4000 pair did) is the safe shape; scale the two
+            // together if the live target changes again.
+            // Scaled to the 5s cushion: a live player can never hold more
+            // buffer than its distance to the live edge, so minBufferMs
+            // must stay under it. Ordering is enforced by ExoPlayer —
+            // bufferForPlaybackMs and bufferForPlaybackAfterRebufferMs
+            // must both be <= minBufferMs <= maxBufferMs, or the player
+            // THROWS on construction and the class cannot be joined.
+            minBufferMs: 3500,
             maxBufferMs: 12000,
-            bufferForPlaybackMs: 2500,
-            bufferForPlaybackAfterRebufferMs: 4000,
+            bufferForPlaybackMs: 2000,
+            bufferForPlaybackAfterRebufferMs: 3500,
           ),
         ),
       );
@@ -502,8 +653,8 @@ class _LiveClassViewState extends State<_LiveClassView>
       // the whole speaking turn. Mixing hands focus back to us; we duck
       // the stream manually in [_applyDuck] instead.
       controller.setMixWithOthers(true);
-      // Restore/keep duck level in case we rebuilt while speaking.
-      await controller.setVolume(_ducked ? 0.2 : 1.0);
+      // Restore/keep the mute in case we rebuilt mid-speaking-turn.
+      await controller.setVolume(_ducked ? 0.0 : 1.0);
       setState(() {});
       // Start the warm-up clock here: everything below this point counts as
       // "video is up", and the first few seconds of buffering are normal.
@@ -511,11 +662,177 @@ class _LiveClassViewState extends State<_LiveClassView>
       _stalls.clear();
       _bufferStart = null;
       _startHealthMonitor();
-    } catch (_) {
+    } catch (e, st) {
+      // Log it. Swallowing this hides a hard player-setup failure behind
+      // a silent quality drop / audio fallback — the screen just shows no
+      // video and nothing says why.
+      debugPrint('[LiveClass] player setup FAILED: $e');
+      debugPrint('[LiveClass] $st');
       if (mounted) _maybeFallbackToAudio('init failed');
     } finally {
       _preparing = false;
     }
+  }
+
+  /// Put the playhead [kLiveTargetOffsetMs] behind the live edge, once
+  /// per controller.
+  ///
+  /// The seek runs natively, where the live edge is read from the
+  /// timeline at the instant of the seek. Doing this in Dart is what
+  /// caused the latency regression: `value.duration` is written once at
+  /// `initialized` and never refreshed, so by the time the player was
+  /// playing (several seconds later) the computed target was that much
+  /// too far back.
+  ///
+  /// Forward-only on the native side — a player already closer to live
+  /// than the target is left alone.
+  void _placeAtLiveOffset() {
+    if (_joinPlaced || _joinPlaceInFlight) return;
+    if (_speakingActive || _userPaused) return;
+    final inner = _playerController?.videoPlayerController;
+    final value = inner?.value;
+    if (inner == null || value == null || !value.initialized) return;
+    // Only ever seek a PLAYING player: the package's internal seekTo ends
+    // with `if (isPlaying) play() else pause()`, so a seek landing in the
+    // gap before autoplay's own play() leaves the player paused.
+    if (!value.isPlaying) return;
+    // Do NOT mark it done up front. The first attempts land before the
+    // live window is readable and are skipped; burning the one shot on
+    // those left the player wherever it started, which is what forced a
+    // manual tap on "Go live".
+    _joinPlaceInFlight = true;
+    _joinPlaceTries++;
+    unawaited(
+      inner
+          .seekToLiveOffset(kLiveTargetOffsetMs)
+          .then((resultMs) {
+            _joinPlaceInFlight = false;
+            if (!mounted) return;
+            // Only a real placement retires the attempt; a skip retries
+            // on the next progress tick until the window is readable.
+            if (resultMs >= 0 || _joinPlaceTries >= _joinPlaceMaxTries) {
+              _joinPlaced = true;
+            }
+            const reasons = {
+              -1: 'no live timeline yet',
+              -2: 'window duration unknown',
+              -3: 'already closer to live than target',
+              -4: 'nothing buffered ahead yet',
+            };
+            debugPrint('[LiveClass] join placement → '
+                '${resultMs < 0 ? "skipped: ${reasons[resultMs] ?? resultMs}" : "${resultMs}ms behind live"}');
+            _ensurePlaying('after join placement');
+          })
+          .catchError((Object e) {
+            _joinPlaceInFlight = false;
+            // A platform that cannot answer must not be retried on every
+            // progress tick for the whole class.
+            if (_joinPlaceTries >= _joinPlaceMaxTries) _joinPlaced = true;
+          }),
+    );
+  }
+
+  /// Play by default: a live class is watched from the moment it opens.
+  /// Re-asserts playback whenever the player is initialised, idle (not
+  /// buffering, no error, not at the end of the stream) and the student
+  /// has not pressed pause themselves. Goes through the inner controller,
+  /// which is not gated on the package's own lifecycle bookkeeping.
+  void _ensurePlaying(String reason) {
+    if (_userPaused) return;
+    final controller = _playerController;
+    final inner = controller?.videoPlayerController;
+    final value = inner?.value;
+    if (controller == null || inner == null || value == null) return;
+    if (!value.initialized || value.isPlaying || value.isBuffering) return;
+    if (value.hasError) return;
+    if (context.read<LiveClassCubit>().state.pauseDraining) return;
+    debugPrint('[LiveClass] player idle → play ($reason)');
+    unawaited(inner.play());
+  }
+
+  /// Re-seek to the shared live target after a *discrete* interruption —
+  /// app resume, or the audio→video handoff. Ongoing drift is not this
+  /// method's business: the native live configuration holds the target
+  /// continuously by nudging playback rate, and now also refuses to park
+  /// beyond `maxOffsetMs`. This is only for the jump a long gap leaves.
+  ///
+  /// Distance behind live comes from the platform player itself
+  /// (`liveOffsetMs` → ExoPlayer's `getCurrentLiveOffset`), never from
+  /// `duration`. `value.duration` is a one-time snapshot taken at
+  /// `initialized` and never refreshed — measuring against it is what
+  /// made the old join seek land seconds further back than intended, and
+  /// what made an earlier wall-clock estimate run away entirely.
+  ///
+  /// The correction is expressed as a *relative* jump forward by the
+  /// excess, so it needs no absolute idea of where the live edge is.
+  void _realignAfterInterruption(String reason) {
+    if (_within(_lastRealignAt, _realignCooldown)) return;
+    // Let the native target settle first — correcting during start-up is
+    // precisely what used to inflate the offset.
+    if (_playbackStartedAt == null ||
+        _within(_playbackStartedAt, _realignStartupGrace)) {
+      return;
+    }
+    final cubit = context.read<LiveClassCubit>();
+    if (cubit.state.pauseDraining || _speakingActive || _userPaused) return;
+    final controller = _playerController;
+    final inner = controller?.videoPlayerController;
+    if (controller == null || inner == null) return;
+    if (!inner.value.initialized || !inner.value.isPlaying) return;
+    unawaited(
+      inner.liveOffsetMs
+          .then((offsetMs) {
+            if (!mounted || offsetMs < 0) return;
+            final excessMs = offsetMs - kLiveTargetOffsetMs;
+            // Forward-only, and only for a gap far larger than the one
+            // the native target already holds by itself.
+            if (excessMs < _realignDeadband.inMilliseconds) return;
+            final value = inner.value;
+            if (!value.initialized || !value.isPlaying) return;
+            if (_userPaused || _speakingActive) return;
+            _lastRealignAt = DateTime.now();
+            debugPrint('[LiveClass] realign ($reason): ${offsetMs}ms behind '
+                'live (target ${kLiveTargetOffsetMs}ms) → +${excessMs}ms');
+            unawaited(
+              controller
+                  .seekTo(value.position + Duration(milliseconds: excessMs))
+                  .then((_) {
+                    if (mounted) _ensurePlaying('after realign');
+                  }),
+            );
+          })
+          .catchError((Object _) {}),
+    );
+  }
+
+  /// Queue a realignment for the moment the player is running again.
+  /// Used where the interruption ends before the player has caught up —
+  /// on resume it may still be paused or buffering, and a seek against
+  /// that position would be measured from a stale reading.
+  void _requestRealign(String reason) {
+    _pendingRealign = reason;
+    _pendingRealignAt = DateTime.now();
+    _consumePendingRealign();
+  }
+
+  /// One attempt, taken as soon as the player is genuinely playing, and
+  /// dropped if it never gets there inside [_pendingRealignWindow] — by
+  /// then a rebuild or the audio handoff owns the position instead.
+  void _consumePendingRealign() {
+    final reason = _pendingRealign;
+    final since = _pendingRealignAt;
+    if (reason == null || since == null) return;
+    if (DateTime.now().difference(since) > _pendingRealignWindow) {
+      _pendingRealign = null;
+      _pendingRealignAt = null;
+      return;
+    }
+    final value = _playerController?.videoPlayerController?.value;
+    if (value == null || !value.initialized) return;
+    if (!value.isPlaying || value.isBuffering) return;
+    _pendingRealign = null;
+    _pendingRealignAt = null;
+    _realignAfterInterruption(reason);
   }
 
   void _onPlayerEvent(BetterPlayerEvent event) {
@@ -529,14 +846,50 @@ class _LiveClassViewState extends State<_LiveClassView>
       case BetterPlayerEventType.bufferingStart:
         _bufferStart ??= DateTime.now();
       case BetterPlayerEventType.bufferingEnd:
-        if (_bufferStart != null) {
-          _stalls.add(DateTime.now());
+        final stallStart = _bufferStart;
+        if (stallStart != null) {
+          // Only count a rebuffer that actually interrupted watching.
+          //
+          // This used to count EVERY buffering event, with no minimum
+          // duration — a 50ms blip weighed the same as a five-second
+          // freeze. Live HLS with 1s segments rebuffers briefly as a
+          // matter of course, and our own seeks (join placement,
+          // realignment) each produce one. Three such blips inside 30s
+          // dropped the student to audio-only, which was observed
+          // happening on a 92 Mbps connection.
+          final stalled = DateTime.now().difference(stallStart);
+          if (stalled >= _minCountedStall) _stalls.add(DateTime.now());
           _bufferStart = null;
         }
+        _ensurePlaying('bufferingEnd');
+        _placeAtLiveOffset();
+        // Deliberately NOT a realign point. A seek on a live HLS stream
+        // costs a rebuffer, so realigning from the end of one is a loop
+        // with no exit — seek, buffer, seek — which is exactly what it
+        // did in the field: continuous buffering on a healthy network.
+        // ExoPlayer's speed control pulls the offset back after a stall
+        // with no seek at all; that is what holds sync here.
+      case BetterPlayerEventType.pause:
+        // Only the student (or our own teardown) posts this — see
+        // [_userPaused]. Respect it until they press play again.
+        _userPaused = true;
+      case BetterPlayerEventType.progress:
+        if (!_joinPlaced) _placeAtLiveOffset();
+        // Never a correction of its own — only the delivery point for a
+        // realignment an earlier interruption already asked for.
+        _consumePendingRealign();
+      case BetterPlayerEventType.finished:
+        // Reached `#EXT-X-ENDLIST` — the host stopped and the student has
+        // now heard everything that was in flight. The cubit moves to the
+        // waiting screen (ending the pause drain if one was running).
+        context.read<LiveClassCubit>().onPlayerFinished();
       case BetterPlayerEventType.play:
         // Playing again — the stream recovered, so start the retry budget
         // fresh for any future error.
         _playerErrorRetries = 0;
+        _userPaused = false;
+        _playbackStartedAt ??= DateTime.now();
+        _placeAtLiveOffset();
         // Backstop for the phase-based trigger: if the student somehow
         // reached playback without passing through a waiting/live
         // transition this listener saw, they're unambiguously in.
@@ -567,21 +920,42 @@ class _LiveClassViewState extends State<_LiveClassView>
       // Android, an iOS interruption when the mic session opened).
       // Scoped to the speaking window so it never fights a student who
       // deliberately hit pause on the player controls.
-      final controller = _playerController;
-      final videoValue = controller?.videoPlayerController?.value;
-      if (_speakingActive &&
-          videoValue != null &&
-          videoValue.initialized &&
-          !videoValue.isPlaying &&
-          !videoValue.isBuffering &&
-          !videoValue.hasError) {
-        debugPrint('[LiveClass] player paused externally → resuming '
-            '(speaking=$_speakingActive)');
-        controller!.play();
+      // Something paused us that wasn't the student — an audio-focus
+      // loss on older Android, an iOS interruption when the mic session
+      // opened, a seek that landed on an idle player. Put it back.
+      _ensurePlaying('health tick');
+      // Live-offset telemetry. ExoPlayer's own answer to "how far behind
+      // the live edge am I": the ONLY number that separates a player
+      // sitting too far back from a pipeline (encoder → packager → CDN)
+      // that is simply slow. Glass-to-glass latency cannot tell those
+      // apart, which is why tuning the target alone kept missing.
+      // Debug builds only: this is a platform-channel round trip every
+      // 3s, and it exists to diagnose latency, not to run in students'
+      // pockets. Re-enable by building in debug when investigating.
+      // Holds the live offset. NOT debug-only and NOT optional: without
+      // it every stall is a permanent loss and latency ratchets upward
+      // for the whole class — measured climbing 10s → 18s in 5 minutes
+      // with this removed.
+      _holdLiveOffset();
+      // Draining after a pause: the only question is whether the tail can
+      // still be fetched. Everything below (fallback, verification) would
+      // fight the drain, so this is the whole check while it runs.
+      final cubit = context.read<LiveClassCubit>();
+      if (cubit.state.pauseDraining) {
+        final stalledSince = _bufferStart;
+        if (stalledSince != null &&
+            DateTime.now().difference(stalledSince) > _drainStallLimit) {
+          cubit.finishDrain();
+        }
+        return;
       }
       // A single stall currently lasting too long.
       final bs = _bufferStart;
       if (bs != null && DateTime.now().difference(bs) > _singleStallLimit) {
+        // A stall this long is also what a stopped broadcast looks like —
+        // let the cubit check the playlist (throttled) before we drop to
+        // an audio rendition that would be just as dead.
+        unawaited(context.read<LiveClassCubit>().verifyBroadcast());
         _maybeFallbackToAudio('long stall');
         return;
       }
@@ -598,6 +972,8 @@ class _LiveClassViewState extends State<_LiveClassView>
   // ── Video → audio handoff ────────────────────────────────────────
 
   int _playerErrorRetries = 0;
+  DateTime? _lastPlayerErrorAt;
+  static const _playerErrorWindow = Duration(seconds: 60);
 
   /// Recover from a player error by re-preparing at the live edge.
   ///
@@ -611,12 +987,126 @@ class _LiveClassViewState extends State<_LiveClassView>
   ///
   /// Only falls back to audio if that keeps failing, which is the case
   /// where the network really is the problem.
+  /// Prints the player's real distance behind the live edge.
+  ///
+  /// Read it against [kLiveTargetOffsetMs]:
+  ///  * reported ≈ target → the player is doing its job, and any latency
+  ///    beyond it is upstream (encoder, SRS packaging, CDN playlist
+  ///    caching) and cannot be fixed from Flutter;
+  ///  * reported ≫ target → the offset is not being honoured, and the
+  ///    fix belongs here.
+  /// Playback rate we last asked for, so the platform is only called on
+  /// an actual change.
+  double _liveSpeed = 1.0;
+
+  /// 4% is imperceptible — ExoPlayer time-stretches audio without shifting
+  /// pitch — and recovers ~2.4s of lag per minute.
+  static const double _catchUpSpeed = 1.04;
+
+  /// Enter catch-up above this excess, leave below the lower bound. The
+  /// gap is hysteresis; a single threshold makes the rate flap.
+  static const int _catchUpEnterMs = 1500;
+  static const int _catchUpExitMs = 500;
+
+  /// Beyond this, SEEK — do not try to walk home.
+  ///
+  /// Was 12000, which was far too generous. At 1.04 the player regains
+  /// only ~0.12s per 3s check, so an 8s deficit needs over three minutes
+  /// of sustained catch-up and any single stall erases the progress. The
+  /// field log showed exactly that: speed pinned at 1.04 for a whole run
+  /// while behindEdge climbed 8s → 15s. It never converged once.
+  ///
+  /// Sustained catch-up is also self-defeating — playing faster drains a
+  /// 4s cushion quicker, which causes the stalls that widen the deficit.
+  /// Rate is for trimming small drift; a seek is for closing a real gap.
+  // Back UP from 5000. Lowering it made the player seek constantly, and
+  // every seek costs a rebuffer — which fed the very stall counter that
+  // triggers the audio fallback and the false "paused" screen. Correcting
+  // drift aggressively made the underlying problem worse.
+  static const int _hardSeekMs = 12000;
+
+  /// Hold the live offset during normal playback.
+  ///
+  /// ANDROID ONLY, deliberately. It works by nudging playback rate, and
+  /// ExoPlayer has a live speed controller that understands the live edge.
+  /// AVFoundation does not: `setSpeed` there sets `player.rate` directly,
+  /// and above 1.0 on a live stream the player consumes segments faster
+  /// than they are published, runs into the live edge and rebuffers
+  /// continuously. That was measured in the field. iOS must be corrected
+  /// by seeking, which is tracked separately — not from here.
+  void _holdLiveOffset() {
+    if (!Platform.isAndroid) return;
+    final controller = _playerController;
+    final inner = controller?.videoPlayerController;
+    if (controller == null || inner == null) return;
+    if (_userPaused || _speakingActive) return;
+    if (context.read<LiveClassCubit>().state.pauseDraining) return;
+    if (!inner.value.initialized || !inner.value.isPlaying) return;
+    unawaited(
+      inner.liveDebugInfo
+          .then((d) {
+            if (!mounted || d['ok'] != true) return;
+            final duration = (d['durationMs'] as num?)?.toInt() ?? 0;
+            final position = (d['positionMs'] as num?)?.toInt() ?? 0;
+            if (duration <= 0) return;
+            final behindEdge = duration - position;
+            final excess = behindEdge - kLiveTargetOffsetMs;
+            if (kDebugMode) {
+              debugPrint('[LiveClass] hold: behindEdge=${behindEdge}ms '
+                  'excess=${excess}ms speed=$_liveSpeed');
+            }
+            if (_userPaused || _speakingActive) return;
+            if (excess > _hardSeekMs) {
+              _setLiveSpeed(1.0);
+              _realignAfterInterruption('drift ${excess}ms');
+              return;
+            }
+            if (excess > _catchUpEnterMs) {
+              _setLiveSpeed(_catchUpSpeed);
+            } else if (excess < _catchUpExitMs) {
+              _setLiveSpeed(1.0);
+            }
+          })
+          .catchError((Object _) {}),
+    );
+  }
+
+  void _setLiveSpeed(double speed) {
+    if (!Platform.isAndroid) return;
+    if (_liveSpeed == speed) return;
+    _liveSpeed = speed;
+    final controller = _playerController;
+    if (controller == null) return;
+    unawaited(controller.setSpeed(speed).catchError((Object _) {}));
+  }
+
   Future<void> _recoverFromPlayerError() async {
     if (!mounted || _switching) return;
-    final url = context.read<LiveClassCubit>().state.hlsUrl;
+    final cubit = context.read<LiveClassCubit>();
+    if (cubit.state.pauseDraining) {
+      // The tail couldn't be fetched (an old server still deletes the
+      // playlist on stop). Nothing to rebuild at a live edge that no
+      // longer exists — go to the waiting screen.
+      cubit.finishDrain();
+      return;
+    }
+    final url = cubit.state.hlsUrl;
     if (url == null || url.isEmpty) return;
+    // The retry budget is per burst, not per page: a stream that died and
+    // came back later deserves fresh attempts. A lifetime cap of two left
+    // the player permanently stuck after the first outage.
+    final now = DateTime.now();
+    final lastError = _lastPlayerErrorAt;
+    if (lastError != null && now.difference(lastError) > _playerErrorWindow) {
+      _playerErrorRetries = 0;
+    }
+    _lastPlayerErrorAt = now;
     if (_playerErrorRetries >= 2) {
-      debugPrint('[LiveClass] player error persists → audio-only');
+      debugPrint('[LiveClass] player error persists → verifying broadcast');
+      // Two rebuilds at the live edge didn't take. Before blaming the
+      // network, ask whether there is still a broadcast to play — the host
+      // stopping the stream is exactly what this looks like from here.
+      unawaited(context.read<LiveClassCubit>().verifyBroadcast());
       _maybeFallbackToAudio('player error');
       return;
     }
@@ -627,16 +1117,78 @@ class _LiveClassViewState extends State<_LiveClassView>
     await _syncPlayer(url);
   }
 
-  /// Bandwidth of the audio-only rendition as advertised in the master
-  /// playlist (`#EXT-X-STREAM-INF:BANDWIDTH=64000`). Capping the player here
-  /// leaves no video variant eligible, so ExoPlayer keeps audio alone.
-  static const int _audioOnlyBitrate = 64000;
+  /// Bitrate the video is currently capped to, or null while unrestricted.
+  /// Cleared whenever full quality is restored.
+  int? _qualityCap;
+
+  /// Drop to the next video rendition below the current cap.
+  ///
+  /// Returns true if it moved down a rung (so the caller must not fall
+  /// back to audio), false when already at the lowest video rendition.
+  bool _stepDownVideoQuality(String reason) {
+    final controller = _playerController;
+    if (controller == null) return false;
+    // A video rung is one with a resolution. Testing bitrate instead
+    // would classify the 80000 audio rendition as video and "step down"
+    // to it, silently dropping the picture while reporting a quality
+    // change.
+    final rungs = controller.betterPlayerAsmsTracks
+        .where((t) => (t.height ?? 0) > 0)
+        .toList()
+      ..sort((a, b) => (a.bitrate ?? 0).compareTo(b.bitrate ?? 0));
+    if (rungs.isEmpty) return false;
+    // Everything strictly below where we are now; the top of that is the
+    // next rung down.
+    //
+    // With no cap yet the player is on the TOP rung, so the ceiling is
+    // that rung's own bitrate — not one above it. Using `+1` here made
+    // the first "step down" select 720p again (the highest track still
+    // being < ceiling), so it changed nothing while logging a step and
+    // burning the trigger:
+    //   quality step down (init failed) → 720p @ 1800000bps
+    final ceiling = _qualityCap ?? (rungs.last.bitrate ?? 0);
+    final below = rungs.where((t) => (t.bitrate ?? 0) < ceiling).toList();
+    if (below.isEmpty) return false; // already on the lowest video rung
+    final target = below.last;
+    _qualityCap = target.bitrate;
+    controller.setTrack(target);
+    debugPrint('[LiveClass] quality step down ($reason) → '
+        '${target.height}p @ ${target.bitrate}bps');
+    // Give the new rung the same grace a fresh player gets, and start its
+    // stall budget clean — otherwise the stalls that caused this step
+    // immediately trigger the next one.
+    _stalls.clear();
+    _bufferStart = null;
+    _videoReadyAt = DateTime.now();
+    return true;
+  }
+
+  /// Bitrate ceiling that selects the audio rendition and nothing else.
+  ///
+  /// Must sit ABOVE the audio variant and BELOW the lowest video one. The
+  /// master playlist advertises:
+  ///
+  ///     audio  BANDWIDTH=80000
+  ///     240p   BANDWIDTH=260000
+  ///     360p   BANDWIDTH=600000
+  ///     480p   BANDWIDTH=1000000
+  ///     720p   BANDWIDTH=1800000
+  ///
+  /// This was 64000, taken from a comment claiming the audio rendition
+  /// was `BANDWIDTH=64000`. It is 80000. A 64000 ceiling therefore
+  /// excluded **every** track in the playlist — including the audio one
+  /// it was trying to select — leaving the selector with nothing legal.
+  /// 100000 admits audio alone, with room either side.
+  static const int _audioOnlyBitrate = 100000;
 
   /// Guarded entry point for the automatic fallback. Ignores the trigger
   /// when we're already in / switching to audio, when the student is
   /// speaking (never drop their mic), or when there's no audio URL.
   void _maybeFallbackToAudio(String reason) {
     if (_switching) return;
+    // Never drop to an audio rendition mid-drain — the tail is what we
+    // are keeping the player alive for.
+    if (context.read<LiveClassCubit>().state.pauseDraining) return;
     if (_mode == PlaybackMode.audio ||
         _mode == PlaybackMode.switchingToAudio) {
       return;
@@ -653,9 +1205,19 @@ class _LiveClassViewState extends State<_LiveClassView>
       debugPrint('[LiveClass] fallback ignored ($reason) — mode just changed');
       return;
     }
+    // Step DOWN the video ladder first. Dropping a student straight from
+    // 720p to audio-only when 480p/360p/240p exist throws away the whole
+    // point of having a ladder — they lose the picture over something a
+    // lower rendition would have absorbed.
+    //
+    // Note ExoPlayer's own adaptive switching will NOT do this for us
+    // here: it steps down when it measures a *bandwidth* shortage, and
+    // these stalls happen on connections with plenty of bandwidth. So the
+    // ladder has to be walked explicitly.
+    if (!_backgrounded && _stepDownVideoQuality(reason)) return;
     final audioUrl = context.read<LiveClassCubit>().state.audioUrl;
     if (audioUrl == null || audioUrl.isEmpty) return;
-    debugPrint('[LiveClass] fallback → audio ($reason)');
+    debugPrint('[LiveClass] fallback → audio ($reason) — no video rung left');
     _switchToAudio(background: _backgrounded);
   }
 
@@ -705,15 +1267,28 @@ class _LiveClassViewState extends State<_LiveClassView>
       if (!mounted) return;
       cubit.setPlaybackMode(PlaybackMode.audio);
       _lastModeSwitchAt = DateTime.now();
-      // Climb back automatically once we're visible again.
-      if (!_backgrounded) {
-        _startRecoveryMonitor();
-        scheduleMicrotask(() => _attemptRecovery(force: true));
-      }
+      // Climb back automatically once we're visible again — but on the
+      // monitor's schedule, NOT immediately.
+      //
+      // This used to also `scheduleMicrotask(() => _attemptRecovery(force:
+      // true))`. `force` skips the _audioMinDwell guard, so the fallback
+      // was undone in the same millisecond it happened:
+      //
+      //   19:15:53.673  fallback → audio (repeated stalls)
+      //   19:15:53.675  switched to audio-only
+      //   19:15:53.676  audio cap lifted → video     ← 1ms later
+      //
+      // Twelve times in one class. Each round trip changes the ExoPlayer
+      // track twice (cap to 64kbps, then restore) and every track change
+      // costs a rebuffer — so the "recovery" manufactured exactly the
+      // stalls that trigger the fallback. The dwell exists to stop this;
+      // forcing past it made the fallback a stall generator.
+      if (!_backgrounded) _startRecoveryMonitor();
     } catch (e) {
       debugPrint('[LiveClass] switchToAudio FAILED (bg=$background): $e');
       if (!mounted) return;
       // Nothing was torn down, so recovering is just lifting the cap again.
+      _qualityCap = null;
       controller.setTrack(BetterPlayerAsmsTrack.defaultTrack());
       cubit.setPlaybackMode(PlaybackMode.video);
     } finally {
@@ -808,9 +1383,11 @@ class _LiveClassViewState extends State<_LiveClassView>
         await _syncPlayer(hlsUrl);
       } else {
         // Clearing all three constraints restores unrestricted selection.
-        controller.setTrack(BetterPlayerAsmsTrack.defaultTrack());
+        _qualityCap = null;
+      controller.setTrack(BetterPlayerAsmsTrack.defaultTrack());
         debugPrint('[LiveClass] audio cap lifted → video');
       }
+      _realignAfterInterruption('audio-to-video');
       _stalls.clear();
       _bufferStart = null;
       // Give the ladder a moment to step back up before stall detection
@@ -827,20 +1404,33 @@ class _LiveClassViewState extends State<_LiveClassView>
     }
   }
 
-  /// Duck the HLS volume while I'm the live speaker so I don't hear my
-  /// own delayed audio; restore on stop.
+  /// Fully mute the HLS stream while I hold the mic (the educator is
+  /// audible in real time over LiveKit instead — 0.2 still leaked my own
+  /// delayed voice back at me). Mute is instant; the restore waits
+  /// [_duckReleaseDelay] so the delayed HLS copy of my turn plays out
+  /// silently first.
   Future<void> _applyDuck(bool duck) async {
-    if (_ducked == duck) return;
-    _ducked = duck;
-    final controller = _playerController;
-    await controller?.setVolume(duck ? 0.2 : 1.0);
-    if (!duck) {
+    if (duck) {
+      _duckReleaseTimer?.cancel();
+      _duckReleaseTimer = null;
+      if (_ducked) return;
+      _ducked = true;
+      await _playerController?.setVolume(0.0);
+      return;
+    }
+    if (!_ducked || _duckReleaseTimer != null) return;
+    _duckReleaseTimer = Timer(_duckReleaseDelay, () async {
+      _duckReleaseTimer = null;
+      if (!mounted) return;
+      _ducked = false;
+      final controller = _playerController;
+      await controller?.setVolume(1.0);
       // iOS's AVAudioSession category is process-wide — WebRTC's own
       // voice-chat session (opened for the speaking turn that just ended)
       // may have re-asserted its category over ours. Re-request mixing so
       // the HLS stream doesn't get left in an exclusive-focus state.
       controller?.setMixWithOthers(true);
-    }
+    });
   }
 
   @override
@@ -887,8 +1477,9 @@ class _LiveClassViewState extends State<_LiveClassView>
               prev.transientNotice != curr.transientNotice ||
               prev.isSelfSpeaking(context.read<LiveClassCubit>().myId) !=
                   curr.isSelfSpeaking(context.read<LiveClassCubit>().myId) ||
-              (prev.handPhase == HandPhase.speaking) !=
-                  (curr.handPhase == HandPhase.speaking),
+              // Any hand-phase change: the mute must kick in at `granted`
+              // (when LiveKit connects), not only when speaking starts.
+              prev.handPhase != curr.handPhase,
           listener: (context, state) {
             final cubit = context.read<LiveClassCubit>();
             // Joining the room is what counts as consuming a live-class
@@ -918,11 +1509,15 @@ class _LiveClassViewState extends State<_LiveClassView>
               // gets its own origin.
               _streamClock.reset();
             }
-            // Audio ducking follows self-speaking. `handPhase.speaking`
-            // is the authority when the id comparison can't run (myId
-            // unknown) — otherwise the student's own mic fights the HLS
-            // stream at full volume.
+            // Mute from the GRANT, not from the `nowSpeaking` echo: the
+            // LiveKit room (and the educator's real-time voice) connects
+            // during granted/connecting, and letting the delayed HLS
+            // stream overlap it plays the educator twice. The hand-phase
+            // check also covers the case where the id comparison can't
+            // run (myId unknown).
             _applyDuck(state.isSelfSpeaking(cubit.myId) ||
+                state.handPhase == HandPhase.granted ||
+                state.handPhase == HandPhase.connecting ||
                 state.handPhase == HandPhase.speaking);
             // One-shot notices → snackbar.
             final notice = state.transientNotice;
@@ -942,7 +1537,11 @@ class _LiveClassViewState extends State<_LiveClassView>
                 label: 'Connecting to the live class…',
               );
             case LiveViewPhase.waiting:
-              return _WaitingView(scheduledAt: state.scheduledAt);
+              return _WaitingView(
+                scheduledAt: state.scheduledAt,
+                interrupted: state.broadcastInterrupted,
+                message: state.waitingMessage,
+              );
             case LiveViewPhase.ended:
               return const _MessageView(
                 icon: Icons.event_available,
@@ -1193,6 +1792,16 @@ class _LiveClassViewState extends State<_LiveClassView>
             top: 10,
             child: SpeakingChip(name: speakingName),
           ),
+        // Host pressed Stop; the last ~7s are still playing out. A small
+        // non-blocking cue — no spinner, no screen change — until the
+        // player reaches the end and the waiting screen takes over.
+        if (state.pauseDraining)
+          const Positioned(
+            left: 0,
+            right: 0,
+            top: 10,
+            child: Center(child: PauseDrainBanner()),
+          ),
       ],
     );
   }
@@ -1390,7 +1999,19 @@ class _CenteredSpinner extends StatelessWidget {
 /// Friendly "not started yet" view with an optional live countdown.
 class _WaitingView extends StatefulWidget {
   final DateTime? scheduledAt;
-  const _WaitingView({this.scheduledAt});
+
+  /// The class WAS live and the broadcast dropped — say so, rather than
+  /// "hasn't started yet" to a student who was just watching it.
+  final bool interrupted;
+
+  /// The server's own reason there is no media yet, when it sent one;
+  /// preferred over the generic copy.
+  final String? message;
+  const _WaitingView({
+    this.scheduledAt,
+    this.interrupted = false,
+    this.message,
+  });
 
   @override
   State<_WaitingView> createState() => _WaitingViewState();
@@ -1418,7 +2039,7 @@ class _WaitingViewState extends State<_WaitingView> {
 
   String? get _countdown {
     final at = widget.scheduledAt;
-    if (at == null) return null;
+    if (at == null || widget.interrupted) return null;
     final diff = at.difference(DateTime.now());
     if (diff.isNegative) return null;
     final h = diff.inHours;
@@ -1432,16 +2053,27 @@ class _WaitingViewState extends State<_WaitingView> {
   @override
   Widget build(BuildContext context) {
     final countdown = _countdown;
+    final headline = widget.message ??
+        (widget.interrupted
+            ? 'The host has paused the stream.'
+            : "The class hasn't started yet.");
+    final subline = widget.interrupted
+        ? "You'll rejoin automatically when it resumes."
+        : "You'll join automatically when it begins.";
     return Center(
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: Screen.getHorizontalSize(24)),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.schedule, size: 64, color: AppColors.primary),
+            Icon(
+              widget.interrupted ? Icons.pause_circle_outline : Icons.schedule,
+              size: 64,
+              color: AppColors.primary,
+            ),
             SizedBox(height: Screen.getVerticalSize(16)),
             Text(
-              "The class hasn't started yet.\nYou'll join automatically when it begins.",
+              '$headline\n$subline',
               textAlign: TextAlign.center,
               style: AppTypography.bodyTextLargeMedium.copyWith(
                 color: AppColors.alwaysWhite,

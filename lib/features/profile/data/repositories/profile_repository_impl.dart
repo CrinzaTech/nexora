@@ -35,6 +35,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
     int? gender,
     File? userProfileImage,
     String? fcmToken,
+    String? stdCode,
   }) async {
     try {
       final json = await _apiClient.updateUserProfile(
@@ -45,6 +46,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
         _genderIntToText(gender),
         userProfileImage,
         fcmToken,
+        stdCode,
       );
       return Right(UserProfileModel.fromJson(json));
     } on DioException catch (e) {

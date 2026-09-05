@@ -541,6 +541,12 @@ class CourseContent {
   /// assignments, etc.). Null on nodes that are immediately available.
   final DateTime? startDateTime;
 
+  /// Live-class nodes only: the real session status from the server
+  /// ("Scheduled" / "Ready" / "Live" / "Ended" / "Cancelled"). Null when
+  /// the api predates the field — the clock-based getters below then
+  /// behave exactly as before, which is what makes the rollout safe.
+  final String? liveStatus;
+
   const CourseContent({
     required this.nodeId,
     required this.nodeName,
@@ -551,6 +557,7 @@ class CourseContent {
     this.durationSeconds,
     this.children = const [],
     this.startDateTime,
+    this.liveStatus,
   });
 
   bool get isFolder => type == CourseContentType.folder;
@@ -566,15 +573,44 @@ class CourseContent {
       ? startDateTime!.add(Duration(seconds: durationSeconds!))
       : null;
 
+  /// Server said the session is finished or will never happen. This is
+  /// what stops an early-ended class advertising "Join now" until its
+  /// booked end time crawls past on the clock. Only the two terminal
+  /// statuses close a node — trusting a stale "Live" mirror to force the
+  /// badge ON would re-create the bug in the other direction, so the
+  /// clock still governs the open window. Case-insensitive because the
+  /// wire values are enum names ("Ended"), not a contract on casing.
+  bool get _isClosedByServer {
+    if (!isLiveClass) return false;
+    final status = liveStatus?.toLowerCase();
+    return status == 'ended' || status == 'cancelled';
+  }
+
+  /// The admin cancelled this class — lets the tile say "Cancelled"
+  /// instead of the generic ended text.
+  bool get isCancelled =>
+      isLiveClass && liveStatus?.toLowerCase() == 'cancelled';
+
+  /// The educator went live and then stopped — still joinable (the
+  /// player waits and resumes on its own), so this never closes the
+  /// node; it only lets the tile say why nothing is playing.
+  bool get isPausedByHost =>
+      isLiveClass && liveStatus?.toLowerCase() == 'paused';
+
   bool get isUpcoming =>
-      startDateTime != null && DateTime.now().isBefore(startDateTime!);
+      !_isClosedByServer &&
+      startDateTime != null &&
+      DateTime.now().isBefore(startDateTime!);
 
   bool get isLiveNow =>
+      !_isClosedByServer &&
       startDateTime != null &&
       !DateTime.now().isBefore(startDateTime!) &&
       (_liveEnd == null || DateTime.now().isBefore(_liveEnd!));
 
-  bool get isEnded => _liveEnd != null && !DateTime.now().isBefore(_liveEnd!);
+  bool get isEnded =>
+      _isClosedByServer ||
+      (_liveEnd != null && !DateTime.now().isBefore(_liveEnd!));
 
   // Backward-compat getters so existing call-sites don't need to change.
   String? get videoUrl => type == CourseContentType.video ? url : null;
@@ -648,6 +684,7 @@ class CourseContent {
       startDateTime: startRaw == null
           ? null
           : DateTime.tryParse(startRaw.toString())?.toLocal(),
+      liveStatus: json['liveStatus'] as String?,
     );
   }
 }

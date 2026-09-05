@@ -27,21 +27,36 @@ class ExamQuestionInput extends StatelessWidget {
   /// own id is passed, not the parent's.
   final void Function(int questionId, ExamAnswerDraft draft) onChanged;
 
+  /// Whether the student parked this question to revisit.
+  final bool isPinned;
+
+  /// Null hides the pin control entirely — that's how competitive mode,
+  /// which has no pinning, gets left alone.
+  final VoidCallback? onTogglePin;
+
   const ExamQuestionInput({
     super.key,
     required this.question,
     required this.number,
     required this.draft,
     required this.onChanged,
+    this.isPinned = false,
+    this.onTogglePin,
   });
 
   @override
   Widget build(BuildContext context) {
     return ExamCard(
+      borderColor: isPinned ? AppColors.warning : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _QuestionHeader(question: question, number: '$number'),
+          _QuestionHeader(
+            question: question,
+            number: '$number',
+            isPinned: isPinned,
+            onTogglePin: onTogglePin,
+          ),
           // `match_the_column` always sends an empty questionText — the
           // pairs are the question. Skip the block entirely so no empty
           // gap is left above the rows.
@@ -178,8 +193,15 @@ class ExamDraftScope extends StatelessWidget {
 class _QuestionHeader extends StatelessWidget {
   final ExamQuestion question;
   final String number;
+  final bool isPinned;
+  final VoidCallback? onTogglePin;
 
-  const _QuestionHeader({required this.question, required this.number});
+  const _QuestionHeader({
+    required this.question,
+    required this.number,
+    this.isPinned = false,
+    this.onTogglePin,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -238,7 +260,37 @@ class _QuestionHeader extends StatelessWidget {
               ),
           ],
         ),
+        if (onTogglePin != null) ...[
+          const SizedBox(width: 4),
+          _PinButton(isPinned: isPinned, onTap: onTogglePin!),
+        ],
       ],
+    );
+  }
+}
+
+class _PinButton extends StatelessWidget {
+  final bool isPinned;
+  final VoidCallback onTap;
+
+  const _PinButton({required this.isPinned, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: isPinned ? 'Unpin question' : 'Pin to revisit later',
+      child: InkResponse(
+        onTap: onTap,
+        radius: 20,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Icon(
+            isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+            size: 20,
+            color: isPinned ? AppColors.warning : AppColors.grey500,
+          ),
+        ),
+      ),
     );
   }
 }

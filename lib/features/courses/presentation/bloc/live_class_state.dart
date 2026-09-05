@@ -78,6 +78,24 @@ class LiveClassState with _$LiveClassState {
     /// Scheduled start, drives the optional countdown in the waiting UI.
     DateTime? scheduledAt,
 
+    /// The broadcast dropped out mid-class (host paused/stopped the
+    /// stream) and we're back in [LiveViewPhase.waiting] until segments
+    /// reappear. Lets the waiting UI say "paused" instead of "hasn't
+    /// started", and is cleared the moment playback resumes.
+    @Default(false) bool broadcastInterrupted,
+
+    /// The playback endpoint's own explanation for why there is no media
+    /// yet ("The host has paused the stream." / "The class has not
+    /// started yet…"). Shown on the waiting screen in place of the
+    /// generic copy; null on an older backend or after a local verdict.
+    String? waitingMessage,
+
+    /// The host pressed Stop, but the student is ~7s behind and the last
+    /// words are still in the player buffer. While this holds the player
+    /// keeps running to the end of the stream (`#EXT-X-ENDLIST`) under a
+    /// small banner; the waiting screen follows only once it finishes.
+    @Default(false) bool pauseDraining,
+
     /// Whether the SignalR class hub is connected. When false, chat send
     /// / raise-hand can't reach the server — the UI reflects this instead
     /// of silently doing nothing.
@@ -86,6 +104,11 @@ class LiveClassState with _$LiveClassState {
     // ── Chat ──────────────────────────────────────────────────────
     @Default(ChatMode.shared) ChatMode chatMode,
     @Default(<LiveChatMessage>[]) List<LiveChatMessage> messages,
+
+    /// Polls by id — the live copy the chat renders its poll cards from.
+    /// Rows seed it; `pollVoteAccepted` / `pollRevealed` / `pollCancelled`
+    /// update it, so a card re-renders in place.
+    @Default(<int, LivePoll>{}) Map<int, LivePoll> polls,
     @Default(false) bool chatLoadingMore,
     @Default(true) bool chatHasMore,
 

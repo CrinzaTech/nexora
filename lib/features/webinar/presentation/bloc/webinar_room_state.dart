@@ -73,8 +73,16 @@ class WebinarRoomState with _$WebinarRoomState {
     /// transition, never cached across sessions.
     String? hlsUrl,
 
+    /// The host pressed Stop while the attendee's player still holds the
+    /// last ~7s of what was said. The player runs to the end of the
+    /// stream under a banner before the lobby takes over.
+    @Default(false) bool pauseDraining,
+
     /// Newest first, de-duplicated by id across REST and the socket.
     @Default(<LiveChatMessage>[]) List<LiveChatMessage> messages,
+
+    /// Polls by id — the live copy the chat renders its poll cards from.
+    @Default(<int, LivePoll>{}) Map<int, LivePoll> polls,
 
     /// False when the socket is down: the transcript still reads, but
     /// sending is off, and the composer says so rather than swallowing

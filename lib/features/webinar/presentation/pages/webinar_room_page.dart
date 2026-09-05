@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/core/config/live_playback.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_sizes.dart';
@@ -17,7 +18,8 @@ import 'package:nexora/core/widgets/custom_action_button.dart';
 import 'package:nexora/core/widgets/custom_appbar_widget.dart';
 import 'package:nexora/core/widgets/custom_network_image.dart';
 import 'package:nexora/core/widgets/live_stream_controls.dart';
-import 'package:nexora/features/courses/presentation/widgets/draggable_fab.dart';
+import 'package:nexora/core/widgets/pause_drain_banner.dart';
+import 'package:nexora/core/widgets/draggable_fab.dart';
 import 'package:nexora/features/courses/presentation/widgets/live_class_speed_dial.dart';
 import 'package:nexora/features/webinar/data/models/webinar_model.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinar_room_cubit.dart';
@@ -104,7 +106,8 @@ class _WebinarRoomView extends StatefulWidget {
   State<_WebinarRoomView> createState() => _WebinarRoomViewState();
 }
 
-class _WebinarRoomViewState extends State<_WebinarRoomView> {
+class _WebinarRoomViewState extends State<_WebinarRoomView>
+    with WidgetsBindingObserver {
   BetterPlayerController? _player;
 
   /// Which URL the current controller was built for. Guards against
@@ -118,8 +121,72 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
   /// the stream timer at zero every time it did.
   final LiveStreamClock _streamClock = LiveStreamClock();
 
-  /// Whether the stream is currently quietened for a speaking turn.
+  /// Whether the stream is currently muted for a speaking turn.
   bool _ducked = false;
+
+  /// While the host's last words drain after a pause, a stall this long
+  /// means the tail can't be fetched — end the drain rather than hang.
+  Timer? _drainStallTimer;
+  static const _drainStallLimit = Duration(seconds: 3);
+
+  // The Dart-side join seek that used to live here is deleted — it was
+  // the cause of the latency regression the sync feature appeared to
+  // introduce. `value.duration` is a one-time snapshot from
+  // `initialized`, but the seek could only run once the player was
+  // actually playing, seconds later; it therefore landed
+  // `startup elapsed + target` behind live rather than `target`.
+  // `MediaItem.LiveConfiguration` / `configuredTimeOffsetFromLive` pick
+  // the start position and hold it against the player's real live edge.
+  // See live_class_page.dart for the full write-up.
+
+  /// First `play` on the current controller. Realignment stays out of the
+  /// way until the native live configuration has settled on its target.
+  DateTime? _playbackStartedAt;
+  static const _realignStartupGrace = Duration(seconds: 15);
+
+  /// One live-offset placement per controller, seeked natively so the
+  /// live edge is read fresh. See live_class_page.dart for why Dart
+  /// cannot compute this correctly.
+  bool _joinPlaced = false;
+  bool _joinPlaceInFlight = false;
+  int _joinPlaceTries = 0;
+  static const _joinPlaceMaxTries = 20;
+
+  // ── Post-interruption realignment ────────────────────────────────
+
+  /// Drift smaller than this is left to the player's own speed control,
+  /// which holds the native target offset continuously by nudging rate.
+  /// A seek is only for the jump a long interruption leaves behind.
+  static const _realignDeadband = Duration(seconds: 3);
+
+  /// A seek on a live HLS stream costs a rebuffer, so two realignments
+  /// close together feed each other. Nothing may seek again inside this
+  /// window, whatever asks for it.
+  DateTime? _lastRealignAt;
+  static const _realignCooldown = Duration(seconds: 20);
+
+  /// An interruption that cannot be corrected on the spot — app resume
+  /// and error recovery, where the player needs a moment to come back
+  /// before a seek means anything. The next progress tick consumes it:
+  /// exactly one attempt, then it is gone, so this never becomes the
+  /// periodic mid-playback correction that causes stutter.
+  String? _pendingRealign;
+  DateTime? _pendingRealignAt;
+  static const _pendingRealignWindow = Duration(seconds: 8);
+
+  /// The attendee pressed pause on this controller — the only thing that
+  /// stops [_ensurePlaying] from re-asserting playback (the package never
+  /// pauses on its own with `handleLifecycle` off).
+  bool _userPaused = false;
+
+  /// Delays the unmute after a speaking turn so the delayed HLS copy of
+  /// the turn — the attendee's own voice included — plays out silently.
+  /// Must stay equal to the cubit's `_postSpeakLinger`: LiveKit (carrying
+  /// the host live) disconnects when that fires, and this unmute has to
+  /// land at the same moment — unmuting first replays the echo tail,
+  /// disconnecting first leaves the attendee in silence.
+  Timer? _duckReleaseTimer;
+  static const _duckReleaseDelay = Duration(seconds: 8);
 
   /// Landscape only: the chat panel slides in over the video rather
   /// than docking beside it, so the stage keeps the full screen.
@@ -128,13 +195,28 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // A webinar is watched, not tapped.
     WakelockPlus.enable();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!mounted || state != AppLifecycleState.resumed) return;
+    // A suspended player keeps its own position while live time moves
+    // on, and every device accumulates a different amount of that —
+    // exactly the drift the shared target exists to remove. Nothing else
+    // belongs here: the player's lifecycle is deliberately ours and not
+    // the package's (`handleLifecycle: false`).
+    _requestRealign('app resume');
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     WakelockPlus.disable();
+    _duckReleaseTimer?.cancel();
+    _drainStallTimer?.cancel();
     // Restore the app-wide portrait lock from `main()`. Expanding the
     // stage pins landscape and keeps it pinned, so an attendee who backs
     // out mid-webinar would otherwise take that lock with them to every
@@ -151,6 +233,13 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
     final controller = _player;
     _player = null;
     _currentUrl = null;
+    _playbackStartedAt = null;
+    _joinPlaced = false;
+    _joinPlaceInFlight = false;
+    _joinPlaceTries = 0;
+    _lastRealignAt = null;
+    _pendingRealign = null;
+    _pendingRealignAt = null;
     controller?.dispose(forceDispose: true);
   }
 
@@ -235,6 +324,16 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
     );
     _player = controller;
     _currentUrl = hlsUrl;
+    // Every fresh controller gets exactly one join-offset adjustment and
+    // starts out playing.
+    _playbackStartedAt = null;
+    _joinPlaced = false;
+    _joinPlaceInFlight = false;
+    _joinPlaceTries = 0;
+    _userPaused = false;
+    _lastRealignAt = null;
+    _pendingRealign = null;
+    _pendingRealignAt = null;
     controller.addEventsListener(_onPlayerEvent);
 
     try {
@@ -248,6 +347,8 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
           // "master_<hash>.m3u8", and builds a progressive source that
           // every extractor then rejects.
           videoFormat: BetterPlayerVideoFormat.hls,
+          // Every viewer holds the same distance behind the live edge.
+          liveTargetOffsetMs: kLiveTargetOffsetMs,
           notificationConfiguration: BetterPlayerNotificationConfiguration(
             showNotification: true,
             title: widget.title,
@@ -260,10 +361,26 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
           // starting on less than a whole segment pins the player to the
           // live edge with no room to absorb a hiccup.
           bufferingConfiguration: const BetterPlayerBufferingConfiguration(
-            minBufferMs: 4500,
-            maxBufferMs: 12000,
-            bufferForPlaybackMs: 2500,
-            bufferForPlaybackAfterRebufferMs: 4000,
+            // Sized against the live target, not independently: the
+            // player can never hold more buffer than the distance to the
+            // live edge, so a 4s offset with the old 4000/4000 pair asked
+            // it to buffer the entire window before resuming from a stall
+            // — which reads as a frozen player.
+            //
+            // ⚠️ ORDER IS ENFORCED. ExoPlayer's DefaultLoadControl.Builder
+            // asserts, and THROWS on construction if violated:
+            //     bufferForPlaybackMs              <= minBufferMs
+            //     bufferForPlaybackAfterRebufferMs <= minBufferMs
+            //     minBufferMs                      <= maxBufferMs
+            // A throw here is not a degraded stream — the controller never
+            // gets built, so the class cannot be joined at all. Keeping
+            // minBufferMs equal to bufferForPlaybackAfterRebufferMs (as the
+            // original 4000/4000 pair did) is the safe shape; scale the two
+            // together if the live target changes again.
+            minBufferMs: 2500,
+            maxBufferMs: 8000,
+            bufferForPlaybackMs: 1500,
+            bufferForPlaybackAfterRebufferMs: 2500,
           ),
         ),
       );
@@ -277,8 +394,8 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
       // whole speaking turn. Mixing hands focus back to us; the stream is
       // quietened deliberately in [_applyDuck] instead.
       controller.setMixWithOthers(true);
-      // Keep the duck level if the player was rebuilt mid-turn.
-      await controller.setVolume(_ducked ? 0.2 : 1.0);
+      // Keep the mute if the player was rebuilt mid-turn.
+      await controller.setVolume(_ducked ? 0.0 : 1.0);
       setState(() {});
     } catch (_) {
       // A signed URL that expired between resolve and setup is the
@@ -290,28 +407,236 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
     }
   }
 
-  /// Quietens the stream while this attendee holds the mic, rather than
-  /// pausing it: they still need to hear the host to answer, and an open
-  /// mic beside a speaker at full volume is a feedback loop.
+  /// Fully mutes the stream while this attendee holds the mic (the host
+  /// is audible in real time over LiveKit instead — 0.2 still leaked the
+  /// attendee's own delayed voice back at them). Mute is instant; the
+  /// restore waits [_duckReleaseDelay] so the delayed HLS copy of the
+  /// turn plays out silently first.
   Future<void> _applyDuck(bool duck) async {
-    if (_ducked == duck) return;
-    _ducked = duck;
-    final controller = _player;
-    await controller?.setVolume(duck ? 0.2 : 1.0);
-    if (!duck) {
+    if (duck) {
+      _duckReleaseTimer?.cancel();
+      _duckReleaseTimer = null;
+      if (_ducked) return;
+      _ducked = true;
+      await _player?.setVolume(0.0);
+      return;
+    }
+    if (!_ducked || _duckReleaseTimer != null) return;
+    _duckReleaseTimer = Timer(_duckReleaseDelay, () async {
+      _duckReleaseTimer = null;
+      if (!mounted) return;
+      _ducked = false;
+      final controller = _player;
+      await controller?.setVolume(1.0);
       // iOS's audio category is process-wide, and the WebRTC session
       // that just ended may have re-asserted its own over ours — ask for
       // mixing again so the stream isn't left holding exclusive focus.
       controller?.setMixWithOthers(true);
+    });
+  }
+
+  /// Put the playhead [kLiveTargetOffsetMs] behind the live edge, once
+  /// per controller, seeked natively against a fresh live-edge reading.
+  void _placeAtLiveOffset() {
+    if (_joinPlaced || _joinPlaceInFlight || _userPaused) return;
+    final hp = context.read<WebinarRoomCubit>().state.handPhase;
+    if (hp == WebinarHandPhase.granted ||
+        hp == WebinarHandPhase.connecting ||
+        hp == WebinarHandPhase.speaking) {
+      return; // never seek during a speaking turn
     }
+    final inner = _player?.videoPlayerController;
+    final value = inner?.value;
+    if (inner == null || value == null || !value.initialized) return;
+    if (!value.isPlaying) return;
+    // Do NOT mark it done up front. The first attempts land before the
+    // live window is readable and are skipped; burning the one shot on
+    // those left the player wherever it started, which is what forced a
+    // manual tap on "Go live".
+    _joinPlaceInFlight = true;
+    _joinPlaceTries++;
+    unawaited(
+      inner
+          .seekToLiveOffset(kLiveTargetOffsetMs)
+          .then((resultMs) {
+            _joinPlaceInFlight = false;
+            if (!mounted) return;
+            // Only a real placement retires the attempt; a skip retries
+            // on the next progress tick until the window is readable.
+            if (resultMs >= 0 || _joinPlaceTries >= _joinPlaceMaxTries) {
+              _joinPlaced = true;
+            }
+            const reasons = {
+              -1: 'no live timeline yet',
+              -2: 'window duration unknown',
+              -3: 'already closer to live than target',
+              -4: 'nothing buffered ahead yet',
+            };
+            debugPrint('[Webinar] join placement → '
+                '${resultMs < 0 ? "skipped: ${reasons[resultMs] ?? resultMs}" : "${resultMs}ms behind live"}');
+            _ensurePlaying();
+          })
+          .catchError((Object e) {
+            _joinPlaceInFlight = false;
+            // A platform that cannot answer must not be retried on every
+            // progress tick for the whole class.
+            if (_joinPlaceTries >= _joinPlaceMaxTries) _joinPlaced = true;
+          }),
+    );
+  }
+
+  /// Play by default. Re-asserts playback whenever the player is
+  /// initialised and idle and the attendee has not pressed pause.
+  void _ensurePlaying() {
+    if (_userPaused) return;
+    final inner = _player?.videoPlayerController;
+    final value = inner?.value;
+    if (inner == null || value == null) return;
+    if (!value.initialized || value.isPlaying || value.isBuffering) return;
+    if (value.hasError) return;
+    if (context.read<WebinarRoomCubit>().state.pauseDraining) return;
+    unawaited(inner.play());
+  }
+
+  /// Re-seek to the shared live target after a *discrete* interruption.
+  /// Distance behind live comes from the platform player itself
+  /// (ExoPlayer's `getCurrentLiveOffset`), never from `value.duration` —
+  /// that is a one-time snapshot from `initialized` and measuring against
+  /// it is what made the old join seek overshoot. The correction is a
+  /// relative jump forward by the excess, so it needs no absolute idea of
+  /// where the live edge is.
+  void _realignAfterInterruption(String reason) {
+    if (_userPaused) return;
+    final last = _lastRealignAt;
+    if (last != null && DateTime.now().difference(last) < _realignCooldown) {
+      return;
+    }
+    final startedAt = _playbackStartedAt;
+    if (startedAt == null ||
+        DateTime.now().difference(startedAt) < _realignStartupGrace) {
+      return;
+    }
+    final cubit = context.read<WebinarRoomCubit>();
+    if (cubit.state.pauseDraining) return;
+    final hp = cubit.state.handPhase;
+    if (hp == WebinarHandPhase.granted ||
+        hp == WebinarHandPhase.connecting ||
+        hp == WebinarHandPhase.speaking) {
+      // Never seek during a speaking turn: the conversation is real-time
+      // over LiveKit and the HLS copy is ducked anyway.
+      return;
+    }
+    final controller = _player;
+    final inner = controller?.videoPlayerController;
+    if (controller == null || inner == null) return;
+    if (!inner.value.initialized || !inner.value.isPlaying) return;
+    unawaited(
+      inner.liveOffsetMs
+          .then((offsetMs) {
+            if (!mounted || offsetMs < 0) return;
+            final excessMs = offsetMs - kLiveTargetOffsetMs;
+            if (excessMs < _realignDeadband.inMilliseconds) return;
+            final value = inner.value;
+            if (!value.initialized || !value.isPlaying || _userPaused) return;
+            _lastRealignAt = DateTime.now();
+            debugPrint('[Webinar] realign ($reason): ${offsetMs}ms behind '
+                'live (target ${kLiveTargetOffsetMs}ms) → +${excessMs}ms');
+            unawaited(
+              controller
+                  .seekTo(value.position + Duration(milliseconds: excessMs))
+                  .then((_) {
+                    if (mounted) _ensurePlaying();
+                  }),
+            );
+          })
+          .catchError((Object _) {}),
+    );
+  }
+
+  /// Queue a realignment for the moment the player is running again.
+  /// Used where the interruption ends before the player has caught up —
+  /// on resume or a URL re-resolve it may still be paused or buffering,
+  /// and a seek against that position would be measured from a stale
+  /// reading.
+  void _requestRealign(String reason) {
+    _pendingRealign = reason;
+    _pendingRealignAt = DateTime.now();
+    _consumePendingRealign();
+  }
+
+  /// One attempt, taken as soon as the player is genuinely playing, and
+  /// dropped if it never gets there inside [_pendingRealignWindow] — by
+  /// then a rebuilt controller owns the position instead.
+  void _consumePendingRealign() {
+    final reason = _pendingRealign;
+    final since = _pendingRealignAt;
+    if (reason == null || since == null) return;
+    if (DateTime.now().difference(since) > _pendingRealignWindow) {
+      _pendingRealign = null;
+      _pendingRealignAt = null;
+      return;
+    }
+    final value = _player?.videoPlayerController?.value;
+    if (value == null || !value.initialized) return;
+    if (!value.isPlaying || value.isBuffering) return;
+    _pendingRealign = null;
+    _pendingRealignAt = null;
+    _realignAfterInterruption(reason);
   }
 
   void _onPlayerEvent(BetterPlayerEvent event) {
     if (!mounted) return;
-    if (event.betterPlayerEventType == BetterPlayerEventType.exception) {
-      // Signed links are short-lived; a mid-session failure is usually
-      // an expired one. Re-resolve instead of stranding the learner.
-      context.read<WebinarRoomCubit>().refreshPlayback();
+    final cubit = context.read<WebinarRoomCubit>();
+    switch (event.betterPlayerEventType) {
+      case BetterPlayerEventType.exception:
+        if (cubit.state.pauseDraining) {
+          // The tail couldn't be fetched (an old server still deletes the
+          // playlist on stop) — nothing left to play, go to the lobby.
+          cubit.finishDrain();
+          return;
+        }
+        // Signed links are short-lived; a mid-session failure is usually
+        // an expired one. Re-resolve instead of stranding the learner.
+        cubit.refreshPlayback();
+        // If that comes back with the same URL the controller is kept and
+        // resumes wherever it died — which is behind the shared target.
+        // (A changed URL rebuilds the player, and the join offset places
+        // it; this request then falls away in the deadband.)
+        _requestRealign('error recovery');
+      case BetterPlayerEventType.finished:
+        // Reached `#EXT-X-ENDLIST`: the host stopped and the attendee has
+        // heard everything that was in flight.
+        cubit.onPlayerFinished();
+      case BetterPlayerEventType.bufferingStart:
+        // Only matters mid-drain; the timer checks the flag when it fires
+        // so a routine rebuffer costs nothing.
+        _drainStallTimer?.cancel();
+        _drainStallTimer = Timer(_drainStallLimit, () {
+          if (!mounted) return;
+          final c = context.read<WebinarRoomCubit>();
+          if (c.state.pauseDraining) c.finishDrain();
+        });
+      case BetterPlayerEventType.bufferingEnd:
+        _drainStallTimer?.cancel();
+        _drainStallTimer = null;
+        _ensurePlaying();
+        _placeAtLiveOffset();
+        // Deliberately NOT a realign point — a seek on a live stream
+        // costs a rebuffer, so realigning from the end of one loops with
+        // no exit. See the live-class page for the field symptom.
+      case BetterPlayerEventType.play:
+        _userPaused = false;
+        _playbackStartedAt ??= DateTime.now();
+        _placeAtLiveOffset();
+      case BetterPlayerEventType.pause:
+        _userPaused = true;
+      case BetterPlayerEventType.progress:
+        if (!_joinPlaced) _placeAtLiveOffset();
+        // Never a correction of its own — only the delivery point for a
+        // realignment an earlier interruption already asked for.
+        _consumePendingRealign();
+      default:
+        break;
     }
   }
 
@@ -320,6 +645,7 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
     return BlocConsumer<WebinarRoomCubit, WebinarRoomState>(
       listenWhen: (p, c) =>
           p.hlsUrl != c.hlsUrl ||
+          p.phase != c.phase ||
           p.transientNotice != c.transientNotice ||
           p.handPhase != c.handPhase ||
           p.speakingUserId != c.speakingUserId,
@@ -327,13 +653,24 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
         final url = state.hlsUrl;
         if (url != null && state.phase == WebinarPhase.live) {
           _syncPlayer(url);
+        } else if (state.phase != WebinarPhase.live &&
+            state.phase != WebinarPhase.connecting) {
+          // Lobby (host paused), ended, cancelled: drop the controller.
+          // `_syncPlayer` short-circuits on an unchanged URL, so without
+          // this a return to live would resume the stale, stuck player
+          // instead of rebuilding at the new live edge. `connecting` is
+          // spared — it is the URL refresh mid-session.
+          _disposePlayer();
         }
         final myId = context.read<WebinarRoomCubit>().myId;
-        // Duck on the local phase as well as the server's echo: the
-        // attendee is audibly live from the moment the mic publishes,
-        // which is before `nowSpeaking` comes back.
+        // Mute from the GRANT, not from the `nowSpeaking` echo: the
+        // LiveKit room (and the host's real-time voice) connects during
+        // granted/connecting, and letting the delayed HLS stream overlap
+        // it plays the host twice.
         _applyDuck(
           state.isSelfSpeaking(myId) ||
+              state.handPhase == WebinarHandPhase.granted ||
+              state.handPhase == WebinarHandPhase.connecting ||
               state.handPhase == WebinarHandPhase.speaking,
         );
         final notice = state.transientNotice;
@@ -632,6 +969,14 @@ class _WebinarRoomViewState extends State<_WebinarRoomView> {
                   name: state.speakingName ?? 'Someone',
                   isMe: isMeSpeaking,
                 ),
+              ),
+            // Host pressed Stop; the last ~7s are still playing out.
+            if (state.pauseDraining)
+              const Positioned(
+                left: 0,
+                right: 0,
+                top: 10,
+                child: Center(child: PauseDrainBanner()),
               ),
           ],
         );

@@ -22,6 +22,9 @@ class UpdateProfileUseCase {
     int? gender,
     File? userProfileImage,
     String? fcmToken,
+    // Dial code without the leading '+' (e.g. "234" for Nigeria) for
+    // the country selected alongside [phoneNumber].
+    String? stdCode,
   }) {
     return repository.updateProfile(
       name: name,
@@ -31,6 +34,7 @@ class UpdateProfileUseCase {
       gender: gender,
       userProfileImage: userProfileImage,
       fcmToken: fcmToken,
+      stdCode: stdCode,
     );
   }
 }

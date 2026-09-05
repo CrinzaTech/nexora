@@ -97,6 +97,11 @@ abstract class ApiClient {
     @Part(name: 'gender') String? gender,
     @Part(name: 'UserProfileImage') File? userProfileImage,
     @Part(name: 'fcmToken') String? fcmToken,
+    // Dial code without the leading '+' (e.g. "234" for Nigeria) for
+    // whichever country was selected alongside [phoneNumber]. Same
+    // field name ("stdCode") the send/verify-OTP endpoints already use
+    // for this — see otp_repository_impl.dart.
+    @Part(name: 'stdCode') String? stdCode,
   );
 
   // ============================================================
@@ -223,6 +228,16 @@ abstract class ApiClient {
   // ============================================================
   @GET(ApiEndpoints.webinars)
   Future<Map<String, dynamic>> getWebinars(
+    @Query('pageNo') int pageNo,
+    @Query('pageSize') int pageSize,
+  );
+
+  // ============================================================
+  // HOME — Live classes rail
+  // GET /api/v1/Dashboard/live-sessions?pageNo=&pageSize=
+  // ============================================================
+  @GET(ApiEndpoints.homeLiveSessions)
+  Future<Map<String, dynamic>> getHomeLiveSessions(
     @Query('pageNo') int pageNo,
     @Query('pageSize') int pageSize,
   );
@@ -459,6 +474,15 @@ abstract class ApiClient {
     @Path('roomId') String roomId,
     @Query('beforeId') int? beforeId,
     @Query('limit') int? limit,
+  );
+
+  // ============================================================
+  // LIVE CLASSES — Polls posted into the chat
+  // GET /api/stream/live-classes/{roomId}/polls
+  // ============================================================
+  @GET(ApiEndpoints.liveClassPolls)
+  Future<Map<String, dynamic>> getLiveClassPolls(
+    @Path('roomId') String roomId,
   );
 
   // ============================================================

@@ -260,3 +260,187 @@ String formatDurationSeconds(int seconds) {
   if (h > 0) return '${h}h ${m}m';
   return '${m}m ${s.toString().padLeft(2, '0')}s';
 }
+
+// ── Dialogs ──────────────────────────────────────────────────────────────
+
+/// The exam's confirm / warning prompts, so they read as one family: a
+/// tinted icon medallion, centred copy, and full-width stacked actions.
+class ExamDialogShell extends StatelessWidget {
+  final IconData icon;
+
+  /// Tints the medallion. Also the natural colour for a destructive action.
+  final Color accent;
+
+  final String title;
+  final String message;
+
+  /// Optional block between the message and the actions.
+  final Widget? extra;
+
+  /// Rendered full width, in order, primary first.
+  final List<Widget> actions;
+
+  const ExamDialogShell({
+    super.key,
+    required this.icon,
+    required this.accent,
+    required this.title,
+    required this.message,
+    this.extra,
+    required this.actions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.white,
+      elevation: 0,
+      insetPadding: const EdgeInsets.symmetric(
+        horizontal: AppSizes.paddingL,
+        vertical: AppSizes.paddingXL,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSizes.paddingL,
+            AppSizes.paddingL,
+            AppSizes.paddingL,
+            AppSizes.paddingM,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: accent.withValues(alpha: 0.08),
+                ),
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: accent.withValues(alpha: 0.14),
+                  ),
+                  child: Icon(icon, size: 26, color: accent),
+                ),
+              ),
+              const SizedBox(height: AppSizes.paddingM),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: AppTypography.bodyTextXtraLargeSemiBold.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: AppTypography.bodyTextMedium.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+              if (extra != null) ...[
+                const SizedBox(height: AppSizes.paddingM),
+                extra!,
+              ],
+              const SizedBox(height: AppSizes.paddingL),
+              for (var i = 0; i < actions.length; i++) ...[
+                if (i > 0) const SizedBox(height: 8),
+                SizedBox(width: double.infinity, child: actions[i]),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Filled pill action for [ExamDialogShell].
+class ExamDialogAction extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final Color? color;
+  final VoidCallback onPressed;
+
+  const ExamDialogAction({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final background = color ?? AppColors.primary;
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: background,
+        foregroundColor: AppColors.alwaysWhite,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 19, color: AppColors.alwaysWhite),
+            const SizedBox(width: 8),
+          ],
+          Text(
+            label,
+            style: AppTypography.bodyTextLargeSemiBold.copyWith(
+              color: AppColors.alwaysWhite,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Quiet secondary action for [ExamDialogShell].
+class ExamDialogGhostAction extends StatelessWidget {
+  final String label;
+  final VoidCallback onPressed;
+
+  const ExamDialogGhostAction({
+    super.key,
+    required this.label,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: AppColors.textSecondary,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
+        ),
+      ),
+      child: Text(
+        label,
+        style: AppTypography.bodyTextLargeSemiBold.copyWith(
+          color: AppColors.textSecondary,
+        ),
+      ),
+    );
+  }
+}

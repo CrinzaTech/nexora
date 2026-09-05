@@ -74,17 +74,42 @@ class DeviceService {
     // 1. In-memory cache
     if (_cachedId != null) return _cachedId!;
 
-    // 2. Previously stored value (survives app restarts)
-    final stored = await _storage.read(key: _kDeviceIdKey);
+    // 2. Previously stored value (survives app restarts).
+    //
+    // On Android this reads an EncryptedSharedPreferences file backed by a
+    // Keystore key. That file can be restored by Android's app-data auto
+    // backup while the hardware Keystore key it was encrypted with cannot
+    // (Keystore keys never leave the device) — after a backup/restore
+    // mismatch (e.g. reinstalling on a device that still has an old cloud
+    // backup) decrypting throws a PlatformException forever, on every call,
+    // even across reinstalls. Treat that as "no stored value" instead of
+    // letting it crash the caller (e.g. the send-OTP flow).
+    String? stored;
+    try {
+      stored = await _storage.read(key: _kDeviceIdKey);
+    } catch (_) {
+      try {
+        await _storage.delete(key: _kDeviceIdKey);
+      } catch (_) {
+        // Deleting the corrupted entry can itself throw — ignore, we still
+        // fall through to resolving a fresh ID below.
+      }
+    }
     if (stored != null && stored.isNotEmpty) {
       _cachedId = stored;
       return _cachedId!;
     }
 
-    // 3. First-ever call — resolve from the OS and freeze in storage
+    // 3. First-ever call (or recovering from a corrupted store) — resolve
+    // from the OS and freeze in storage.
     final fresh = await _resolveFromOs();
     _cachedId = fresh;
-    await _storage.write(key: _kDeviceIdKey, value: fresh);
+    try {
+      await _storage.write(key: _kDeviceIdKey, value: fresh);
+    } catch (_) {
+      // Persisting is best-effort — the OTP flow must not fail just because
+      // the device couldn't cache this value; it'll retry next call.
+    }
     return _cachedId!;
   }
 

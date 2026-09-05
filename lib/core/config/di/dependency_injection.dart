@@ -29,6 +29,8 @@ import 'package:nexora/features/courses/domain/usecases/get_live_class_playback_
 import 'package:nexora/features/courses/domain/usecases/get_stream_token_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/get_live_class_chat_usecase.dart';
 import 'package:nexora/features/courses/data/services/live_class_audio_service.dart';
+import 'package:nexora/features/courses/data/services/live_status_probe.dart';
+import 'package:nexora/features/courses/domain/usecases/get_live_class_polls_usecase.dart';
 import 'package:nexora/core/services/content_completion_service.dart';
 import 'package:nexora/features/courses/domain/usecases/get_course_pricing_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/get_course_categories_usecase.dart';
@@ -46,7 +48,10 @@ import 'package:nexora/features/courses/presentation/bloc/course_list_cubit.dart
 import 'package:nexora/features/courses/presentation/bloc/course_reviews_cubit.dart';
 import 'package:nexora/features/courses/presentation/bloc/course_filters_cubit.dart';
 import 'package:nexora/features/courses/presentation/bloc/live_class_cubit.dart';
-import 'package:nexora/features/courses/presentation/bloc/live_now_cubit.dart';
+import 'package:nexora/features/home_live/data/repositories/home_live_repository_impl.dart';
+import 'package:nexora/features/home_live/domain/repositories/home_live_repository.dart';
+import 'package:nexora/features/home_live/domain/usecases/get_home_live_sessions_usecase.dart';
+import 'package:nexora/features/home_live/presentation/bloc/home_live_cubit.dart';
 import 'package:nexora/features/courses/presentation/bloc/search_courses_cubit.dart';
 import 'package:nexora/features/chats/data/repositories/chat_group_repository_impl.dart';
 import 'package:nexora/features/chats/data/services/chat_token_provider.dart';
@@ -59,6 +64,7 @@ import 'package:nexora/features/direct_chat/domain/repositories/direct_chat_repo
 import 'package:nexora/features/direct_chat/presentation/bloc/direct_inbox_cubit.dart';
 import 'package:nexora/features/auth/data/repositories/org_code_repository_impl.dart';
 import 'package:nexora/features/auth/data/repositories/otp_repository_impl.dart';
+import 'package:nexora/features/auth/data/services/google_account_picker_service.dart';
 import 'package:nexora/features/auth/domain/repositories/org_code_repository.dart';
 import 'package:nexora/features/auth/domain/repositories/otp_repository.dart';
 import 'package:nexora/features/auth/domain/usecases/resend_otp_usecase.dart';
@@ -196,6 +202,10 @@ Future<void> setupLocator() async {
   sl.registerLazySingleton(() => GetLiveClassPlaybackUseCase(sl()));
   sl.registerLazySingleton(() => GetStreamTokenUseCase(sl()));
   sl.registerLazySingleton(() => GetLiveClassChatUseCase(sl()));
+  sl.registerLazySingleton(() => GetLiveClassPollsUseCase(sl()));
+  // Singleton — one shared "is this room actually broadcasting?" cache
+  // for every curriculum row's LIVE NOW badge.
+  sl.registerLazySingleton(() => LiveStatusProbe(sl()));
   // Audio-only LiveKit wrapper — one live turn per instance, so a
   // factory (fresh per cubit / per speak session).
   sl.registerFactory(() => LiveClassAudioService());
@@ -228,12 +238,6 @@ Future<void> setupLocator() async {
     () => ContinueCoursesCubit(getContinueCoursesUseCase: sl()),
   );
   sl.registerFactory(
-    () => LiveNowCubit(
-      getMyCoursesUseCase: sl(),
-      getCourseDetailUseCase: sl(),
-    ),
-  );
-  sl.registerFactory(
     () => MyCoursesCubit(getMyCoursesUseCase: sl(), rewatchCourseUseCase: sl()),
   );
   sl.registerFactory(() => SearchCoursesCubit(getCourseCatalogUseCase: sl()));
@@ -243,6 +247,7 @@ Future<void> setupLocator() async {
       getLiveClassPlaybackUseCase: sl(),
       getStreamTokenUseCase: sl(),
       getLiveClassChatUseCase: sl(),
+      getLiveClassPollsUseCase: sl(),
       audioService: sl(),
       sessionService: sl<SessionService>(),
     ),
@@ -314,6 +319,7 @@ Future<void> setupLocator() async {
   sl.registerLazySingleton<OrgCodeRepository>(
     () => OrgCodeRepositoryImpl(sl<ApiClient>()),
   );
+  sl.registerLazySingleton(() => GoogleAccountPickerService());
 
   // Use Cases — v1
   sl.registerLazySingleton(() => SendOtpUseCase(sl()));
@@ -465,9 +471,7 @@ Future<void> setupLocator() async {
   );
   sl.registerLazySingleton(() => GetCompletedCoursesUseCase(sl()));
   sl.registerLazySingleton(() => DownloadCertificateUseCase(sl()));
-  sl.registerFactory(
-    () => CertificateCubit(getCompletedCoursesUseCase: sl()),
-  );
+  sl.registerFactory(() => CertificateCubit(getCompletedCoursesUseCase: sl()));
 
   // ============================================
   // FEATURES - WEBINARS
@@ -480,9 +484,14 @@ Future<void> setupLocator() async {
   // Factories, not singletons: the Dashboard owns one WebinarsCubit for
   // the Home rail while the "View All" page pages through its own.
   sl.registerFactory(() => WebinarsCubit(getWebinarsUseCase: sl()));
-  sl.registerFactory(
-    () => WebinarDetailCubit(getWebinarDetailUseCase: sl()),
+  // Home "Live classes" rail — same shape as the webinar rail: repository
+  // + use case as singletons, one cubit per Dashboard.
+  sl.registerLazySingleton<HomeLiveRepository>(
+    () => HomeLiveRepositoryImpl(sl<ApiClient>()),
   );
+  sl.registerLazySingleton(() => GetHomeLiveSessionsUseCase(sl()));
+  sl.registerFactory(() => HomeLiveCubit(getHomeLiveSessionsUseCase: sl()));
+  sl.registerFactory(() => WebinarDetailCubit(getWebinarDetailUseCase: sl()));
   // A3–A7 — the room. Joining is a plain authenticated call here: in the
   // app the learner already has an account, so there is no registration
   // step and no webinar-scoped token to manage.
@@ -537,16 +546,12 @@ Future<void> setupLocator() async {
   sl.registerLazySingleton(() => DownloadWorkshopPassUseCase(sl()));
   // Factory: one cubit per open pass screen, so two workshops opened
   // back to back never share a ticket.
-  sl.registerFactory(
-    () => WorkshopPassCubit(getWorkshopPassUseCase: sl()),
-  );
+  sl.registerFactory(() => WorkshopPassCubit(getWorkshopPassUseCase: sl()));
   // My Bookings. Shares the pass repository because it is the same API
   // family: this list is what makes a pass reachable once the app is no
   // longer holding the slug from the purchase that issued it.
   sl.registerLazySingleton(() => GetMyWebinarsUseCase(sl()));
-  sl.registerFactory(
-    () => MyWebinarsCubit(getMyWebinarsUseCase: sl()),
-  );
+  sl.registerFactory(() => MyWebinarsCubit(getMyWebinarsUseCase: sl()));
 
   // ============================================
   // EXTERNAL

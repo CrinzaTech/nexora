@@ -10,7 +10,6 @@ import 'package:nexora/core/theme/branding_config.dart';
 import 'package:nexora/core/theme/responsive_helper.dart';
 import 'package:nexora/core/utils/utils.dart';
 import 'package:nexora/core/widgets/custom_action_button.dart';
-import 'package:nexora/core/widgets/custom_network_image.dart';
 import 'package:nexora/core/widgets/shine_sweep.dart';
 import 'package:nexora/core/widgets/profile_image_viewer.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
@@ -19,7 +18,8 @@ import 'package:nexora/features/courses/presentation/widgets/view_demo_buy_now_r
 import 'package:nexora/features/home/data/models/home_model.dart';
 import 'package:nexora/core/widgets/scrolling_title.dart';
 import 'package:nexora/features/home/presentation/bloc/home_cubit.dart';
-import 'package:nexora/features/home/presentation/widgets/live_class_section_widget.dart';
+import 'package:nexora/features/home_live/presentation/bloc/home_live_cubit.dart';
+import 'package:nexora/features/home_live/presentation/widgets/home_live_section_widget.dart';
 import 'package:nexora/features/home/presentation/widgets/banner_widget.dart';
 import 'package:nexora/features/home/presentation/widgets/category_section_widget.dart';
 import 'package:nexora/features/home/presentation/widgets/featured_courses_widget.dart';
@@ -34,6 +34,7 @@ import 'package:nexora/core/theme/app_decorations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:nexora/features/courses/presentation/widgets/course_cover.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -173,6 +174,7 @@ class _HomePageState extends State<HomePage>
               onRefresh: () => Future.wait([
                 context.read<HomeCubit>().silentRefresh(),
                 context.read<ContinueCoursesCubit>().silentRefresh(),
+                context.read<HomeLiveCubit>().silentRefresh(),
                 context.read<WebinarsCubit>().silentRefresh(),
               ]),
               child: SingleChildScrollView(
@@ -358,13 +360,12 @@ class _HomePageState extends State<HomePage>
                                 BannerSection(banners: dashboard.banner),
                                 // Top of the page for the same reason the
                                 // webinar rail is near it, only more so: a
-                                // class the learner has already paid for,
-                                // on air this second, is the one thing
-                                // here they lose by not seeing. Costs no
-                                // request — it reads the Continue Learning
-                                // list Home already holds — and collapses
-                                // to nothing when none are live.
-                                const LiveClassSectionWidget(),
+                                // course class on air this second is the
+                                // one thing here they lose by not seeing.
+                                // Served by its own endpoint (the educator
+                                // decides per class who sees it), and it
+                                // collapses to nothing when there are none.
+                                const HomeLiveSectionWidget(),
                                 // Above the course rails on purpose: a
                                 // webinar is time-bound, and one that is
                                 // live right now is the most perishable
@@ -1108,22 +1109,10 @@ class _ContinuePurchaseCard extends StatelessWidget {
                     flex: 45,
                     child: Padding(
                       padding: const EdgeInsets.all(6.0),
-                      child: ClipRRect(
+                      child: CourseCoverImage(
+                        url: course.courseImageUrl,
                         borderRadius: BorderRadius.circular(9),
-                        child: CustomNetworkImage(
-                          url: course.courseImageUrl,
-                          borderRadius: BorderRadius.zero,
-                          fit: BoxFit.cover,
-                          errorWidget: Container(
-                            color: AppColors.grey100,
-                            alignment: Alignment.center,
-                            child: Icon(
-                              Icons.image_outlined,
-                              color: AppColors.grey400,
-                              size: 26,
-                            ),
-                          ),
-                        ),
+                        fallbackIconSize: 26,
                       ),
                     ),
                   ),

@@ -2,7 +2,7 @@ import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_theme.dart';
 import 'package:nexora/core/theme/responsive_helper.dart';
 import 'package:nexora/core/utils/utils.dart';
-import 'package:nexora/core/widgets/custom_network_image.dart';
+import 'package:nexora/features/courses/presentation/widgets/course_cover.dart';
 import 'package:nexora/core/widgets/rating_and_review_row_widget.dart';
 import 'package:nexora/core/theme/app_decorations.dart';
 import 'package:flutter/material.dart';
@@ -179,20 +179,14 @@ class _CourseCard extends StatelessWidget {
             // ── Course image + optional NEW badge ──────────────────
             Stack(
               children: [
-                // AspectRatio(16:9) so the image fills its frame fully
-                // regardless of the original upload dimensions.
+                // A 16:9 frame the banner is fitted *inside* of — see
+                // [CourseCoverImage]. Cropping to fill used to cut the
+                // edges off whatever the educator uploaded.
                 AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: CustomNetworkImage(
+                  child: CourseCoverImage(
                     url: course.courseImageUrl,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
                     borderRadius: BorderRadius.circular(AppSizes.radiusM),
-                    errorWidget: Container(
-                      color: AppColors.grey100,
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.image_not_supported_outlined),
-                    ),
                   ),
                 ),
 

@@ -4,9 +4,9 @@ import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_action_button.dart';
-import 'package:nexora/core/widgets/custom_text_form_field.dart';
 import 'package:nexora/features/auth/presentation/pages/login_page.dart'
     show LoginMode;
+import 'package:nexora/features/auth/presentation/widgets/google_email_picker_field.dart';
 import 'package:nexora/features/auth/presentation/widgets/phone_input_field.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -30,6 +30,7 @@ class LoginFormContent extends StatelessWidget {
     required this.onCountrySelected,
     required this.onToggleMode,
     required this.onSendOTPPressed,
+    required this.onGooglePickEmailPressed,
   });
 
   final GlobalKey<FormState> formKey;
@@ -45,7 +46,15 @@ class LoginFormContent extends StatelessWidget {
   /// this and clears [isLoading] in its `finally` block.
   final Future<void> Function() onSendOTPPressed;
 
+  /// Async — called when the user taps "Continue with Google" (or
+  /// "Change" on an already-picked email). The page opens the native
+  /// account picker and fills [emailController] with the result;
+  /// sending the OTP is a separate "Send OTP" tap.
+  final Future<void> Function() onGooglePickEmailPressed;
+
   bool get _isPhone => mode == LoginMode.phone;
+
+  bool get _hasSelectedEmail => emailController.text.trim().isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -104,32 +113,22 @@ class LoginFormContent extends StatelessWidget {
                             ),
                           ],
                         ),
-                        // Mode-driven input — PhoneInputField for phone,
-                        // CustomTextFormField (with email validation) for
-                        // email. Same outer geometry both sides so the
-                        // surrounding form layout doesn't shift on toggle.
+                        // Mode-driven input — PhoneInputField for phone;
+                        // email has no typed field at all, only a Google
+                        // account picker, so there's no typo-prone free
+                        // text entry on that path. Same outer geometry
+                        // both sides so the layout doesn't shift on toggle.
                         if (_isPhone)
-                          PhoneInputField(controller: phoneController)
+                          PhoneInputField(
+                            controller: phoneController,
+                            initialCountry: selectedCountry,
+                            onCountryChanged: onCountrySelected,
+                          )
                         else
-                          Padding(
-                            padding: Screen.getPadding(horizontal: 8),
-                            child: CustomTextFormField(
-                              controller: emailController,
-
-                              hintText: 'Enter your email address',
-                              keyboardType: TextInputType.emailAddress,
-                              validator: (value) {
-                                final v = value?.trim() ?? '';
-                                if (v.isEmpty) {
-                                  return 'Please enter your email';
-                                }
-                                final ok = RegExp(
-                                  r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-                                ).hasMatch(v);
-                                if (!ok) return 'Enter a valid email';
-                                return null;
-                              },
-                            ),
+                          GoogleEmailPickerField(
+                            email: emailController.text,
+                            isLoading: isLoading,
+                            onPick: onGooglePickEmailPressed,
                           ),
                         Row(
                           children: [
@@ -235,13 +234,18 @@ class LoginFormContent extends StatelessWidget {
                             // isLoading disables the button while the
                             // OTP request is in-flight so the user can't
                             // double-tap and trigger duplicate API calls.
-                            onTap: isLoading
-                                ? (s, e, _) {} // no-op while loading
+                            // In email mode there's no field to validate
+                            // on tap anymore, so the button itself stays
+                            // disabled until a Google account is picked.
+                            onTap:
+                                (isLoading || (!_isPhone && !_hasSelectedEmail))
+                                ? (s, e, _) {} // no-op
                                 : (startLoading, stopLoading, _) {
                                     onSendOTPPressed();
                                   },
                             name: "Send OTP",
-                            isFormFilled: !isLoading,
+                            isFormFilled:
+                                !isLoading && (_isPhone || _hasSelectedEmail),
                             buttonHeight: Screen.getVerticalSize(48),
                           ),
                         ),

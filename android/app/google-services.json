@@ -12,7 +12,28 @@
           "package_name": "co.diy7.pvdca"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "592458511076-a8agtahaoqqg0mc4lbq7bb1539aavtjo.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "co.diy7.pvdca",
+            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
+          }
+        },
+        {
+          "client_id": "592458511076-grsgiu7pld0evtncvtcnv26eqgoisu05.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "co.diy7.pvdca",
+            "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
@@ -20,7 +41,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
         }
       }
     },
@@ -31,7 +64,28 @@
           "package_name": "com.crinesta.crinza"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "592458511076-274if6fnf6t3v61rie1guq78b0k2icp4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.crinesta.crinza",
+            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
+          }
+        },
+        {
+          "client_id": "592458511076-gi75kqrbooeqo5b5dsd3tt14g5dhf7sb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.crinesta.crinza",
+            "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
@@ -39,7 +93,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
         }
       }
     },
@@ -50,7 +116,12 @@
           "package_name": "com.crinesta.crinza.v2"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
@@ -58,7 +129,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
         }
       }
     },
@@ -69,7 +152,12 @@
           "package_name": "com.crinesta.crinza.v3"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
@@ -77,7 +165,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
         }
       }
     },
@@ -88,7 +188,28 @@
           "package_name": "com.crinesta.dvr"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "592458511076-5sr37t6nv7iqbvo2bqltr6tc8inod04t.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.crinesta.dvr",
+            "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-hdnamo23isn7hm4a1aquc726aq7vfquo.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.crinesta.dvr",
+            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
+          }
+        },
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
@@ -96,7 +217,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
         }
       }
     },
@@ -107,7 +240,28 @@
           "package_name": "com.dy.nic"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "592458511076-a2j5psfk86hunmpq7l114oclejl8751t.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.dy.nic",
+            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
+          }
+        },
+        {
+          "client_id": "592458511076-d7qgd7u2erv62i2m9uh6mdstvn6ai3o2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.dy.nic",
+            "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
@@ -115,7 +269,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
         }
       }
     },
@@ -126,7 +292,28 @@
           "package_name": "com.nex.ora"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "592458511076-hnk53afrd7b65f7tm6jcrss0mbimv09k.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nex.ora",
+            "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-s1268qhq31dgle70416nqjeqd2gbmst3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nex.ora",
+            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
+          }
+        },
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
@@ -134,7 +321,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
         }
       }
     },
@@ -145,7 +344,28 @@
           "package_name": "com.prash.academy"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "592458511076-d0r7lu8odujl9j00v39h7v1fucd4hjqb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.prash.academy",
+            "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-lii8fs9k5heoi6n1suvcn5k699d90s54.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.prash.academy",
+            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
+          }
+        },
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
@@ -153,7 +373,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
         }
       }
     },
@@ -164,7 +396,28 @@
           "package_name": "com.prime.anjaneya"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "592458511076-tr1ddq7mmie1dhl8llvplrbsp9ca6pme.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.prime.anjaneya",
+            "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-uo7kutd3h4mm0kvi35na79q1tp61qlh8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.prime.anjaneya",
+            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
+          }
+        },
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
@@ -172,7 +425,71 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:c3fd67a26a7ef9ff0f32f1",
+        "android_client_info": {
+          "package_name": "com.sk.ady"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "592458511076-kfevuo23v2sjvrpgefc3rmv32a9cpuvi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sk.ady",
+            "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-v4kd0dl8p22dhb4sv1b4p8dvt1k9u5j7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sk.ady",
+            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
+          }
+        },
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
         }
       }
     },
@@ -183,7 +500,28 @@
           "package_name": "com.sl.gr"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "592458511076-tbogoh8vslouupl537okgl1os1qkn2s6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sl.gr",
+            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
+          }
+        },
+        {
+          "client_id": "592458511076-uipun5n0vvfanl48ub16r5seu7j4da62.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sl.gr",
+            "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
@@ -191,7 +529,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
         }
       }
     },
@@ -202,7 +552,28 @@
           "package_name": "com.studybae.academy"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "592458511076-2ktlkncr18p0r8q1me84a9kdmnuc94k4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.studybae.academy",
+            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
+          }
+        },
+        {
+          "client_id": "592458511076-i62ct077nnfvkn92u1duq9epu5aguhlv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.studybae.academy",
+            "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
@@ -210,7 +581,71 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:54316cd3d094cfae0f32f1",
+        "android_client_info": {
+          "package_name": "com.the.ngmy"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "592458511076-4s79v04ch8nprmijd7o8igsg28hhn6dg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.the.ngmy",
+            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
+          }
+        },
+        {
+          "client_id": "592458511076-4t69790ami8otc2vvivvq55edqnhd3nk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.the.ngmy",
+            "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
         }
       }
     },
@@ -221,7 +656,28 @@
           "package_name": "com.vtc.ady"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "592458511076-bh49o3u8j16v9g680bvpalkt2pdto5bh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.vtc.ady",
+            "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-pklq230loku8iproqtjhae5kqi4auqb7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.vtc.ady",
+            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
+          }
+        },
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
@@ -229,7 +685,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
         }
       }
     }

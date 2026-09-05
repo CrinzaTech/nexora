@@ -22,7 +22,7 @@ import 'package:nexora/features/exam/presentation/pages/exam_page.dart';
 import 'package:nexora/features/courses/presentation/pages/folder_content_page.dart';
 import 'package:nexora/features/courses/presentation/pages/pdf_viewer_page.dart';
 import 'package:nexora/features/courses/presentation/pages/image_viewer_page.dart';
-import 'package:nexora/features/courses/presentation/bloc/live_now_cubit.dart';
+import 'package:nexora/features/home_live/presentation/bloc/home_live_cubit.dart';
 import 'package:nexora/features/courses/presentation/pages/live_class_page.dart';
 import 'package:nexora/features/courses/presentation/pages/video_player_page.dart';
 import 'package:nexora/features/courses/presentation/folder_navigation_cache.dart';
@@ -197,7 +197,7 @@ class AppRouter {
             BlocProvider(create: (_) => sl<HomeCubit>()),
             BlocProvider(create: (_) => sl<ContinueCoursesCubit>()..load()),
             BlocProvider(create: (_) => sl<WebinarsCubit>()..load()),
-            BlocProvider(create: (_) => sl<LiveNowCubit>()..load()),
+            BlocProvider(create: (_) => sl<HomeLiveCubit>()..load()),
           ],
           child: const HomePage(),
         ),
@@ -262,10 +262,22 @@ class AppRouter {
           // Optional title hint (e.g. ctaName from a banner tap).
           // Displayed immediately in the AppBar while the API loads.
           final courseTitle = state.uri.queryParameters['title'];
+          // From the Home "Live classes" rail: land on Content with the
+          // live-class node highlighted, walking into its folder first
+          // when it is nested. Never opens the player.
+          final q = state.uri.queryParameters;
+          final parents = (q['parents'] ?? '')
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList(growable: false);
           return CourseDetailPage(
             courseId: courseId,
             courseTitle: courseTitle,
-            initialTabIndex: _courseTabIndex(state.uri.queryParameters['tab']),
+            initialTabIndex: _courseTabIndex(q['tab']),
+            focusNodeId: q['nodeId'],
+            focusRoomId: q['roomId'],
+            focusParentNodeIds: parents,
           );
         },
       ),
@@ -299,6 +311,7 @@ class AppRouter {
             courseId: courseId,
             coursePurchasedId: coursePurchasedId,
             activateWatermark: activateWatermark,
+            focusNodeId: state.uri.queryParameters['focusNodeId'],
           );
         },
       ),

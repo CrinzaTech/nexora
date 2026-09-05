@@ -67,6 +67,11 @@ class ExamCubit extends SafeCubit<ExamState> {
   /// Flat questionId → type map for every answerable question in the paper.
   final Map<int, ExamQuestionType> _questionTypes = {};
 
+  /// Top-level question ids the student pinned to come back to. Lives only
+  /// here: pins are a study aid, never part of the graded submission, so
+  /// nothing about them reaches the server.
+  final Set<int> _pinned = {};
+
   Timer? _autosaveTimer;
   bool _dirty = false;
   bool _autosaveStopped = false;
@@ -185,6 +190,7 @@ class ExamCubit extends SafeCubit<ExamState> {
   void _hydrateAnswers(ExamPaperResponse paper) {
     _answers.clear();
     _questionTypes.clear();
+    _pinned.clear();
     for (final q in paper.allQuestions) {
       _indexQuestion(q);
     }
@@ -310,6 +316,21 @@ class ExamCubit extends SafeCubit<ExamState> {
     _emitTaking();
   }
 
+  /// Pin / unpin a question for later review. Normal mode only — the
+  /// competitive flow never reaches [ExamState.taking].
+  void togglePin(int questionId) {
+    if (!_pinned.remove(questionId)) _pinned.add(questionId);
+    _emitTaking();
+  }
+
+  /// Drop every pin at once — used when the student chooses to submit with
+  /// pinned questions still outstanding.
+  void clearPins() {
+    if (_pinned.isEmpty) return;
+    _pinned.clear();
+    _emitTaking();
+  }
+
   void _emitTaking() {
     final paper = _paper;
     if (paper == null) return;
@@ -319,6 +340,7 @@ class ExamCubit extends SafeCubit<ExamState> {
         answers: Map<int, ExamAnswerDraft>.from(_answers),
         deadlineUtc: _deadlineUtc,
         autosaveStopped: _autosaveStopped,
+        pinnedQuestionIds: Set<int>.from(_pinned),
       ),
     );
   }

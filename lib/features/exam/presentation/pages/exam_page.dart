@@ -10,6 +10,7 @@ import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/core/widgets/custom_appbar_widget.dart';
 import 'package:nexora/features/exam/presentation/bloc/exam_cubit.dart';
 import 'package:nexora/features/exam/data/models/exam_models.dart';
+import 'package:nexora/features/exam/presentation/widgets/exam_atoms.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_calculator.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_competitive_view.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_countdown.dart';
@@ -61,7 +62,7 @@ class ExamPage extends StatelessWidget {
         listenWhen: (prev, curr) => prev.runtimeType != curr.runtimeType,
         listener: (context, state) {
           final started = state.maybeWhen(
-            taking: (_, __, ___, ____) => true,
+            taking: (_, __, ___, ____, _____) => true,
             competitiveQuestion: (_, __, ___, ____) => true,
             sectionTransition: (_, __, ___, ____) => true,
             orElse: () => false,
@@ -107,7 +108,7 @@ class _ExamViewState extends State<_ExamView> {
         // Any "in the middle of the exam" state where an accidental back
         // should be guarded.
         final isTaking = state.maybeWhen(
-          taking: (_, __, ___, ____) => true,
+          taking: (_, __, ___, ____, _____) => true,
           competitiveQuestion: (_, __, ___, ____) => true,
           sectionTransition: (_, __, ___, ____) => true,
           orElse: () => false,
@@ -118,7 +119,7 @@ class _ExamViewState extends State<_ExamView> {
         // mode re-fetches it with every question. Assigned during build
         // (no setState) because it is consumed by this same build.
         state.maybeWhen(
-          taking: (paper, _, __, ___) {
+          taking: (paper, _, __, ___, ____) {
             _calculatorAllowed = paper.allowCalculator;
             _calculatorType = paper.calculatorType;
           },
@@ -144,7 +145,7 @@ class _ExamViewState extends State<_ExamView> {
             appBar: CustomAppBar(
               title: state.maybeWhen(
                 gate: (g) => g.examTitle,
-                taking: (paper, _, __, ___) => paper.examTitle,
+                taking: (paper, _, __, ___, ____) => paper.examTitle,
                 competitiveQuestion: (data, _, __, ___) => data.examTitle,
                 result: (r) => r.examTitle,
                 orElse: () => 'Exam',
@@ -163,7 +164,7 @@ class _ExamViewState extends State<_ExamView> {
               actions: [
                 () {
                   final deadline = state.maybeWhen(
-                    taking: (_, __, d, ___) => d,
+                    taking: (_, __, d, ___, ____) => d,
                     competitiveQuestion: (_, __, d, ___) => d,
                     sectionTransition: (_, __, d, ___) => d,
                     orElse: () => null,
@@ -219,11 +220,14 @@ class _ExamViewState extends State<_ExamView> {
         title: 'Not available in the app',
         message: reason,
       ),
-      taking: (paper, answers, deadline, stopped) => ExamPaperView(
+      taking: (paper, answers, deadline, stopped, pinned) => ExamPaperView(
         paper: paper,
         answers: answers,
         autosaveStopped: stopped,
+        pinnedQuestionIds: pinned,
         onUpdateAnswer: cubit.updateAnswer,
+        onTogglePin: cubit.togglePin,
+        onClearPins: cubit.clearPins,
         onSubmit: () => cubit.submit(autoSubmitted: false),
       ),
       competitiveQuestion: (data, draft, deadline, submitting) =>
@@ -259,33 +263,23 @@ class _ExamViewState extends State<_ExamView> {
   Future<bool?> _confirmLeave(BuildContext context) {
     return showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusL),
-        ),
-        title: Text(
-          'Leave exam?',
-          style: AppTypography.bodyTextXtraLargeSemiBold,
-        ),
-        content: Text(
-          'Your answers are saved automatically, but the timer keeps running. '
-          'You can resume from where you left off.',
-          style: AppTypography.bodyTextMedium.copyWith(
-            color: AppColors.textSecondary,
-          ),
-        ),
+      barrierColor: AppColors.overlayMedium,
+      builder: (ctx) => ExamDialogShell(
+        icon: Icons.logout_rounded,
+        accent: AppColors.error,
+        title: 'Leave exam?',
+        message:
+            'Your answers are saved automatically, but the timer keeps '
+            'running. You can resume from where you left off.',
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Stay'),
-          ),
-          ElevatedButton(
+          ExamDialogAction(
+            label: 'Leave exam',
+            color: AppColors.error,
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: AppColors.alwaysWhite,
-            ),
-            child: const Text('Leave'),
+          ),
+          ExamDialogGhostAction(
+            label: 'Stay',
+            onPressed: () => Navigator.of(ctx).pop(false),
           ),
         ],
       ),
