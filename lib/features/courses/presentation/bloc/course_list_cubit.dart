@@ -349,18 +349,31 @@ class CourseListCubit extends SafeCubit<CourseListState> {
 
   void reset() => emit(const CourseListState.initial());
 
-  updatePurchasedStatus(int courseId, bool isPurchased) {
+  /// Flips the purchased flag for one course after an enrolment, in the
+  /// paging buffer as well as the emitted state.
+  ///
+  /// The buffer write-back is the half that matters. Every other emit in
+  /// this cubit rebuilds the list from [_courses], so an update that only
+  /// touched the emitted state was silently undone by the next emit —
+  /// and on the catalog that comes almost immediately: the scroll
+  /// listener fires `loadNextPage` whenever the list is within 200px of
+  /// the bottom, which a short list already is. The card flipped back to
+  /// its "Buy Now" / "Get Free Access" CTA a beat after the purchase
+  /// succeeded, which read as the purchase not registering at all.
+  void updatePurchasedStatus(int courseId, bool isPurchased) {
+    var changed = false;
+    for (var i = 0; i < _courses.length; i++) {
+      if (_courses[i].courseId != courseId) continue;
+      if (_courses[i].isPurchased == isPurchased) continue;
+      _courses[i] = _courses[i].copyWith(isPurchased: isPurchased);
+      changed = true;
+    }
+    if (!changed) return;
     state.maybeWhen(
       orElse: () {},
       loaded: (courses, hasMore, currentPage, isLoadingMore) {
-        final updatedCourses = courses.map((course) {
-          if (course.courseId == courseId) {
-            return course.copyWith(isPurchased: isPurchased);
-          }
-          return course;
-        }).toList();
         emit(CourseListState.loaded(
-          updatedCourses,
+          List.from(_courses),
           hasMoreData: hasMore,
           currentPage: currentPage,
           isLoadingMore: isLoadingMore,

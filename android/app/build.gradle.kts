@@ -43,7 +43,7 @@ android {
 
     defaultConfig {
         // Todo: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.nex.ora"
+        applicationId = "co.nex.ora"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

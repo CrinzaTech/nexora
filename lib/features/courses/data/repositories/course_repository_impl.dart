@@ -7,12 +7,14 @@ import 'package:nexora/core/network/network_exception_mapper.dart';
 import 'package:nexora/features/courses/data/models/course_filter_models.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/data/models/live_class_models.dart';
+import 'package:nexora/features/courses/data/services/free_course_registry.dart';
 import 'package:nexora/features/courses/domain/repositories/course_repository.dart';
 
 class CourseRepositoryImpl implements CourseRepository {
   final ApiClient _apiClient;
+  final FreeCourseRegistry _freeCourseRegistry;
 
-  CourseRepositoryImpl(this._apiClient);
+  CourseRepositoryImpl(this._apiClient, this._freeCourseRegistry);
 
 
 
@@ -339,6 +341,15 @@ class CourseRepositoryImpl implements CourseRepository {
     CatalogSortBy? sortBy,
   }) async {
     try {
+      final normalisedType = courseType?.toLowerCase().trim();
+      // The catalog rows carry no price or free-marker, so the free ids
+      // are resolved alongside the page rather than after it — the two
+      // requests overlap instead of stacking their latency. Skipped when
+      // the caller already filtered to free courses (every row is free)
+      // or to paid ones (no row is).
+      final freeIdsFuture = normalisedType == null
+          ? _freeCourseRegistry.freeCourseIds()
+          : Future.value(const <int>{});
       final json = await _apiClient.getCourseCatalog(
         pageNo: pageNo,
         searchQuery: searchQuery,
@@ -348,12 +359,53 @@ class CourseRepositoryImpl implements CourseRepository {
         courseStatusType: courseStatusType,
         sortBy: sortBy?.apiValue,
       );
-      return Right(CourseCatalogResponse.fromJson(json));
+      final response = CourseCatalogResponse.fromJson(json);
+      // Once the backend ships `isCourseFree` on catalog rows, every
+      // row answers for itself and the id lookup is pure waste — so the
+      // first page that comes back fully marked switches it off for the
+      // rest of the session.
+      if (response.courses.isNotEmpty &&
+          response.courses.every((c) => c.hasServerFreeFlag)) {
+        _freeCourseRegistry.markServerAuthoritative();
+      }
+      final freeIds = await freeIdsFuture;
+      return Right(
+        _withFreeFlags(
+          response,
+          allFree: normalisedType == 'free',
+          freeIds: freeIds,
+        ),
+      );
     } on DioException catch (e) {
       return Left(mapDioExceptionToFailure(e));
     } catch (e) {
       return Left(Failure.unknown(message: e.toString()));
     }
+  }
+
+  /// Stamps `isCourseFree` onto rows the catalog payload left unmarked.
+  ///
+  /// A row that carried its own marker is returned untouched — free or
+  /// paid, the server's answer stands. Only rows with no marker at all
+  /// ([CourseSummary.hasServerFreeFlag] `false`) are filled in, from
+  /// the `courseType=free` filter the caller used or from the id set
+  /// [FreeCourseRegistry] resolved.
+  CourseCatalogResponse _withFreeFlags(
+    CourseCatalogResponse response, {
+    required bool allFree,
+    required Set<int> freeIds,
+  }) {
+    if (!allFree && freeIds.isEmpty) return response;
+    return CourseCatalogResponse(
+      courses: response.courses.map((c) {
+        if (c.hasServerFreeFlag) return c;
+        if (!allFree && !freeIds.contains(c.courseId)) return c;
+        return c.copyWith(isCourseFree: true, hasServerFreeFlag: true);
+      }).toList(),
+      totalCount: response.totalCount,
+      pageNo: response.pageNo,
+      totalPages: response.totalPages,
+    );
   }
 
   List<CourseSummary> _parseCourseSummaryList(Map<String, dynamic> json) {

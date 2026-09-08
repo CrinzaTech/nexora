@@ -28,6 +28,7 @@ import 'package:nexora/features/courses/domain/usecases/record_content_completio
 import 'package:nexora/features/courses/domain/usecases/get_live_class_playback_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/get_stream_token_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/get_live_class_chat_usecase.dart';
+import 'package:nexora/features/courses/data/services/free_course_registry.dart';
 import 'package:nexora/features/courses/data/services/live_class_audio_service.dart';
 import 'package:nexora/features/courses/data/services/live_status_probe.dart';
 import 'package:nexora/features/courses/domain/usecases/get_live_class_polls_usecase.dart';
@@ -180,8 +181,12 @@ Future<void> setupLocator() async {
   // FEATURES - COURSES
   // ============================================
   // Repository
+  // Session-scoped cache of "which courses are free?" — the catalog
+  // rows don't say, so the repository stamps the flag on (see
+  // [FreeCourseRegistry]).
+  sl.registerLazySingleton(() => FreeCourseRegistry(sl<ApiClient>()));
   sl.registerLazySingleton<CourseRepository>(
-    () => CourseRepositoryImpl(sl<ApiClient>()),
+    () => CourseRepositoryImpl(sl<ApiClient>(), sl<FreeCourseRegistry>()),
   );
 
   // Use Cases

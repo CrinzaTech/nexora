@@ -444,14 +444,14 @@ const crinestaBranding = BrandingConfig(
 
   headerGradientAngle: 0 ,
   headerGradientDark: false,
-  headerShine: false,
+  headerShine: true,
   
   logo: 'assets/images/logo.png',
   logoWithText: 'assets/images/logo_with_text.png',
   splashBackground: 'assets/images/backgrounds/splash_background.png',
   loginBackground: 'assets/images/backgrounds/login_background.png',
   appName: 'NEXORA',
-  packageName: 'com.nex.ora',
+  packageName: 'co.nex.ora',
   // ── Tile Theme ──────────────────────────────────────────────────
   // Mirrors the values that were previously in .env.
   // Flip any flag here to change the tile visual style at build time.
@@ -462,7 +462,7 @@ const crinestaBranding = BrandingConfig(
   // ── Tile Only-Icon Theme ─────────────────────────────────────────
   tileOnlyIcon: false,
   tile3x3: false,
-  tileBg: false,
+  tileBg: true,
   tileBgDark: false,
   tileOnlyBgCircular: false,
   tileText: false,
@@ -472,7 +472,7 @@ const crinestaBranding = BrandingConfig(
   tileBannerInvert: false,
   tileBannerSquare: false,
   
-  pngBg: false,
+  pngBg: true,
   pngBgDark: false,
 );
 

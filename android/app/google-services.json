@@ -59,6 +59,42 @@
     },
     {
       "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:bc991217bb1cb6480f32f1",
+        "android_client_info": {
+          "package_name": "co.nex.ora"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:592458511076:android:29b15bba6c889f380f32f1",
         "android_client_info": {
           "package_name": "com.crinesta.crinza"
@@ -74,6 +110,14 @@
           }
         },
         {
+          "client_id": "592458511076-4a4rrigjievlvllf9vas14j1jg8p054c.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.crinesta.crinza",
+            "certificate_hash": "888c9ea4269bec4ad678676a6d262952d9af27c8"
+          }
+        },
+        {
           "client_id": "592458511076-gi75kqrbooeqo5b5dsd3tt14g5dhf7sb.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -81,78 +125,6 @@
             "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
           }
         },
-        {
-          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
-              "client_type": 3
-            },
-            {
-              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.crinesta.crinza"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:592458511076:android:13cecfc8d09e4b890f32f1",
-        "android_client_info": {
-          "package_name": "com.crinesta.crinza.v2"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
-              "client_type": 3
-            },
-            {
-              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.crinesta.crinza"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:592458511076:android:a65e96966a3636cb0f32f1",
-        "android_client_info": {
-          "package_name": "com.crinesta.crinza.v3"
-        }
-      },
-      "oauth_client": [
         {
           "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
           "client_type": 3
@@ -287,26 +259,18 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:592458511076:android:9177aa120f4386d10f32f1",
+        "mobilesdk_app_id": "1:592458511076:android:9def3407a8c2bd660f32f1",
         "android_client_info": {
-          "package_name": "com.nex.ora"
+          "package_name": "com.healing.coach"
         }
       },
       "oauth_client": [
         {
-          "client_id": "592458511076-hnk53afrd7b65f7tm6jcrss0mbimv09k.apps.googleusercontent.com",
+          "client_id": "592458511076-9bi63bf3flat79bd6rr1hok3uj2t9t96.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.nex.ora",
+            "package_name": "com.healing.coach",
             "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
-          }
-        },
-        {
-          "client_id": "592458511076-s1268qhq31dgle70416nqjeqd2gbmst3.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.nex.ora",
-            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
           }
         },
         {
@@ -458,6 +422,14 @@
           }
         },
         {
+          "client_id": "592458511076-tq74qjnvv1kd1g8fs4lq06ac8st1quq7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sk.ady",
+            "certificate_hash": "1047de6a62b9eedc7f24be34dcfac53b14346d30"
+          }
+        },
+        {
           "client_id": "592458511076-v4kd0dl8p22dhb4sv1b4p8dvt1k9u5j7.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -501,6 +473,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "592458511076-818jf2b7nk4de9e4iktl9uo7i8cuoqhi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sl.gr",
+            "certificate_hash": "3daa71b45079a025c11d5786f7c4cf4116423488"
+          }
+        },
         {
           "client_id": "592458511076-tbogoh8vslouupl537okgl1os1qkn2s6.apps.googleusercontent.com",
           "client_type": 1,
@@ -562,11 +542,71 @@
           }
         },
         {
+          "client_id": "592458511076-h8vga4ltscvp95tar9ftq5p0cja10ipr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.studybae.academy",
+            "certificate_hash": "6ee40ef64de13f9622b0d2038f487388013cd93b"
+          }
+        },
+        {
           "client_id": "592458511076-i62ct077nnfvkn92u1duq9epu5aguhlv.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.studybae.academy",
             "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMr1zCZeiJVVlwjLzkADfieWEABjVOhJA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "592458511076-3q0q12qs64rl7rhn912ame9rnatj6pte.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.crinesta.crinza"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592458511076:android:5eeb583a2860c6fb0f32f1",
+        "android_client_info": {
+          "package_name": "com.tc.mx"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "592458511076-a0mihl1ij1rl9sjjhv01j5t1llnolofe.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tc.mx",
+            "certificate_hash": "86d11837e9b3c7f4c407808abba5fd106a4b4497"
+          }
+        },
+        {
+          "client_id": "592458511076-n8po2ldok91qblfhskqf8atnuvtmogdo.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tc.mx",
+            "certificate_hash": "47294038fbdeeca4d180f69bcf4c613c669b1f4c"
           }
         },
         {
@@ -622,6 +662,14 @@
           }
         },
         {
+          "client_id": "592458511076-9usa7if014jlusc5onach41o0msmupkp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.the.ngmy",
+            "certificate_hash": "4e4f961d1330fe2fc7fdd3639a356807efc0128d"
+          }
+        },
+        {
           "client_id": "592458511076-il4qr2c1hst8vg6q2t5fj5csoa53ltln.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -657,6 +705,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "592458511076-480skqm6v2odjb60nb9d6bi4af1g2u6u.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.vtc.ady",
+            "certificate_hash": "d0d46d932c022efe7fbf0d4e7ea1a49991c1a81b"
+          }
+        },
         {
           "client_id": "592458511076-bh49o3u8j16v9g680bvpalkt2pdto5bh.apps.googleusercontent.com",
           "client_type": 1,

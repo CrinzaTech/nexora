@@ -105,10 +105,22 @@ class CourseSummary {
   ///
   /// List endpoints ship no price breakdown (that only arrives with the
   /// detail/pricing calls), so this is read defensively off whichever
-  /// free-marker the endpoint happens to send — see [_readIsFree].
+  /// free-marker the endpoint happens to send — see [_resolveIsFree].
   /// Defaults to `false`, which keeps the existing "Buy Now" copy when
   /// the backend sends no marker at all.
   final bool isCourseFree;
+
+  /// `true` when [isCourseFree] came from the payload rather than from
+  /// the `false` default — i.e. the row carried `isCourseFree`,
+  /// `isFree`, `isPaid`, `courseType` or a price.
+  ///
+  /// The catalog endpoint currently ships none of those, so the
+  /// repository fills the gap from [FreeCourseRegistry]. This flag is
+  /// what keeps that fallback from overriding a real answer: a row the
+  /// server marked is left exactly as the server marked it, free or
+  /// paid. Once the backend ships `isCourseFree` on catalog rows the
+  /// fallback stops touching them entirely.
+  final bool hasServerFreeFlag;
 
   const CourseSummary({
     required this.courseId,
@@ -125,6 +137,7 @@ class CourseSummary {
     this.purchasedId,
     this.hasCertificate = false,
     this.isCourseFree = false,
+    this.hasServerFreeFlag = false,
   });
 
   /// Maps the backend's `0..100` completion percentage to a `0..1`
@@ -171,6 +184,7 @@ class CourseSummary {
     int? purchasedId,
     bool? hasCertificate,
     bool? isCourseFree,
+    bool? hasServerFreeFlag,
   }) {
     return CourseSummary(
       courseId: courseId ?? this.courseId,
@@ -188,10 +202,15 @@ class CourseSummary {
       purchasedId: purchasedId ?? this.purchasedId,
       hasCertificate: hasCertificate ?? this.hasCertificate,
       isCourseFree: isCourseFree ?? this.isCourseFree,
+      hasServerFreeFlag: hasServerFreeFlag ?? this.hasServerFreeFlag,
     );
   }
 
   factory CourseSummary.fromJson(Map<String, dynamic> json) {
+    // Null when the row carries no free-marker at all — the catalog's
+    // current shape. Kept separate from the `false` default so callers
+    // can tell "the backend says paid" from "the backend didn't say".
+    final resolvedFree = _resolveIsFree(json);
     // Backend is inconsistent across endpoints:
     // - tile/category/trending use `totalReviewsCounts` + `category`
     // - continue-course/search use `totalReviewsCount` + `categoryId`
@@ -231,27 +250,33 @@ class CourseSummary {
                   json['certificateAvailable'])
               as bool? ??
           false,
-      isCourseFree: _readIsFree(json),
+      isCourseFree: resolvedFree ?? false,
+      hasServerFreeFlag: resolvedFree != null,
     );
   }
 
-  /// Resolves whether a list-endpoint course is free.
+  /// Resolves whether a list-endpoint course is free, or `null` when
+  /// the row says nothing either way.
   ///
-  /// The list payloads carry no price breakdown, and the backend hasn't
-  /// settled on one spelling for the flag, so every plausible marker is
-  /// checked in turn:
+  /// The backend hasn't settled on one spelling for the flag, so every
+  /// plausible marker is checked in turn:
   ///  1. an explicit boolean (`isCourseFree` / `isFree` / `isPaid`),
   ///  2. the catalog's `courseType` string ("free" / "paid"),
-  ///  3. a price field that is present *and* zero.
+  ///  3. a price field that is present (zero → free, anything else →
+  ///     paid).
   ///
-  /// A missing price is never read as free — absent data means unknown,
-  /// and the card falls back to "Buy Now".
-  static bool _readIsFree(Map<String, dynamic> json) {
-    final explicit = json['isCourseFree'] ?? json['isFree'];
-    if (explicit is bool) return explicit;
-    if (json['isPaid'] is bool) return !(json['isPaid'] as bool);
+  /// `null` — no marker at all — is what the catalog returns today, and
+  /// it means *unknown*, not *paid*: the card falls back to "Buy Now"
+  /// while the repository tries to fill the gap from
+  /// [FreeCourseRegistry].
+  static bool? _resolveIsFree(Map<String, dynamic> json) {
+    final explicit = _readBool(json['isCourseFree'] ?? json['isFree']);
+    if (explicit != null) return explicit;
 
-    final type = json['courseType']?.toString().toLowerCase();
+    final isPaid = _readBool(json['isPaid']);
+    if (isPaid != null) return !isPaid;
+
+    final type = json['courseType']?.toString().toLowerCase().trim();
     if (type == 'free') return true;
     if (type == 'paid') return false;
 
@@ -261,8 +286,34 @@ class CourseSummary {
         json['discountedPrice'] ??
         json['price'];
     if (price is num) return price <= 0;
+    if (price is String) {
+      final parsed = double.tryParse(price.replaceAll(',', '').trim());
+      if (parsed != null) return parsed <= 0;
+    }
 
-    return false;
+    return null;
+  }
+
+  /// Tolerant boolean read. The flag is new on these endpoints and the
+  /// backend has shipped booleans as `1`/`0` and `"true"`/`"false"`
+  /// before, so all three forms are accepted. `null` means "not a
+  /// boolean I recognise", which callers treat as *absent*.
+  static bool? _readBool(dynamic raw) {
+    if (raw is bool) return raw;
+    if (raw is num) return raw != 0;
+    if (raw is String) {
+      switch (raw.toLowerCase().trim()) {
+        case 'true':
+        case '1':
+        case 'yes':
+          return true;
+        case 'false':
+        case '0':
+        case 'no':
+          return false;
+      }
+    }
+    return null;
   }
 
   /// Reads `courseCompletionPercentage` from the response. Backend now
