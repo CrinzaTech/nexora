@@ -116,8 +116,14 @@ class _ReviewCard extends StatelessWidget {
               color: Colors.transparent,
               borderRadius: radius,
               child: InkWell(
+                // Land on the course's Reviews tab: the card the learner
+                // tapped is a review, so the review list — not the About
+                // blurb — is what the tap promises. `tab` is parsed by
+                // AppRouter._courseTabIndex.
                 onTap: () => context.push(
-                  '${AppRoutes.courseDetail}?courseId=${review.courseId}',
+                  '${AppRoutes.courseDetail}'
+                  '?courseId=${review.courseId}'
+                  '&tab=reviews',
                 ),
                 borderRadius: radius,
                 splashColor: AppColors.primary.withValues(alpha: 0.10),
@@ -182,16 +188,38 @@ class _ReviewCard extends StatelessWidget {
 
                       SizedBox(height: Screen.getVerticalSize(5)),
 
+                      // A fixed `maxLines: 3` was not enough on its own:
+                      // the card's height is fixed, so once the header
+                      // and course title had taken their share, three
+                      // lines of a long review could be taller than the
+                      // space left and painted past the card instead of
+                      // ellipsing. Derive the line budget from the room
+                      // actually available — accounting for the OS text
+                      // scale, which is what pushed it over on large-font
+                      // devices — and cap it at 3 as before.
                       Expanded(
-                        child: Text(
-                          review.reviewMessage,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.bodyTextMedium.copyWith(
-                            color: AppColors.grey500,
-                            fontSize: Screen.getFontSizeCapped(13),
-                            height: 1.4,
-                          ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final fontSize = Screen.getFontSizeCapped(13);
+                            final lineHeight =
+                                MediaQuery.textScalerOf(
+                                  context,
+                                ).scale(fontSize) *
+                                1.4;
+                            final fitting = lineHeight <= 0
+                                ? 1
+                                : (constraints.maxHeight / lineHeight).floor();
+                            return Text(
+                              review.reviewMessage,
+                              maxLines: fitting.clamp(1, 3),
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.bodyTextMedium.copyWith(
+                                color: AppColors.grey500,
+                                fontSize: fontSize,
+                                height: 1.4,
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ],

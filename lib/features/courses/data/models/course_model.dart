@@ -663,6 +663,23 @@ class CourseContent {
       _isClosedByServer ||
       (_liveEnd != null && !DateTime.now().isBefore(_liveEnd!));
 
+  // ── Scheduled release (non-live nodes) ─────────────────────────────
+  // The admin can put a `startDateTime` on ANY node, not just a live
+  // class — an image, video, PDF, exam, assignment or whole folder can
+  // be published now and made openable later. Live classes are excluded
+  // because they run their own upcoming → live → ended state machine
+  // above (and do open a waiting room), whereas a scheduled file is
+  // simply unavailable until its moment arrives.
+
+  /// This node carries a release time that the schedule gate applies to.
+  bool get isScheduledRelease => !isLiveClass && startDateTime != null;
+
+  /// The release time hasn't arrived yet — the node must be listed but
+  /// not openable. Evaluated against the clock on every read so a row
+  /// rebuilt after the moment passes unlocks itself without a refresh.
+  bool get isScheduleLocked =>
+      isScheduledRelease && DateTime.now().isBefore(startDateTime!);
+
   // Backward-compat getters so existing call-sites don't need to change.
   String? get videoUrl => type == CourseContentType.video ? url : null;
   String? get imageUrl => type == CourseContentType.image ? url : null;

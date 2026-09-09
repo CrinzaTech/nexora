@@ -11,6 +11,7 @@ import 'package:nexora/core/widgets/custom_snackbar.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/data/services/live_status_probe.dart';
 import 'package:nexora/features/courses/presentation/folder_navigation_cache.dart';
+import 'package:nexora/features/courses/presentation/widgets/scheduled_content_dialog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -75,6 +76,15 @@ class ModuleCard extends StatelessWidget {
         builder: tile,
       );
     }
+    // Same treatment for a node with a scheduled release time: tick so
+    // the row flips from "Unlocks …" to openable on its own when the
+    // moment passes, instead of stranding the student on a stale tile.
+    if (module.isScheduleLocked) {
+      return _PeriodicRebuild(
+        interval: const Duration(seconds: 30),
+        builder: tile,
+      );
+    }
     return tile(context);
   }
 
@@ -131,6 +141,22 @@ class ModuleCard extends StatelessWidget {
               title: "Oops!",
               message:
                   "This content is locked. Please enroll in the course to access it.",
+            );
+            return;
+          }
+          // Scheduled release: the node is published but must not open
+          // before its start time. Checked here — ahead of every
+          // type-specific branch — so it covers images, videos,
+          // documents, exams, assignments, zips and folders alike.
+          // Live classes are excluded by the getter; their own
+          // upcoming/ended handling further down still applies.
+          if (module.isScheduleLocked) {
+            // A dialog, not a snackbar: the message names the content,
+            // a full date, a time and a countdown, which a toast clips.
+            ScheduledContentDialog.show(
+              context,
+              nodeName: module.nodeName,
+              startAt: module.startDateTime!,
             );
             return;
           }
@@ -258,13 +284,13 @@ class ModuleCard extends StatelessWidget {
             } else if (module.isUpcoming) {
               // Joining is blocked until the scheduled start time — the
               // row rebuilds on the 30s tick, so it becomes tappable on
-              // its own once the class window opens.
-              CustomSnackbar.info(
+              // its own once the class window opens. Same dialog as the
+              // scheduled-file gate, in its live-class wording.
+              ScheduledContentDialog.show(
                 context,
-                title: 'Not started yet',
-                message:
-                    'This class starts ${_formatStartTime(module.startDateTime!)}. '
-                    'You can join once it begins.',
+                nodeName: module.nodeName,
+                startAt: module.startDateTime!,
+                isLiveClass: true,
               );
             } else if ((module.url ?? '').isNotEmpty) {
               // Only a class inside its scheduled window reaches here.
@@ -409,6 +435,34 @@ class ModuleCard extends StatelessWidget {
                 ),
               ),
 
+            // Scheduled, not yet released — say so on the row itself so
+            // the student understands why it won't open before tapping.
+            if (module.isScheduleLocked) ...[
+              SizedBox(height: Screen.getVerticalSize(5)),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.lock_clock,
+                    size: Screen.getSize(12),
+                    color: AppColors.mutedTextPrimary,
+                  ),
+                  SizedBox(width: Screen.getHorizontalSize(4)),
+                  Flexible(
+                    child: Text(
+                      'Unlocks ${_formatStartTime(module.startDateTime!)}',
+                      style: AppTypography.bodyTextMedium.copyWith(
+                        color: AppColors.mutedTextPrimary,
+                        fontSize: rh.isLargeScreen
+                            ? rh.cappedFontSize(12)
+                            : Screen.getFontSize(12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
             if (module.type == CourseContentType.liveClass) ...[
               SizedBox(height: Screen.getVerticalSize(5)),
               _buildLiveClassSubtitle(rh),
@@ -481,7 +535,10 @@ class ModuleCard extends StatelessWidget {
     if (startDay == today.add(const Duration(days: 1))) {
       return 'Tomorrow, $time';
     }
-    return '${DateFormat('d MMM').format(start)}, $time';
+    // Include the year once the date leaves the current one, so a
+    // schedule set for a later year can't read as a date days away.
+    final datePattern = start.year == now.year ? 'd MMM' : 'd MMM yyyy';
+    return '${DateFormat(datePattern).format(start)}, $time';
   }
 }
 
@@ -590,6 +647,15 @@ Widget? _getTrailing(CourseContent module, {bool offAir = false}) {
       AppImages.passwordIcon,
       width: Screen.getSize(20),
       height: Screen.getSize(20),
+      color: AppColors.mutedTextPrimary,
+    );
+  }
+  if (module.isScheduleLocked) {
+    // Published but not yet released — a muted clock so the row reads as
+    // unavailable at a glance (the tap explains exactly when it opens).
+    return Icon(
+      Icons.lock_clock,
+      size: Screen.getSize(20),
       color: AppColors.mutedTextPrimary,
     );
   }
