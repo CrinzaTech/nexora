@@ -350,6 +350,26 @@ class BrandingConfig {
   /// [pngBg] is true.
   final bool pngBgDark;
 
+  // ── Payment ────────────────────────────────────────────────────────
+
+  /// Collect course payments over WhatsApp instead of Razorpay.
+  ///
+  /// false → the enrolment sheet's swipe opens the Razorpay checkout
+  ///         (default).
+  /// true  → it opens WhatsApp with a pre-filled request — course name,
+  ///         the exact payable amount, thumbnail link and the student's
+  ///         own details — addressed to the org's support number from
+  ///         `GET /api/v1/organization-info?whatsappNumber=true`.
+  ///
+  /// For clients with no payment gateway onboarded, who take the money
+  /// off-app and unlock the course by hand. Everything before the
+  /// payment step is unchanged, so the amount in the message is exactly
+  /// what Razorpay would have charged.
+  ///
+  /// Free courses ignore this flag: a zero total is enrolled by the
+  /// backend and never reaches a payment step at all.
+  final bool isPaymentRequestOnWhatsapp;
+
   const BrandingConfig({
     required this.primary,
     required this.primaryLight,
@@ -394,6 +414,8 @@ class BrandingConfig {
     this.tileBannerSquare = false,
     this.pngBg = false,
     this.pngBgDark = false,
+    // Payment
+    this.isPaymentRequestOnWhatsapp = false,
   });
 }
 
@@ -474,6 +496,11 @@ const crinestaBranding = BrandingConfig(
   
   pngBg: true,
   pngBgDark: false,
+
+  // ── Payment ─────────────────────────────────────────────────────
+  // true → course checkout goes to the org's WhatsApp instead of
+  // opening Razorpay. See the field doc on BrandingConfig.
+  isPaymentRequestOnWhatsapp: false,
 );
 
 /// The active brand — what `AppColors` and `AppImages` read from.

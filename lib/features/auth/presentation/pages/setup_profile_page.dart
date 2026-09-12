@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:io';
+
+import 'package:http/http.dart' as http;
 
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/router/app_routes.dart';
@@ -15,6 +18,7 @@ import 'package:nexora/features/auth/presentation/widgets/google_email_picker_fi
 import 'package:nexora/features/auth/presentation/widgets/phone_input_field.dart';
 import 'package:nexora/features/profile/domain/usecases/update_profile_usecase.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
@@ -93,6 +97,71 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
     // a value, not a placeholder).
     if (!widget.isPhone && widget.email.isNotEmpty) {
       _emailController.text = widget.email;
+      // A number collected before the email hand-off (the non-India
+      // "Next" flow) arrives alongside it — pre-fill it, editable, so
+      // the learner doesn't type the same number twice.
+      if (widget.phoneNumber.isNotEmpty) {
+        _phoneController.text = widget.phoneNumber;
+        _phoneCountry = _countryForDialCode(widget.countryCode);
+      }
+    }
+    // If the user reached login through the Google picker, reuse the
+    // name and photo it already returned. Cached on the service because
+    // the OTP page sits between that pick and this screen.
+    _applyGoogleAccount(sl<GoogleAccountPickerService>().lastPicked);
+  }
+
+  /// Rebuilds the country the learner was on from the dial code carried
+  /// through the route. Falls back to the India default when the code is
+  /// one the picker doesn't list, which only costs the flag — the dial
+  /// code itself still goes out with the profile.
+  Country _countryForDialCode(String dialCode) {
+    for (final country in PhoneInputField.countries) {
+      if (country.dialCode == dialCode) return country;
+    }
+    return _phoneCountry;
+  }
+
+  /// Prefills whatever [account] offers without overwriting anything the
+  /// user has already entered — Google's values are a convenience, not
+  /// an authority.
+  void _applyGoogleAccount(GoogleAccountInfo? account) {
+    if (account == null) return;
+
+    final name = account.displayName?.trim() ?? '';
+    if (name.isNotEmpty && _nameController.text.trim().isEmpty) {
+      _nameController.text = name;
+    }
+
+    final photo = account.photoUrl;
+    if (photo != null && photo.isNotEmpty && _profileImage == null) {
+      unawaited(_downloadGooglePhoto(photo));
+    }
+  }
+
+  /// Pulls the Google avatar down to a temp file so it flows through the
+  /// existing multipart upload path, which expects a [File] rather than
+  /// a URL. Best-effort: a failure just leaves the default avatar, since
+  /// the photo is optional anyway.
+  Future<void> _downloadGooglePhoto(String url) async {
+    try {
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200 || response.bodyBytes.isEmpty) return;
+
+      final dir = await getTemporaryDirectory();
+      final file = File(
+        '${dir.path}/google_avatar_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+      await file.writeAsBytes(response.bodyBytes);
+
+      if (!mounted) return;
+      // Still guard on null: the user may have picked their own photo
+      // while the download was in flight, and theirs wins.
+      if (_profileImage == null) setState(() => _profileImage = file);
+    } catch (e) {
+      debugPrint('Google avatar download failed: $e');
     }
   }
 
@@ -133,9 +202,9 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
     if (!mounted || _isPickingGoogleEmail) return;
     setState(() => _isPickingGoogleEmail = true);
 
-    String? email;
+    GoogleAccountInfo? account;
     try {
-      email = await sl<GoogleAccountPickerService>().pickEmail();
+      account = await sl<GoogleAccountPickerService>().pickAccount();
     } catch (e) {
       if (mounted) {
         CustomSnackbar.error(
@@ -149,8 +218,9 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
     if (!mounted) return;
     setState(() {
       _isPickingGoogleEmail = false;
-      if (email != null) _emailController.text = email;
+      if (account != null) _emailController.text = account.email;
     });
+    _applyGoogleAccount(account);
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -281,6 +351,9 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
       },
       (profile) async {
         await sl<SessionService>().saveProfileComplete(true);
+        // Signup is done with the picked account — drop it so the next
+        // signup on this device can't inherit this user's name/photo.
+        sl<GoogleAccountPickerService>().clearLastPicked();
         if (!mounted) return;
         CustomSnackbar.success(
           context,

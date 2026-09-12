@@ -1,5 +1,6 @@
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/router/app_routes.dart';
+import 'package:nexora/core/services/whatsapp_payment_request_service.dart';
 import 'package:nexora/core/widgets/celebration_overlay.dart';
 import 'package:nexora/core/widgets/custom_snackbar.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
@@ -8,6 +9,7 @@ import 'package:nexora/features/payment/presentation/bloc/payment_cubit.dart';
 import 'package:nexora/features/profile/presentation/bloc/profile_cubit.dart';
 import 'package:go_router/go_router.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:nexora/core/theme/branding_config.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_action_button.dart';
 import 'package:nexora/core/widgets/custom_outlined_action_button.dart';
@@ -235,6 +237,69 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
     );
   }
 
+  /// Hands the purchase to the org's support WhatsApp instead of
+  /// Razorpay, for brands with
+  /// [BrandingConfig.isPaymentRequestOnWhatsapp] on.
+  ///
+  /// Runs after the enrolment sheet has already popped itself, so the
+  /// feedback is snackbars on the host screen rather than sheet state.
+  /// No cubit is involved: nothing was ordered, so there is no order to
+  /// track and `onPurchased` must NOT fire — the student is not enrolled
+  /// until the org confirms the transfer and unlocks the course.
+  Future<void> _requestPaymentOnWhatsapp(
+    CoursePricing pricing,
+    String? couponCode,
+  ) async {
+    // iPad anchors the share sheet to the widget that opened it and
+    // throws without an origin rect. Read before the await — the render
+    // object is gone if this row leaves the tree mid-request.
+    final box = context.findRenderObject() as RenderBox?;
+    final origin = box != null && box.hasSize
+        ? box.localToGlobal(Offset.zero) & box.size
+        : null;
+
+    CustomSnackbar.info(
+      context,
+      title: 'Opening WhatsApp',
+      message: 'Preparing your payment request\u2026',
+    );
+
+    final outcome = await sl<WhatsappPaymentRequestService>().requestForCourse(
+      pricing,
+      couponCode: couponCode,
+      sharePositionOrigin: origin,
+    );
+
+    if (!mounted) return;
+
+    switch (outcome.result) {
+      case WhatsappPaymentRequestResult.sharedWithImage:
+      case WhatsappPaymentRequestResult.openedChat:
+        // Nothing more to say — the user is looking at WhatsApp (or the
+        // share sheet) with the request ready to send, and a snackbar
+        // behind it goes unread.
+        break;
+      case WhatsappPaymentRequestResult.lookupFailed:
+        CustomSnackbar.error(
+          context,
+          title: 'Error',
+          message: outcome.message ?? 'Could not reach support right now.',
+        );
+      case WhatsappPaymentRequestResult.unavailable:
+        CustomSnackbar.warning(
+          context,
+          title: 'Unavailable',
+          message: 'Payment support is not available right now.',
+        );
+      case WhatsappPaymentRequestResult.launchFailed:
+        CustomSnackbar.error(
+          context,
+          title: 'Cannot Open WhatsApp',
+          message: 'Make sure WhatsApp is installed on your device.',
+        );
+    }
+  }
+
   /// Opens the tier-picker sheet. Captured cubits over `context` are
   /// passed by closure so we don't read the descendant `BuildContext`
   /// after the async gap that the sheet introduces.
@@ -306,11 +371,27 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
                   // `(courseId, priceId)` so we forward the tier id
                   // the pricing breakdown was bound to — amount is calculated
                   // on the backend, but we pass the coupon code if applied.
-                  onProceed: (current) => paymentCubit.createOrder(
-                    courseId: widget.courseId,
-                    priceId: current.coursePriceId,
-                    couponCode: pricingCubit.appliedCouponCode,
-                  ),
+                  onProceed: (current) {
+                    // WhatsApp-request deployments never open Razorpay
+                    // for a chargeable course — the org collects the
+                    // money off-app. A zero total still goes through
+                    // create-order, because that is what enrols the
+                    // student in a free course; there is nothing to
+                    // ask WhatsApp for.
+                    if (currentBranding.isPaymentRequestOnWhatsapp &&
+                        current.totalPayable > 0) {
+                      _requestPaymentOnWhatsapp(
+                        current,
+                        pricingCubit.appliedCouponCode,
+                      );
+                      return;
+                    }
+                    paymentCubit.createOrder(
+                      courseId: widget.courseId,
+                      priceId: current.coursePriceId,
+                      couponCode: pricingCubit.appliedCouponCode,
+                    );
+                  },
                 ).whenComplete(() {
                   _enrolmentSheetOpen = false;
                   if (!mounted) return;

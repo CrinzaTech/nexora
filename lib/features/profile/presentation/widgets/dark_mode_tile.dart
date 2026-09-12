@@ -32,7 +32,8 @@ class DarkModeTile extends StatelessWidget {
           // The whole row is the tap target, matching every other tile.
           // The badge is painted as a pure indicator so there's no nested
           // hit-test competing with it.
-          onTap: () => context.read<ThemeCubit>().toggle(isCurrentlyDark: isDark),
+          onTap: () =>
+              context.read<ThemeCubit>().toggle(isCurrentlyDark: isDark),
           trailing: ThemeModeBadge(isDark: isDark),
         );
       },
@@ -54,21 +55,48 @@ class ThemeModeBadge extends StatelessWidget {
   /// Purely decorative by default — the parent row owns the gesture.
   final VoidCallback? onTap;
 
-  const ThemeModeBadge({super.key, required this.isDark, this.onTap});
+  /// Overrides the disc fill. Defaults to a wash of the mode's own hue,
+  /// which is right on a plain list row; the profile card passes the same
+  /// white its info chips use, so the three controls in that row read as
+  /// one set rather than one tinted oddity beside two neutral ones.
+  final Color? backgroundColor;
+
+  /// Rounds the tile instead of drawing it as a disc. Null keeps the
+  /// circle, which is right for a trailing indicator on a list row; the
+  /// profile card passes its chip radius so the badge squares off to
+  /// match the two chips it sits beside.
+  final BorderRadius? borderRadius;
+
+  /// Edge length. Defaults to a compact 34; the profile card passes the
+  /// height of its info chips so the three form an even row.
+  final double? size;
+
+  const ThemeModeBadge({
+    super.key,
+    required this.isDark,
+    this.onTap,
+    this.backgroundColor,
+    this.borderRadius,
+    this.size,
+  });
 
   @override
   Widget build(BuildContext context) {
     final tone = isDark ? AppColors.primary : AppColors.accent;
-    final size = Screen.getSize(34);
+    final edge = Screen.getSize(size ?? 34);
+    final radius = borderRadius;
 
     final badge = AnimatedContainer(
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOut,
-      width: size,
-      height: size,
+      width: edge,
+      height: edge,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: tone.withValues(alpha: isDark ? 0.18 : 0.14),
+        // A BoxDecoration may carry a shape or a borderRadius, never
+        // both — setting a radius on a circle throws.
+        shape: radius == null ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: radius,
+        color: backgroundColor ?? tone.withValues(alpha: isDark ? 0.18 : 0.14),
         border: Border.all(color: tone.withValues(alpha: 0.38), width: 1),
         boxShadow: [
           BoxShadow(

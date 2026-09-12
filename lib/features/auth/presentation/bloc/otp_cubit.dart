@@ -61,7 +61,9 @@ class OtpCubit extends SafeCubit<OtpState> {
 
     result.fold(
       (failure) => emit(OtpState.error(failure.message)),
-      (_) => emit(const OtpState.resent(status: 1, message: 'OTP resent successfully')),
+      (_) => emit(
+        const OtpState.resent(status: 1, message: 'OTP resent successfully'),
+      ),
     );
   }
 
@@ -108,7 +110,8 @@ class OtpCubit extends SafeCubit<OtpState> {
 
     result.fold(
       (failure) => emit(OtpState.error(failure.message)),
-      (model) => emit(OtpState.resent(status: model.status, message: model.message)),
+      (model) =>
+          emit(OtpState.resent(status: model.status, message: model.message)),
     );
   }
 

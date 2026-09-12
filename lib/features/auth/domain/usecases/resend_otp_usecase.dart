@@ -9,9 +9,7 @@ class ResendOtpUseCase {
   ResendOtpUseCase(this.repository);
 
   /// Execute use case
-  Future<Either<Failure, void>> call({
-    required String phoneNumber,
-  }) {
+  Future<Either<Failure, void>> call({required String phoneNumber}) {
     return repository.resendOtp(phoneNumber: phoneNumber);
   }
 }

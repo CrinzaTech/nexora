@@ -77,6 +77,16 @@ abstract class ApiClient {
   );
 
   // ============================================================
+  // LOCATION — Resolve caller's country from IP
+  // GET /api/v1/location/me   — open, no auth, no input
+  // Response: { "data": { "isIndian": bool, "stdCode": String,
+  //             "countryCode": String, "country": String,
+  //             "isResolved": bool } }
+  // ============================================================
+  @GET(ApiEndpoints.locationMe)
+  Future<Map<String, dynamic>> getLocation();
+
+  // ============================================================
   // PROFILE — Get User Profile
   // GET /api/v1/user-profile
   // ============================================================
@@ -103,6 +113,20 @@ abstract class ApiClient {
     // for this — see otp_repository_impl.dart.
     @Part(name: 'stdCode') String? stdCode,
   );
+
+  // ============================================================
+  // PROFILE — Request account deletion
+  // DELETE /api/v1/delete-account  — JSON body { "reason": "..." }
+  //
+  // The learner and the org come from the JWT. Files a request for
+  // back-office processing rather than deleting outright, and is NOT
+  // idempotent — see ApiEndpoints.deleteAccount.
+  //
+  // Returns the `{success, message, data}` envelope so the repository can
+  // read `success` rather than inferring it from the status code alone.
+  // ============================================================
+  @DELETE(ApiEndpoints.deleteAccount)
+  Future<Map<String, dynamic>> deleteAccount(@Body() Map<String, dynamic> body);
 
   // ============================================================
   // PROFILE — Update FCM token
@@ -481,9 +505,7 @@ abstract class ApiClient {
   // GET /api/stream/live-classes/{roomId}/polls
   // ============================================================
   @GET(ApiEndpoints.liveClassPolls)
-  Future<Map<String, dynamic>> getLiveClassPolls(
-    @Path('roomId') String roomId,
-  );
+  Future<Map<String, dynamic>> getLiveClassPolls(@Path('roomId') String roomId);
 
   // ============================================================
   // EXAM — Gate (read-only; never creates an attempt)

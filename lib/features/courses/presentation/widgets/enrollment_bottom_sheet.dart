@@ -2,6 +2,7 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:nexora/core/theme/app_colors.dart';
+import 'package:nexora/core/theme/branding_config.dart';
 import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/core/theme/responsive_helper.dart';
@@ -380,8 +381,12 @@ class _SheetContent extends StatelessWidget {
           child: SwipeToPayButton(
             // Nothing to pay (free course, or a coupon that zeroed the
             // total) — "Proceed to Pay Securely" would be misleading.
+            // So is "Securely" on a WhatsApp-request build, where the
+            // swipe opens a chat rather than a payment gateway.
             text: pricing.totalPayable <= 0
                 ? 'Unlock Course'
+                : currentBranding.isPaymentRequestOnWhatsapp
+                ? 'Request on WhatsApp'
                 : 'Proceed to Pay Securely',
             onSwipeComplete: onProceed,
           ),

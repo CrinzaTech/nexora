@@ -48,10 +48,42 @@ class ApiEndpoints {
   /// Response: { "message": String, "data": { "isValid": bool } }
   static const String validateOrgCode = '/api/v1/validate-org-code';
 
+  /// Resolve the caller's country from their IP. Open — no auth, no input.
+  /// GET /api/v1/location/me
+  /// Response data: { isIndian, stdCode, countryCode, country, isResolved }
+  ///
+  /// Always 200 with a usable body: on a failed lookup or a private /
+  /// loopback caller it returns `isResolved: false` carrying the
+  /// configured default (IN / +91), so callers never special-case an error.
+  static const String locationMe = '/api/v1/location/me';
+
   // ============================================================
   // PROFILE
   // ============================================================
   static const String userProfile = '/api/v1/user-profile';
+
+  /// Records an account-deletion **request** for the learner behind the
+  /// access token. JSON body `{ "reason": "..." }`, which is required and
+  /// must be non-blank.
+  ///
+  /// Required by App Store Review Guideline 5.1.1(v): an app that creates
+  /// accounts must let the user delete theirs **from inside the app**. A
+  /// link to a deletion page on the website does not satisfy it — Apple's
+  /// own guidance calls that out specifically — which is why this is a
+  /// first-class endpoint rather than a `launchUrl`.
+  ///
+  /// The learner and the org come from the JWT; the app never sends them.
+  ///
+  /// **Not a hard delete and not idempotent.** A `200` means the request
+  /// was filed for back-office processing — the account and its data still
+  /// exist. Calling twice files two requests, so the caller must latch
+  /// after the first success.
+  ///
+  /// The server revokes the refresh-token family on success (best-effort,
+  /// inside a swallowed catch), but the *current* access token stays valid
+  /// until it expires — 7 days. The app must therefore clear its own
+  /// session immediately rather than waiting to be locked out.
+  static const String deleteAccount = '/api/v1/delete-account';
 
   // Dedicated FCM-token sync — JSON body { "fcmToken": "..." }.
   // Separate from the multipart user-profile update so a background
@@ -130,8 +162,7 @@ class ApiEndpoints {
   /// Paginated chat backfill for a live class room. `beforeId` pages
   /// backwards; `limit` caps the page (default 30).
   /// GET /api/stream/live-classes/{roomId}/chat?beforeId=&limit=
-  static const String liveClassChat =
-      '/api/stream/live-classes/{roomId}/chat';
+  static const String liveClassChat = '/api/stream/live-classes/{roomId}/chat';
 
   /// Every poll in a live class room, oldest first, shaped for this viewer
   /// (own answer filled in; counts only once results are visible). Used on
@@ -287,8 +318,7 @@ class ApiEndpoints {
 
   /// The learner's DM inbox. Returns a **bare JSON array** of
   /// conversation cards, newest-activity first.
-  static const String directConversations =
-      '/api/v1/direct-chat/conversations';
+  static const String directConversations = '/api/v1/direct-chat/conversations';
 
   /// Staff the learner is allowed to message. Bare JSON array; each
   /// entry carries a precomputed `conversationKey`.

@@ -138,9 +138,9 @@ class ModuleCard extends StatelessWidget {
           if (module.isLocked) {
             CustomSnackbar.error(
               context,
-              title: "Oops!",
+              title: "Locked",
               message:
-                  "This content is locked. Please enroll in the course to access it.",
+                  "This content is locked. Enrol in the course to open it.",
             );
             return;
           }

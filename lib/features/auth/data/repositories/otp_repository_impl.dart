@@ -14,9 +14,7 @@ class OtpRepositoryImpl implements OtpRepository {
   OtpRepositoryImpl(this._apiClient);
 
   @override
-  Future<Either<Failure, void>> sendOtp({
-    required String mobileNumber,
-  }) async {
+  Future<Either<Failure, void>> sendOtp({required String mobileNumber}) async {
     try {
       final json = await _apiClient.sendOtp(mobileNumber);
       SendOtpResponseModel.fromJson(json);
@@ -65,9 +63,7 @@ class OtpRepositoryImpl implements OtpRepository {
   }
 
   @override
-  Future<Either<Failure, void>> resendOtp({
-    required String phoneNumber,
-  }) async {
+  Future<Either<Failure, void>> resendOtp({required String phoneNumber}) async {
     return sendOtp(mobileNumber: phoneNumber);
   }
 

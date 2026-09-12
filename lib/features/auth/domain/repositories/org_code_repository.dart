@@ -5,7 +5,5 @@ import 'package:nexora/core/error/failures.dart';
 abstract class OrgCodeRepository {
   /// Calls `POST /api/v1/validate-org-code` and returns whether
   /// the supplied [orgCode] is recognised by the backend.
-  Future<Either<Failure, bool>> validateOrgCode({
-    required String orgCode,
-  });
+  Future<Either<Failure, bool>> validateOrgCode({required String orgCode});
 }

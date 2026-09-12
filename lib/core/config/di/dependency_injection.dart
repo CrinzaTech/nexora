@@ -32,6 +32,7 @@ import 'package:nexora/features/courses/data/services/free_course_registry.dart'
 import 'package:nexora/features/courses/data/services/live_class_audio_service.dart';
 import 'package:nexora/features/courses/data/services/live_status_probe.dart';
 import 'package:nexora/features/courses/domain/usecases/get_live_class_polls_usecase.dart';
+import 'package:nexora/core/services/whatsapp_payment_request_service.dart';
 import 'package:nexora/core/services/content_completion_service.dart';
 import 'package:nexora/features/courses/domain/usecases/get_course_pricing_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/get_course_categories_usecase.dart';
@@ -66,6 +67,7 @@ import 'package:nexora/features/direct_chat/presentation/bloc/direct_inbox_cubit
 import 'package:nexora/features/auth/data/repositories/org_code_repository_impl.dart';
 import 'package:nexora/features/auth/data/repositories/otp_repository_impl.dart';
 import 'package:nexora/features/auth/data/services/google_account_picker_service.dart';
+import 'package:nexora/features/auth/data/services/location_country_service.dart';
 import 'package:nexora/features/auth/domain/repositories/org_code_repository.dart';
 import 'package:nexora/features/auth/domain/repositories/otp_repository.dart';
 import 'package:nexora/features/auth/domain/usecases/resend_otp_usecase.dart';
@@ -103,6 +105,7 @@ import 'package:nexora/features/notification/domain/usecases/mark_notification_r
 import 'package:nexora/features/notification/presentation/bloc/notification_cubit.dart';
 import 'package:nexora/features/profile/data/repositories/profile_repository_impl.dart';
 import 'package:nexora/features/profile/domain/repositories/profile_repository.dart';
+import 'package:nexora/features/profile/domain/usecases/delete_account_usecase.dart';
 import 'package:nexora/features/profile/domain/usecases/get_app_rating_url_usecase.dart';
 import 'package:nexora/features/profile/domain/usecases/get_org_info_usecase.dart';
 import 'package:nexora/features/profile/domain/usecases/get_profile_usecase.dart';
@@ -326,6 +329,7 @@ Future<void> setupLocator() async {
     () => OrgCodeRepositoryImpl(sl<ApiClient>()),
   );
   sl.registerLazySingleton(() => GoogleAccountPickerService());
+  sl.registerLazySingleton(() => LocationCountryService(sl<ApiClient>()));
 
   // Use Cases — v1
   sl.registerLazySingleton(() => SendOtpUseCase(sl()));
@@ -431,6 +435,7 @@ Future<void> setupLocator() async {
   sl.registerLazySingleton(() => UpdateFcmTokenUseCase(sl()));
   sl.registerLazySingleton(() => GetOrgInfoUseCase(sl()));
   sl.registerLazySingleton(() => GetAppRatingUrlUseCase(sl()));
+  sl.registerLazySingleton(() => DeleteAccountUseCase(sl()));
 
   // Cubit — singleton because the same profile state needs to be observed
   // by Home (avatar + name in the header), Profile page, and Edit Profile
@@ -455,6 +460,11 @@ Future<void> setupLocator() async {
   sl.registerFactory(
     () => PaymentCubit(createOrderUseCase: sl(), verifyPaymentUseCase: sl()),
   );
+
+  // Alternate "payment" path for brands with no gateway onboarded:
+  // BrandingConfig.isPaymentRequestOnWhatsapp routes the proceed-to-pay
+  // step to the org's support WhatsApp instead of Razorpay.
+  sl.registerLazySingleton(() => WhatsappPaymentRequestService(sl()));
 
   // ============================================
   // FEATURES - TRANSACTIONS

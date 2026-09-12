@@ -7,9 +7,7 @@ import 'package:nexora/features/auth/data/models/send_otp_response_model.dart';
 abstract class OtpRepository {
   /// v1 — phone-only. Kept for backward compatibility; new code paths
   /// should use [sendOtpV2] / [verifyOtpV2] which accept email too.
-  Future<Either<Failure, void>> sendOtp({
-    required String mobileNumber,
-  });
+  Future<Either<Failure, void>> sendOtp({required String mobileNumber});
 
   /// v1 — phone-only verify.
   Future<Either<Failure, OtpVerificationModel>> verifyOtp({
@@ -20,9 +18,7 @@ abstract class OtpRepository {
   });
 
   /// v1 — phone-only resend (just re-calls [sendOtp]).
-  Future<Either<Failure, void>> resendOtp({
-    required String phoneNumber,
-  });
+  Future<Either<Failure, void>> resendOtp({required String phoneNumber});
 
   // ── v2 — recipient-agnostic (phone OR email) ─────────────────────
 

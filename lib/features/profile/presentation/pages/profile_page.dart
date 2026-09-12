@@ -1,4 +1,6 @@
 import 'dart:io' show Platform;
+import 'package:nexora/features/profile/domain/usecases/delete_account_usecase.dart';
+import 'package:nexora/features/profile/presentation/widgets/delete_account_dialog.dart';
 
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/router/app_routes.dart';
@@ -20,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_decorations.dart';
+import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/core/theme/responsive_helper.dart';
 import 'package:nexora/core/theme/screen.dart';
@@ -29,7 +32,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../widgets/app_version_text.dart';
-import '../widgets/dark_mode_tile.dart';
 import '../widgets/logout_button.dart';
 import '../widgets/person_card_widget.dart';
 import '../widgets/profile_card_error.dart';
@@ -48,6 +50,10 @@ class _ProfilePageState extends State<ProfilePage>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
+
+  /// Latches while an account-deletion request is in flight, so the tile
+  /// can't start a second one. See [_handleDeleteAccount].
+  bool _deleting = false;
 
   @override
   void initState() {
@@ -330,6 +336,129 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
+  /// Opens the edit-profile screen from the pencil on the profile card.
+  ///
+  /// The edit page reads the live profile straight from the global
+  /// [ProfileCubit], so nothing is ferried through go_router's `extra:`.
+  /// The guard is still needed though: the pencil is visible during the
+  /// `updating` state too, and pushing a form with nothing loaded behind
+  /// it would strand the learner on empty fields.
+  void _openEditProfile() {
+    final profile = context.read<ProfileCubit>().state.maybeWhen(
+      loaded: (p) => p,
+      updated: (p) => p,
+      updating: (p) => p,
+      orElse: () => null,
+    );
+    if (profile == null) {
+      CustomSnackbar.warning(
+        context,
+        title: 'Hold on',
+        message: 'Your profile is still loading.',
+      );
+      return;
+    }
+    context.push(AppRoutes.editProfile);
+  }
+
+  // ----------------------------------------------------------------
+  // Ending the session
+  // ----------------------------------------------------------------
+
+  /// Tears down everything tied to the signed-in learner and sends them
+  /// back to the entry screen. Shared by logout and account deletion,
+  /// which differ only in what happens to the queued completions — see
+  /// [deleted].
+  ///
+  /// Ordering matters throughout and is not incidental:
+  ///   * the completion queue is handled first, while the access token
+  ///     is still valid;
+  ///   * the refresh-token family is revoked before the local wipe,
+  ///     because revoking needs the refresh token that `clearToken` is
+  ///     about to delete;
+  ///   * neither step is allowed to block the exit — a learner who
+  ///     cannot reach the backend must still get out of the session.
+  Future<void> _endSession({bool deleted = false}) async {
+    if (mounted) {
+      // Drop cached profile so the next login doesn't briefly show the
+      // previous user's data on Home.
+      context.read<ProfileCubit>().reset();
+    }
+    final completions = sl<ContentCompletionService>();
+    if (deleted) {
+      // Nothing to drain into — the account is gone. See
+      // ContentCompletionService.clearForAccountDeletion.
+      await completions.clearForAccountDeletion();
+    } else {
+      // Drain, then wipe: the queue is device-scoped, so anything left
+      // behind would be delivered under the next account's token.
+      await completions.clearForLogout();
+    }
+    if (!deleted) {
+      // Skipped after a deletion request: the server already revoked the
+      // refresh-token family as part of filing it, so this would be a
+      // round trip the learner waits through to redo work that is done.
+      await sl<TokenRefreshService>().revokeSession();
+    }
+    await sl<SessionService>().clearToken();
+    OrgCodeService.instance.clear();
+    if (!mounted) return;
+    // Show the Org Code gate only on iOS when ORG_ID is CRINZA — same
+    // rule as the splash screen.
+    final orgId = dotenv.env['ORG_ID'] ?? '';
+    final isIosAndCrinza =
+        !kIsWeb && Platform.isIOS && orgId.toUpperCase() == 'CRINZA';
+    context.go(isIosAndCrinza ? AppRoutes.orgCode : AppRoutes.login);
+  }
+
+  /// Permanent account deletion, initiated and completed in the app.
+  ///
+  /// Required by App Store Review Guideline 5.1.1(v) — see
+  /// [DeleteAccountUseCase] for why this can't be a link to the website.
+  ///
+  /// The local session is torn down **only after the server confirms**.
+  /// Wiping first would leave a learner whose delete failed signed out
+  /// of an account that still exists, with no token to retry on.
+  Future<void> _handleDeleteAccount() async {
+    // The dialog closes before the request goes out, which leaves the
+    // tile tappable again while the delete is still in flight. Harmless
+    // on the server if it's idempotent as specified, but the second
+    // response would land after the first already tore the session
+    // down — so don't start one.
+    if (_deleting) return;
+
+    final reason = await DeleteAccountDialog.show(context);
+    if (reason == null || reason.isEmpty || !mounted) return;
+
+    setState(() => _deleting = true);
+    _showLoadingSnackbar('Submitting your request…');
+    final result = await sl<DeleteAccountUseCase>()(reason: reason);
+    if (!mounted) return;
+
+    await result.fold(
+      (failure) async {
+        // Only the failure path releases the latch. On success the
+        // session is torn down and this screen goes away, and leaving it
+        // set is the cheapest guarantee that a second request can't be
+        // filed in the gap — the endpoint is not idempotent, so a double
+        // tap would put two rows in front of the back office.
+        setState(() => _deleting = false);
+        CustomSnackbar.error(
+          context,
+          title: 'Request not submitted',
+          message: failure.message,
+        );
+      },
+      (_) async {
+        // The server revokes the refresh-token family, but the access
+        // token this app already holds stays valid for seven days — so
+        // signing out locally is what actually ends the session, not a
+        // courtesy on top of it.
+        await _endSession(deleted: true);
+      },
+    );
+  }
+
   /// Shows a brief info snackbar while the API call is in-flight.
   void _showLoadingSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -414,12 +543,21 @@ class _ProfilePageState extends State<ProfilePage>
                       BlocBuilder<ProfileCubit, ProfileState>(
                         builder: (context, state) {
                           return state.maybeWhen(
-                            loaded: (profile) =>
-                                PersonCardWidget(profile: profile),
-                            updated: (profile) =>
-                                PersonCardWidget(profile: profile),
-                            updating: (current) =>
-                                PersonCardWidget(profile: current),
+                            // Every state that has a profile to show also
+                            // has one to edit, so the pencil is wired in
+                            // all three rather than only the settled one.
+                            loaded: (profile) => PersonCardWidget(
+                              profile: profile,
+                              onEdit: _openEditProfile,
+                            ),
+                            updated: (profile) => PersonCardWidget(
+                              profile: profile,
+                              onEdit: _openEditProfile,
+                            ),
+                            updating: (current) => PersonCardWidget(
+                              profile: current,
+                              onEdit: _openEditProfile,
+                            ),
                             error: (message) => ProfileCardError(
                               message: message,
                               onRetry: _onRefresh,
@@ -481,64 +619,11 @@ class _ProfilePageState extends State<ProfilePage>
 
                       SizedBox(height: Screen.getVerticalSize(20)),
 
-                      // MARK: Account Settings Section
-                      PremiumSurface(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: Screen.getPadding(
-                                vertical: 12,
-                                horizontal: 15,
-                              ),
-                              child: Text(
-                                "Account Settings",
-                                style: AppTypography.bodyTextMedium.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: Screen.getFontSizeCapped(14),
-                                  color: AppColors.mutedTextPrimary,
-                                ),
-                              ),
-                            ),
-                            CustomProfileListTileWidget(
-                              title: "Edit Profile",
-                              leadingIcon: AppImages.personIcon,
-                              onTap: () {
-                                // Pull the latest loaded profile out of the
-                                // cubit so the edit form pre-populates without
-                                // a fresh API call.
-                                final state = context
-                                    .read<ProfileCubit>()
-                                    .state;
-                                final profile = state.maybeWhen(
-                                  loaded: (p) => p,
-                                  updated: (p) => p,
-                                  updating: (p) => p,
-                                  orElse: () => null,
-                                );
-                                if (profile == null) {
-                                  CustomSnackbar.warning(
-                                    context,
-                                    title: 'Hold on',
-                                    message: 'Your profile is still loading.',
-                                  );
-                                  return;
-                                }
-                                // Edit page reads the live profile from the
-                                // global ProfileCubit — no need to ferry the
-                                // model through go_router's `extra:`.
-                                context.push(AppRoutes.editProfile);
-                              },
-                            ),
-                            // Light/dark appearance toggle. Owns no
-                            // state of its own — reads and writes the
-                            // app-wide ThemeCubit provided in main.dart.
-                            const DarkModeTile(),
-                          ],
-                        ),
-                      ),
-                      SizedBox(height: Screen.getVerticalSize(20)),
+                      // The Account Settings section used to sit here.
+                      // Both of its rows moved onto the profile card —
+                      // Edit Profile became the pencil on the avatar, and
+                      // Dark Mode the sun/moon badge beside the entity
+                      // code — which left an empty titled panel behind.
 
                       // MARK: Help & Support Section
                       PremiumSurface(
@@ -588,6 +673,14 @@ class _ProfilePageState extends State<ProfilePage>
                               leadingIcon: AppImages.personIcon,
                               onTap: _shareApp,
                             ),
+                            // Permanent account deletion. Last in the
+                            // section on purpose: everything above it is
+                            // reversible, and this is the one row a
+                            // mis-tap can't be walked back from. Present
+                            // on every platform — App Store guideline
+                            // 5.1.1(v) mandates it and Play's data
+                            // deletion policy expects it.
+                            _DeleteAccountTile(onTap: _handleDeleteAccount),
                           ],
                         ),
                       ),
@@ -635,39 +728,7 @@ class _ProfilePageState extends State<ProfilePage>
                         onTap: () async {
                           final confirmed = await LogoutDialog.show(context);
                           if (confirmed != true) return;
-                          if (context.mounted) {
-                            // Drop cached profile so the next login doesn't
-                            // briefly show the previous user's data on Home.
-                            context.read<ProfileCubit>().reset();
-                          }
-                          // Drain queued content completions while the
-                          // token is still valid, then wipe them — the
-                          // queue is device-scoped, so anything left
-                          // behind would be delivered under the next
-                          // account's token.
-                          await sl<ContentCompletionService>()
-                              .clearForLogout();
-                          // Revoke the refresh-token family server-side
-                          // before the local wipe — it needs the refresh
-                          // token clearToken is about to delete. Never
-                          // blocks sign-out if it can't reach the backend.
-                          await sl<TokenRefreshService>().revokeSession();
-                          await sl<SessionService>().clearToken();
-                          OrgCodeService.instance.clear();
-                          if (context.mounted) {
-                            // Show the Org Code gate only on iOS when ORG_ID is
-                            // CRINZA — same rule as the splash screen.
-                            final orgId = dotenv.env['ORG_ID'] ?? '';
-                            final isIosAndCrinza =
-                                !kIsWeb &&
-                                Platform.isIOS &&
-                                orgId.toUpperCase() == 'CRINZA';
-                            if (isIosAndCrinza) {
-                              context.go(AppRoutes.orgCode);
-                            } else {
-                              context.go(AppRoutes.login);
-                            }
-                          }
+                          await _endSession();
                         },
                       ),
                       SizedBox(height: Screen.getVerticalSize(10)),
@@ -682,6 +743,69 @@ class _ProfilePageState extends State<ProfilePage>
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The "Delete Account" row.
+///
+/// Its own widget rather than a [CustomProfileListTileWidget] because it
+/// needs to read as destructive — red ink, no trailing chevron — and
+/// that tile paints its icon and title in the standard text colour and
+/// always points onward to somewhere else. Red is the whole point here:
+/// on a list where every other row is safe, this one has to look unlike
+/// the others before it is tapped, not after.
+class _DeleteAccountTile extends StatelessWidget {
+  const _DeleteAccountTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: AppColors.error.withValues(alpha: 0.1),
+        highlightColor: AppColors.error.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(AppSizes.radiusL),
+        child: Padding(
+          padding: Screen.getPadding(vertical: 12, horizontal: 15),
+          child: Row(
+            children: [
+              Icon(
+                Icons.delete_outline_rounded,
+                size: Screen.getSize(20),
+                color: AppColors.error,
+              ),
+              SizedBox(width: Screen.getHorizontalSize(15)),
+              Expanded(
+                child: Text(
+                  'Delete Account',
+                  style: AppTypography.bodyTextLargeMedium.copyWith(
+                    color: AppColors.error,
+                    fontSize: Screen.getFontSizeCapped(14),
+                  ),
+                ),
+              ),
+              // The same chevron every other row carries, tinted to match
+              // this one's ink. Its absence made this row look like a
+              // dead-end label rather than something that opens.
+              SizedBox.square(
+                dimension: Screen.getSize(20),
+                child: Image.asset(
+                  AppImages.arrowRightIcon,
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.high,
+                  // Flat monochrome PNG on transparent — tinting keeps
+                  // the alpha and swaps the ink, same as the list tile.
+                  color: AppColors.error,
+                ),
+              ),
+            ],
           ),
         ),
       ),

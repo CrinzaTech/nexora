@@ -26,6 +26,23 @@ class OrgCodeService {
   ///  2. `ORG_ID` value from `.env` (the pre-ship default).
   String? get effectiveOrgCode => _userOrgCode ?? dotenv.env['ORG_ID'];
 
+  /// The same value, for **display**, but never throws.
+  ///
+  /// `dotenv.env` throws [NotInitializedError] when `.env` hasn't been
+  /// loaded. `main()` loads it before `runApp`, so [effectiveOrgCode] is
+  /// safe on the auth path and deliberately keeps throwing there — a
+  /// missing `.env` is a build misconfiguration, and every OTP call
+  /// silently going out without an org code would be far harder to
+  /// diagnose than a crash at startup.
+  ///
+  /// A profile header is a different matter: it should not be able to
+  /// take down the screen over a value it only renders as a label. This
+  /// returns `null` instead, and the caller omits the field.
+  String? get displayOrgCode {
+    if (_userOrgCode != null) return _userOrgCode;
+    return dotenv.isInitialized ? dotenv.env['ORG_ID'] : null;
+  }
+
   /// Store a validated org code. Should only be called after the
   /// `/api/v1/validate-org-code` endpoint confirms `isValid: true`.
   void setOrgCode(String code) {

@@ -585,7 +585,9 @@ class _ProfilePicturePicker extends StatelessWidget {
                     ),
                     alignment: Alignment.center,
                     child: Text(
-                      Utils.getInitials(profileName.isEmpty ? '?' : profileName),
+                      Utils.getInitials(
+                        profileName.isEmpty ? '?' : profileName,
+                      ),
                       style: AppTypography.h6SemiBold.copyWith(
                         color: AppColors.alwaysWhite,
                         fontSize: Screen.getFontSize(36),
@@ -766,9 +768,7 @@ class _GenderOption extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isSelected
-                      ? AppColors.primary
-                      : AppColors.grey300,
+                  color: isSelected ? AppColors.primary : AppColors.grey300,
                   width: isSelected ? 5 : 1.5,
                 ),
               ),

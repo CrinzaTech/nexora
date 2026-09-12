@@ -47,13 +47,10 @@ class OrgCodeCubit extends SafeCubit<OrgCodeState> {
 
     final result = await _validateOrgCodeUseCase(orgCode: orgCode.trim());
 
-    result.fold(
-      (failure) => emit(OrgCodeError(failure.message)),
-      (_) {
-        OrgCodeService.instance.setOrgCode(orgCode.trim());
-        emit(OrgCodeValid(orgCode.trim()));
-      },
-    );
+    result.fold((failure) => emit(OrgCodeError(failure.message)), (_) {
+      OrgCodeService.instance.setOrgCode(orgCode.trim());
+      emit(OrgCodeValid(orgCode.trim()));
+    });
   }
 
   /// Reset to initial so the page can be reused without stale state.

@@ -153,7 +153,9 @@ class ContentCompletionService {
         }
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('CompletionService: queue restore failed — $e');
+      if (kDebugMode) {
+        debugPrint('CompletionService: queue restore failed — $e');
+      }
     }
 
     try {
@@ -383,7 +385,9 @@ class ContentCompletionService {
     } catch (e) {
       // Storage failure leaves the queue in memory only — it still
       // retries this session, just not across a restart.
-      if (kDebugMode) debugPrint('CompletionService: queue persist failed — $e');
+      if (kDebugMode) {
+        debugPrint('CompletionService: queue persist failed — $e');
+      }
     }
   }
 
@@ -423,6 +427,24 @@ class ContentCompletionService {
   /// expired token for the *same* student, who should keep their queue.
   Future<void> clearForLogout() async {
     await flushPending();
+    _marked.clear();
+    _inFlight.clear();
+    _pending.clear();
+    await _persist();
+  }
+
+  /// Wipe without draining, for **account deletion**.
+  ///
+  /// The counterpart to [clearForLogout], and the drain is exactly what
+  /// changes. There is nothing worth waiting for here: the learner has
+  /// asked for the account to go, so course progress delivered on the way
+  /// out buys them nothing, and a queue flush is a round trip per entry
+  /// standing between them and a sign-out they already asked for.
+  ///
+  /// The wipe itself is not optional. The queue is device-scoped, so
+  /// entries left behind would be delivered under the *next* account to
+  /// sign in on this handset and credit the wrong learner.
+  Future<void> clearForAccountDeletion() async {
     _marked.clear();
     _inFlight.clear();
     _pending.clear();

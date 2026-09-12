@@ -28,7 +28,9 @@ class OtpInputField extends StatelessWidget {
   Widget build(BuildContext context) {
     final pinShadow = [
       BoxShadow(
-        color: AppColors.black.withValues(alpha: AppColors.isDark ? 0.40 : 0.08),
+        color: AppColors.black.withValues(
+          alpha: AppColors.isDark ? 0.40 : 0.08,
+        ),
         blurRadius: 8,
         offset: const Offset(0, 3),
       ),

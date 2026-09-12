@@ -16,16 +16,22 @@ class Utils {
   /// Joined At Date Formatter
   /// Formats a DateTime string into "Joined At Month Year" format.
   /// Example: "2023-01-15T12:34:56Z" → "Joined At Jan 2023"
-  static String formatJoinedAt(String? joinedAt) {
+  static String formatJoinedAt(String? joinedAt) =>
+      "Joined At ${formatJoinedAtDate(joinedAt)}";
+
+  /// The join date on its own — "22, May 2026" — for layouts that supply
+  /// their own "Joined" label instead of carrying it inside the value.
+  /// [formatJoinedAt] is the same thing with the label prefixed.
+  static String formatJoinedAtDate(String? joinedAt) {
     try {
       if (joinedAt == null || joinedAt.isEmpty) {
-        return "Joined At N/A";
+        return "N/A";
       }
       final date = DateTime.parse(joinedAt);
-      return "Joined At ${DateFormat('dd, MMM yyyy').format(date)}";
+      return DateFormat('dd, MMM yyyy').format(date);
     } catch (e) {
       debugLog("Error parsing joinedAt date: $e");
-      return "Joined At Unknown";
+      return "Unknown";
     }
   }
 

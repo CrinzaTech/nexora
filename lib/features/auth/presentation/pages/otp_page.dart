@@ -278,47 +278,58 @@ class _OtpFormContent extends StatelessWidget {
                   message,
                   isUserAlreadyExist,
                 ) async {
-              if (token != null && token.isNotEmpty) {
-                // Both tokens in one write: the refresh token is what lets
-                // this session renew itself instead of expiring the learner
-                // back to the login screen a week from now.
-                await sl<SessionService>().saveTokens(
-                  accessToken: token,
-                  refreshToken: refreshToken,
-                );
-                // Gate the dashboard until setup-profile is actually
-                // submitted. Written immediately (before navigation) so
-                // the flag survives an app kill/cache-clear that leaves
-                // the token in secure storage but the form unfilled.
-                await sl<SessionService>().saveProfileComplete(
-                  isUserAlreadyExist,
-                );
-                // A fresh token can unblock content completions that were
-                // queued when the previous one expired (they're retried,
-                // not dropped, on 401). Drain now rather than making the
-                // student wait for the next launch or network flap.
-                unawaited(sl<ContentCompletionService>().flushPending());
-              }
-              if (context.mounted) {
-                CustomSnackbar.success(
-                  context,
-                  title: 'Success',
-                  message: message,
-                );
-                if (isUserAlreadyExist) {
-                  context.go(AppRoutes.dashboard);
-                } else {
-                  // Carry whichever channel the user authenticated on
-                  // into setup-profile so the matching field can be
-                  // pre-filled (phone → phone field; email → email
-                  // field). The page treats empties as "not set yet".
-                  final query = isPhone
-                      ? 'phone=$phoneNumber&countryCode=$countryCode'
-                      : 'email=${Uri.encodeComponent(email)}';
-                  context.go('${AppRoutes.setupProfile}?$query');
-                }
-              }
-            },
+                  if (token != null && token.isNotEmpty) {
+                    // Both tokens in one write: the refresh token is what lets
+                    // this session renew itself instead of expiring the learner
+                    // back to the login screen a week from now.
+                    await sl<SessionService>().saveTokens(
+                      accessToken: token,
+                      refreshToken: refreshToken,
+                    );
+                    // Gate the dashboard until setup-profile is actually
+                    // submitted. Written immediately (before navigation) so
+                    // the flag survives an app kill/cache-clear that leaves
+                    // the token in secure storage but the form unfilled.
+                    await sl<SessionService>().saveProfileComplete(
+                      isUserAlreadyExist,
+                    );
+                    // A fresh token can unblock content completions that were
+                    // queued when the previous one expired (they're retried,
+                    // not dropped, on 401). Drain now rather than making the
+                    // student wait for the next launch or network flap.
+                    unawaited(sl<ContentCompletionService>().flushPending());
+                  }
+                  if (context.mounted) {
+                    CustomSnackbar.success(
+                      context,
+                      title: 'Success',
+                      message: message,
+                    );
+                    if (isUserAlreadyExist) {
+                      context.go(AppRoutes.dashboard);
+                    } else {
+                      // Carry whichever channel the user authenticated on
+                      // into setup-profile so the matching field can be
+                      // pre-filled (phone → phone field; email → email
+                      // field). The page treats empties as "not set yet".
+                      // The email leg may also be carrying a number collected
+                      // on the phone screen beforehand (the non-India "Next"
+                      // hand-off), so forward it too rather than making the
+                      // learner type it again on the form.
+                      final query = isPhone
+                          ? 'phone=$phoneNumber&countryCode=$countryCode'
+                          : [
+                              'email=${Uri.encodeComponent(email)}',
+                              'isPhone=false',
+                              if (phoneNumber.isNotEmpty) ...[
+                                'phone=$phoneNumber',
+                                'countryCode=${Uri.encodeComponent(countryCode)}',
+                              ],
+                            ].join('&');
+                      context.go('${AppRoutes.setupProfile}?$query');
+                    }
+                  }
+                },
             resent: (status, message) {
               // status 1 → success (green)
               // status 3 → warning (orange)

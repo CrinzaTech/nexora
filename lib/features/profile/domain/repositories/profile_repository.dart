@@ -21,6 +21,17 @@ abstract class ProfileRepository {
     String? stdCode,
   });
 
+  /// Files an account-deletion **request** via
+  /// `DELETE /api/v1/delete-account`. [reason] is required by the API and
+  /// must be non-blank.
+  ///
+  /// Returns [Unit] — the response carries no data, only whether the
+  /// request was recorded. Nothing is deleted yet; the row is queued for
+  /// back-office processing. The caller wipes local session state, and
+  /// must not call this twice: the endpoint is not idempotent and a
+  /// second call files a second request.
+  Future<Either<Failure, Unit>> deleteAccount({required String reason});
+
   /// Pushes just the device's FCM token to the dedicated
   /// `PUT /api/v1/update-fcm` endpoint (JSON body). Returns [Unit] on
   /// success — callers only care that it landed, not about any echoed
@@ -43,7 +54,5 @@ abstract class ProfileRepository {
   /// `GET /api/v1/UserAuth/app-rating-url`.
   ///
   /// [deviceType] must be `"android"` or `"ios"`.
-  Future<Either<Failure, AppRatingUrlModel>> getAppRatingUrl(
-    String deviceType,
-  );
+  Future<Either<Failure, AppRatingUrlModel>> getAppRatingUrl(String deviceType);
 }

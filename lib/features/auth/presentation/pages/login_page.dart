@@ -1,3 +1,5 @@
+import 'package:nexora/core/config/auth_policy.dart';
+import 'package:nexora/features/auth/presentation/widgets/email_input_field.dart';
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_colors.dart';
@@ -47,13 +49,16 @@ class _LoginPageState extends State<LoginPage> {
   Country get _defaultCountry =>
       const Country(name: 'India', code: 'IN', dialCode: '+91', flag: '🇮🇳');
 
-  void _toggleMode() {
-    setState(() {
-      _mode = _mode == LoginMode.phone ? LoginMode.email : LoginMode.phone;
-    });
-    // Reset the form so a previously-typed-but-discarded field doesn't
-    // raise a validation error against the now-hidden input.
-    _formKey.currentState?.reset();
+  /// Pencil on the email step — back to the number, keeping what was
+  /// already typed.
+  ///
+  /// Deliberately does not reset the form: `FormState.reset()` restores
+  /// fields to their initial value, which for the phone field means
+  /// empty — it would wipe the very number the learner tapped the pencil
+  /// to correct.
+  void _handleEditPhone() {
+    if (!mounted) return;
+    setState(() => _mode = LoginMode.phone);
   }
 
   Future<void> _handleSendOTP() async {
@@ -66,18 +71,43 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    // Email mode has no typed field to validate — the recipient only
-    // ever comes from a Google account pick, so just guard it's set.
+    // Email mode: the address is either picked from a Google account or
+    // typed, depending on platform (see [AuthPolicy]). Both land in the
+    // same controller and both reach the backend as a plain string, so
+    // there is one send path from here. Only the "it's missing" wording
+    // differs, because "pick one" and "type one" are different fixes.
     final email = _emailController.text.trim();
     if (email.isEmpty) {
       CustomSnackbar.error(
         context,
         title: 'Error',
-        message: 'Please pick an email with Google first.',
+        message: AuthPolicy.allowsGoogleEmailPicker
+            ? 'Please pick an email with Google first.'
+            : 'Please enter your email address.',
+      );
+      return;
+    }
+    // Shape check on the typed path only — a picked address came from a
+    // real Google account and has nothing to check.
+    if (!AuthPolicy.allowsGoogleEmailPicker &&
+        !EmailInputField.looksLikeEmail(email)) {
+      CustomSnackbar.error(
+        context,
+        title: 'Error',
+        message: "That email address doesn't look right.",
       );
       return;
     }
     await _sendOtp(recipient: email, isPhone: false);
+  }
+
+  /// Non-India phone screen: nothing is sent here. The number is just
+  /// validated and kept, and the user moves to the email step, which is
+  /// where verification actually happens for learners SMS can't reach.
+  void _handleNext() {
+    if (!mounted) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _mode = LoginMode.email);
   }
 
   /// Opens the native Google account picker so the user can pick a
@@ -88,9 +118,12 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted || _isLoading) return;
     setState(() => _isLoading = true);
 
-    String? email;
+    GoogleAccountInfo? account;
     try {
-      email = await sl<GoogleAccountPickerService>().pickEmail();
+      // The name/photo on the returned account are cached by the
+      // service, so Setup Profile can prefill them after the OTP hop
+      // if this turns out to be a new user.
+      account = await sl<GoogleAccountPickerService>().pickAccount();
     } catch (e) {
       if (mounted) {
         CustomSnackbar.error(
@@ -104,9 +137,9 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
     setState(() {
       _isLoading = false;
-      if (email != null) {
+      if (account != null) {
         _mode = LoginMode.email;
-        _emailController.text = email;
+        _emailController.text = account.email;
       }
     });
   }
@@ -169,9 +202,20 @@ class _LoginPageState extends State<LoginPage> {
           // dispatch to the correct channel. Phone path keeps the
           // legacy `phone=&countryCode=` for any callers still
           // building the URL by hand; email path uses `email=`.
+          // On the email leg, carry any number collected on the phone
+          // screen first (the non-India "Next" hand-off) so setup-profile
+          // can pre-fill it instead of asking twice.
+          final carriedPhone = _phoneController.text.trim();
           final query = isPhone
               ? 'phone=$recipient&countryCode=$dialCode&isPhone=true'
-              : 'email=${Uri.encodeComponent(recipient)}&isPhone=false';
+              : [
+                  'email=${Uri.encodeComponent(recipient)}',
+                  'isPhone=false',
+                  if (carriedPhone.isNotEmpty) ...[
+                    'phone=$carriedPhone',
+                    'countryCode=${Uri.encodeComponent(dialCode)}',
+                  ],
+                ].join('&');
           context.push('${AppRoutes.otp}?$query');
         },
       );
@@ -220,9 +264,10 @@ class _LoginPageState extends State<LoginPage> {
                 onCountrySelected: (country) {
                   setState(() => _selectedCountry = country);
                 },
-                onToggleMode: _toggleMode,
                 onSendOTPPressed: _handleSendOTP,
                 onGooglePickEmailPressed: _handleGooglePickEmail,
+                onNextPressed: _handleNext,
+                onEditPhonePressed: _handleEditPhone,
               ),
             ),
             // Full-screen loading overlay — shown while the OTP is being

@@ -160,9 +160,7 @@ class _CrashlyticsDiagnostics extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.error,
-              ),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.error),
               onPressed: () {
                 Navigator.of(context).pop();
                 _forceNativeCrash();

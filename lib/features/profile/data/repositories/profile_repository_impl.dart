@@ -57,6 +57,34 @@ class ProfileRepositoryImpl implements ProfileRepository {
   }
 
   @override
+  Future<Either<Failure, Unit>> deleteAccount({required String reason}) async {
+    try {
+      final json = await _apiClient.deleteAccount({'reason': reason});
+      // A 200 whose envelope says `success: false` shouldn't read as a
+      // success. The field is absent from some error shapes this endpoint
+      // can return (the auth filter's `{message, code}`, ASP.NET's
+      // ProblemDetails), so only an explicit `false` is treated as a
+      // failure — a missing field on a 2xx means the old envelope, which
+      // reaching this line already proves succeeded.
+      if (json['success'] == false) {
+        final message = json['message'];
+        return Left(
+          Failure.server(
+            message: message is String && message.isNotEmpty
+                ? message
+                : 'Could not submit the deletion request.',
+          ),
+        );
+      }
+      return const Right(unit);
+    } on DioException catch (e) {
+      return Left(mapDioExceptionToFailure(e));
+    } catch (e) {
+      return Left(Failure.unknown(message: e.toString()));
+    }
+  }
+
+  @override
   Future<Either<Failure, Unit>> updateFcmToken(String fcmToken) async {
     try {
       await _apiClient.updateFcmToken({'fcmToken': fcmToken});

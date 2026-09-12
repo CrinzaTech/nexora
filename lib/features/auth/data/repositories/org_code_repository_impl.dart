@@ -26,10 +26,9 @@ class OrgCodeRepositoryImpl implements OrgCodeRepository {
 
       // Backend returned 200 but isValid is false — surface as a domain error
       // so the UI can show the "wrong code" message.
-      final message =
-          (json['message'] as String?)?.trim().isNotEmpty == true
-              ? json['message'] as String
-              : 'Invalid organisation code.';
+      final message = (json['message'] as String?)?.trim().isNotEmpty == true
+          ? json['message'] as String
+          : 'Invalid organisation code.';
       return Left(Failure.server(message: message));
     } on DioException catch (e) {
       return Left(mapDioExceptionToFailure(e));

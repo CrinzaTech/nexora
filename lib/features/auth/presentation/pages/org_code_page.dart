@@ -69,62 +69,63 @@ class _OrgCodePageState extends State<OrgCodePage> {
       child: Scaffold(
         resizeToAvoidBottomInset: false,
         body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: BlocConsumer<OrgCodeCubit, OrgCodeState>(
-          listener: (context, state) {
-            if (state is OrgCodeValid) {
-              // Code validated — proceed to login.
-              context.go(AppRoutes.login);
-            } else if (state is OrgCodeError) {
-              CustomSnackbar.error(
-                context,
-                title: 'Invalid Code',
-                message: 'Please enter the correct org code',
-              );
-              // Reset so the user can retry immediately.
-              context.read<OrgCodeCubit>().reset();
-            }
-          },
-          builder: (context, state) {
-            final isLoading = state is OrgCodeLoading;
-            return Stack(
-              children: [
-                // ── Background ──────────────────────────────────────────
-                Positioned.fill(
-                  child: Image.asset(
-                    AppImages.loginBackground,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                // ── Form content ────────────────────────────────────────
-                Positioned.fill(
-                  child: _OrgCodeFormContent(
-                    codeController: _codeController,
-                    onCodeChanged: (_) => setState(() {}),
-                    onContinuePressed: _handleContinue,
-                    onSkipPressed: _handleSkip,
-                  ),
-                ),
-                // ── Loading overlay ─────────────────────────────────────
-                if (isLoading)
+          behavior: HitTestBehavior.opaque,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: BlocConsumer<OrgCodeCubit, OrgCodeState>(
+            listener: (context, state) {
+              if (state is OrgCodeValid) {
+                // Code validated — proceed to login.
+                context.go(AppRoutes.login);
+              } else if (state is OrgCodeError) {
+                CustomSnackbar.error(
+                  context,
+                  title: 'Invalid Code',
+                  message: 'Please enter the correct org code',
+                );
+                // Reset so the user can retry immediately.
+                context.read<OrgCodeCubit>().reset();
+              }
+            },
+            builder: (context, state) {
+              final isLoading = state is OrgCodeLoading;
+              return Stack(
+                children: [
+                  // ── Background ──────────────────────────────────────────
                   Positioned.fill(
-                    child: Container(
-                      color: Colors.black.withValues(alpha: 0.45),
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.primary,
-                          strokeWidth: 3,
+                    child: Image.asset(
+                      AppImages.loginBackground,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  // ── Form content ────────────────────────────────────────
+                  Positioned.fill(
+                    child: _OrgCodeFormContent(
+                      codeController: _codeController,
+                      onCodeChanged: (_) => setState(() {}),
+                      onContinuePressed: _handleContinue,
+                      onSkipPressed: _handleSkip,
+                    ),
+                  ),
+                  // ── Loading overlay ─────────────────────────────────────
+                  if (isLoading)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.primary,
+                            strokeWidth: 3,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       ),
-    ));
+    );
   }
 }
 
@@ -161,11 +162,7 @@ class _OrgCodeFormContent extends StatelessWidget {
           // ── Logo — floats in whatever space is above the card ────────
           Expanded(
             child: Center(
-              child: Image.asset(
-                AppImages.logoWithText,
-                scale: 2,
-                height: 150,
-              ),
+              child: Image.asset(AppImages.logoWithText, scale: 2, height: 150),
             ),
           ),
 
@@ -248,8 +245,9 @@ class _OrgCodeFormContent extends StatelessWidget {
                                 color: AppColors.white,
                                 borderRadius: BorderRadius.circular(50),
                                 border: Border.all(
-                                  color: AppColors.textPrimary
-                                      .withValues(alpha: 0.15),
+                                  color: AppColors.textPrimary.withValues(
+                                    alpha: 0.15,
+                                  ),
                                   width: 1.5,
                                 ),
                               ),
@@ -258,8 +256,9 @@ class _OrgCodeFormContent extends StatelessWidget {
                                 'Skip',
                                 style: AppTypography.bodyTextSemiBold.copyWith(
                                   fontSize: Screen.getFontSizeCapped(16),
-                                  color: AppColors.textPrimary
-                                      .withValues(alpha: 0.55),
+                                  color: AppColors.textPrimary.withValues(
+                                    alpha: 0.55,
+                                  ),
                                 ),
                               ),
                             ),
@@ -294,17 +293,13 @@ class _OrgCodeFormContent extends StatelessWidget {
   }
 }
 
-
 // ─── 6-cell alphanumeric input ─────────────────────────────────────────────
 
 class _OrgCodeInputField extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
 
-  const _OrgCodeInputField({
-    required this.controller,
-    required this.onChanged,
-  });
+  const _OrgCodeInputField({required this.controller, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {

@@ -3,6 +3,8 @@ import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_text_form_field.dart';
+import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/features/auth/data/services/location_country_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -95,19 +97,6 @@ class PhoneInputField extends StatefulWidget {
   /// stale state.
   final ValueChanged<Country>? onCountryChanged;
 
-  const PhoneInputField({
-    super.key,
-    required this.controller,
-    this.onChanged,
-    this.initialCountry,
-    this.onCountryChanged,
-  });
-
-  @override
-  State<PhoneInputField> createState() => _PhoneInputFieldState();
-}
-
-class _PhoneInputFieldState extends State<PhoneInputField> {
   static const List<Country> countries = [
     Country(name: 'India', code: 'IN', dialCode: '+91', flag: '🇮🇳'),
     Country(name: 'Nigeria', code: 'NG', dialCode: '+234', flag: '🇳🇬'),
@@ -161,22 +150,48 @@ class _PhoneInputFieldState extends State<PhoneInputField> {
     Country(name: 'Sri Lanka', code: 'LK', dialCode: '+94', flag: '🇱🇰'),
   ];
 
-  late Country selectedCountry = widget.initialCountry ?? countries.first;
+  const PhoneInputField({
+    super.key,
+    required this.controller,
+    this.onChanged,
+    this.initialCountry,
+    this.onCountryChanged,
+  });
+
+  @override
+  State<PhoneInputField> createState() => _PhoneInputFieldState();
+}
+
+class _PhoneInputFieldState extends State<PhoneInputField> {
+  late Country selectedCountry =
+      widget.initialCountry ?? PhoneInputField.countries.first;
 
   (int, int) get _lengthRange =>
       _phoneLengthByCountry[selectedCountry.code] ?? _defaultPhoneLengthRange;
 
-  Future<void> _showCountryBottomSheet() async {
-    final picked = await showModalBottomSheet<Country>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) =>
-          _CountryPickerSheet(countries: countries, selected: selectedCountry),
-    );
-    if (picked == null || !mounted) return;
-    setState(() => selectedCountry = picked);
-    widget.onCountryChanged?.call(picked);
+  bool _isResolvingCountry = false;
+
+  /// Tapping the flag resolves the dialling code from the caller's IP
+  /// rather than opening a list to choose from — the country is a fact
+  /// about where you are, not a preference.
+  ///
+  /// Every failure path is silent and leaves the current selection
+  /// alone: no network, a lookup the server couldn't resolve, or a
+  /// private/loopback caller all keep whatever was already set (India
+  /// by default). That means a flaky network can never strand someone
+  /// on the wrong code — it just doesn't change.
+  Future<void> _resolveCountryFromLocation() async {
+    if (_isResolvingCountry) return;
+    setState(() => _isResolvingCountry = true);
+
+    final resolved = await sl<LocationCountryService>().resolveCountry();
+
+    if (!mounted) return;
+    setState(() {
+      _isResolvingCountry = false;
+      if (resolved != null) selectedCountry = resolved;
+    });
+    if (resolved != null) widget.onCountryChanged?.call(resolved);
   }
 
   @override
@@ -215,7 +230,7 @@ class _PhoneInputFieldState extends State<PhoneInputField> {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: _showCountryBottomSheet,
+            onTap: _isResolvingCountry ? null : _resolveCountryFromLocation,
             splashColor: AppColors.primary.withValues(alpha: 0.09),
             highlightColor: AppColors.primary.withValues(alpha: 0.09),
             borderRadius: BorderRadius.circular(AppSizes.radiusXXL),
@@ -227,10 +242,22 @@ class _PhoneInputFieldState extends State<PhoneInputField> {
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      selectedCountry.flag,
-                      style: TextStyle(fontSize: Screen.getFontSizeCapped(18)),
-                    ),
+                    if (_isResolvingCountry)
+                      SizedBox(
+                        width: Screen.getSize(16),
+                        height: Screen.getSize(16),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    else
+                      Text(
+                        selectedCountry.flag,
+                        style: TextStyle(
+                          fontSize: Screen.getFontSizeCapped(18),
+                        ),
+                      ),
                     SizedBox(width: Screen.getHorizontalSize(4)),
                     Text(
                       selectedCountry.dialCode,
