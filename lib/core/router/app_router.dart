@@ -498,6 +498,7 @@ class AppRouter {
             state.uri.queryParameters['courseId'] ?? '',
           );
           final nodeId = state.uri.queryParameters['nodeId'] ?? '';
+          final folderPath = state.uri.queryParameters['folderPath'] ?? '';
           final coursePurchasedId =
               int.tryParse(
                 state.uri.queryParameters['coursePurchasedId'] ?? '',
@@ -510,6 +511,7 @@ class AppRouter {
             examId: examId,
             nodeId: nodeId,
             courseId: courseId ?? 0,
+            folderPath: folderPath,
             coursePurchasedId: coursePurchasedId,
           );
         },

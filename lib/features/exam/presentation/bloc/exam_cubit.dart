@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:nexora/core/bloc/safe_cubit.dart';
+import 'package:nexora/core/storage/secure_storage.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 import 'package:nexora/features/exam/data/models/exam_models.dart';
+import 'package:nexora/features/exam/domain/entities/exam_context.dart';
 import 'package:nexora/features/exam/domain/usecases/answer_exam_question_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_gate_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_history_usecase.dart';
+import 'package:nexora/features/exam/domain/usecases/get_exam_leaderboard_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_paper_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_question_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_result_usecase.dart';
@@ -34,6 +37,7 @@ class ExamCubit extends SafeCubit<ExamState> {
   final GetExamResultUseCase getResult;
   final GetExamHistoryUseCase getHistory;
   final ReattemptExamUseCase reattemptExam;
+  final GetExamLeaderboardUseCase getLeaderboard;
 
   ExamCubit({
     required this.repository,
@@ -47,10 +51,17 @@ class ExamCubit extends SafeCubit<ExamState> {
     required this.getResult,
     required this.getHistory,
     required this.reattemptExam,
+    required this.getLeaderboard,
   }) : super(const ExamState.initial());
 
   // ── Session state ──────────────────────────────────────────────────────
   int _examId = 0;
+
+  // Which course-content placement this session belongs to. Captured once in
+  // [open] and replayed on every (exam, student)-keyed call — gate, start,
+  // reattempt and history — so the same exam sitting in two courses keeps two
+  // independent runs of attempts instead of sharing one "already submitted".
+  ExamContext _context = ExamContext.standalone;
   String? _phone;
   int? _attemptId;
   ExamPaperResponse? _paper;
@@ -100,13 +111,21 @@ class ExamCubit extends SafeCubit<ExamState> {
 
   /// Called once when the exam screen opens. Resolves phone, hits the gate,
   /// and routes to the right screen.
-  Future<void> open(int examId) async {
+  Future<void> open(
+    int examId, {
+    ExamContext context = ExamContext.standalone,
+  }) async {
     _examId = examId;
+    _context = context;
     emit(const ExamState.loading());
     final phone = await _phoneOrError();
     if (phone == null) return;
 
-    final result = await getGate(examId: examId, phoneNumber: phone);
+    final result = await getGate(
+      examId: examId,
+      phoneNumber: phone,
+      context: context,
+    );
     result.fold(
       (failure) => emit(ExamState.error(failure.message)),
       (gate) {
@@ -117,7 +136,9 @@ class ExamCubit extends SafeCubit<ExamState> {
   }
 
   /// Re-run the gate (e.g. Retry after an error).
-  Future<void> refreshGate() => open(_examId);
+  // Keeps the captured placement — re-running the gate must not silently drop
+  // back to the standalone scope and re-show a different course's result.
+  Future<void> refreshGate() => open(_examId, context: _context);
 
   // ── Start / Resume / Reattempt ─────────────────────────────────────────
 
@@ -126,7 +147,11 @@ class ExamCubit extends SafeCubit<ExamState> {
     final phone = await _phoneOrError();
     if (phone == null) return;
     emit(const ExamState.loading());
-    final result = await startExam(examId: _examId, phoneNumber: phone);
+    final result = await startExam(
+      examId: _examId,
+      phoneNumber: phone,
+      context: _context,
+    );
     await result.fold(
       (failure) async => emit(ExamState.error(failure.message)),
       (attempt) => _enterAttempt(attempt),
@@ -138,7 +163,11 @@ class ExamCubit extends SafeCubit<ExamState> {
     final phone = await _phoneOrError();
     if (phone == null) return;
     emit(const ExamState.loading());
-    final result = await reattemptExam(examId: _examId, phoneNumber: phone);
+    final result = await reattemptExam(
+      examId: _examId,
+      phoneNumber: phone,
+      context: _context,
+    );
     await result.fold(
       (failure) async => emit(ExamState.error(failure.message)),
       (attempt) => _enterAttempt(attempt),
@@ -394,6 +423,56 @@ class ExamCubit extends SafeCubit<ExamState> {
     return out;
   }
 
+  // ── Leaving a running exam ─────────────────────────────────────────────
+
+  /// How many times a student may leave a running exam before it is
+  /// submitted for them.
+  static const int maxExits = 3;
+
+  /// Persisted per ATTEMPT, not per session, and deliberately not in memory.
+  ///
+  /// Leaving pops [ExamPage], which disposes this cubit — the factory hands
+  /// back a fresh one on re-entry. An in-memory counter would therefore reset
+  /// on the very action it is meant to count, and secure storage (rather than
+  /// anything in RAM) is what also survives the student force-quitting the
+  /// app to clear it.
+  ///
+  /// Keyed by attempt so a re-attempt legitimately starts with a full
+  /// allowance; cleared once the attempt is submitted.
+  String _exitKey(int attemptId) => 'exam_exits_$attemptId';
+
+  Future<int> _exitsUsed() async {
+    final attemptId = _attemptId;
+    if (attemptId == null) return 0;
+    final raw = await secureStorage.read(key: _exitKey(attemptId));
+    return int.tryParse(raw ?? '') ?? 0;
+  }
+
+  /// Exits the student has left. Zero means the next back press submits.
+  Future<int> exitsRemaining() async {
+    final used = await _exitsUsed();
+    return (maxExits - used).clamp(0, maxExits);
+  }
+
+  /// Records one exit. Called only when the student confirms leaving — a
+  /// dialog they cancel means they stayed in the exam and shouldn't be
+  /// charged for it.
+  Future<void> registerExit() async {
+    final attemptId = _attemptId;
+    if (attemptId == null) return;
+    final used = await _exitsUsed();
+    await secureStorage.write(
+      key: _exitKey(attemptId),
+      value: '${used + 1}',
+    );
+  }
+
+  Future<void> _clearExits() async {
+    final attemptId = _attemptId;
+    if (attemptId == null) return;
+    await secureStorage.delete(key: _exitKey(attemptId));
+  }
+
   // ── Submit ─────────────────────────────────────────────────────────────
 
   /// Final submit. [autoSubmitted] is a client label only — the server
@@ -413,6 +492,9 @@ class ExamCubit extends SafeCubit<ExamState> {
       answers: _buildAnswers(),
     );
     _submitting = false;
+    // Only on success — a failed submit leaves the student in the exam, and
+    // their remaining allowance with it.
+    if (result.isRight()) await _clearExits();
     result.fold(
       (failure) => emit(ExamState.error(failure.message)),
       (res) => emit(ExamState.result(res)),
@@ -437,8 +519,31 @@ class ExamCubit extends SafeCubit<ExamState> {
   Future<List<AttemptHistoryItem>> fetchHistory() async {
     final phone = await _phoneOrError();
     if (phone == null) return const [];
-    final result = await getHistory(examId: _examId, phoneNumber: phone);
+    final result = await getHistory(
+      examId: _examId,
+      phoneNumber: phone,
+      context: _context,
+    );
     return result.fold((_) => const [], (list) => list);
+  }
+
+  /// Rankings for THIS placement. Reuses [_context] captured in [open] — the
+  /// board is per course-content node, so a standalone call here would rank
+  /// the student against the wrong pool.
+  ///
+  /// Returns null on failure rather than an empty board: an empty board is a
+  /// meaningful state ("nobody has finished yet") that the sheet renders
+  /// differently from a network error, so the two must not collapse.
+  Future<ExamLeaderboard?> fetchLeaderboard({int top = 10}) async {
+    final phone = await _phoneOrError();
+    if (phone == null) return null;
+    final result = await getLeaderboard(
+      examId: _examId,
+      phoneNumber: phone,
+      context: _context,
+      top: top,
+    );
+    return result.fold((_) => null, (board) => board);
   }
 
   @override

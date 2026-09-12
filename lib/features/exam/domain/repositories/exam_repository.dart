@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 
 import 'package:nexora/core/error/failures.dart';
 import 'package:nexora/features/exam/data/models/exam_models.dart';
+import 'package:nexora/features/exam/domain/entities/exam_context.dart';
 
 /// Contract for the student exam-taking flow (`api/v1/exam`, normal mode).
 ///
@@ -16,12 +17,14 @@ abstract class ExamRepository {
   Future<Either<Failure, AttemptStateResponse>> getGate({
     required int examId,
     required String phoneNumber,
+    ExamContext context,
   });
 
   /// Idempotent create-or-resume. Starts the clock the first time.
   Future<Either<Failure, AttemptStateResponse>> start({
     required int examId,
     required String phoneNumber,
+    ExamContext context,
   });
 
   /// Whole paper for a normal-mode attempt, with saved answers repainted.
@@ -70,11 +73,24 @@ abstract class ExamRepository {
   Future<Either<Failure, List<AttemptHistoryItem>>> getHistory({
     required int examId,
     required String phoneNumber,
+    ExamContext context,
   });
 
   /// Start a fresh attempt after a finished one.
   Future<Either<Failure, AttemptStateResponse>> reattempt({
     required int examId,
     required String phoneNumber,
+    ExamContext context,
+  });
+
+  /// Top students at this placement, plus the caller's own standing.
+  ///
+  /// [top] is a rank cut-off, not a row count — ties at the cut-off are all
+  /// returned, so the board can come back longer than asked for.
+  Future<Either<Failure, ExamLeaderboard>> getLeaderboard({
+    required int examId,
+    required String phoneNumber,
+    ExamContext context,
+    int top,
   });
 }

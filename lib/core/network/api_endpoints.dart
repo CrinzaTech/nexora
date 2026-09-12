@@ -161,6 +161,11 @@ class ApiEndpoints {
   static const String examHistory = '/api/v1/exam/{examId}/history';
   static const String examReattempt = '/api/v1/exam/{examId}/reattempt';
 
+  // Top students at one exam *placement*, plus the caller's own standing.
+  // Takes the same phoneNumber + nodeId/courseId/folderPath as `examGate`,
+  // and an optional `top` (default 10, clamped server-side to 1-50).
+  static const String examLeaderboard = '/api/v1/exam/{examId}/leaderboard';
+
   // ============================================================
   // WEBINARS (public live classes)
   //

@@ -489,10 +489,17 @@ abstract class ApiClient {
   // EXAM — Gate (read-only; never creates an attempt)
   // GET /api/v1/exam/{examId}/gate?phoneNumber=
   // ============================================================
+  // nodeId/courseId/folderPath say WHICH placement of this exam in course
+  // content the student opened — the same exam can sit in several courses and
+  // each keeps its own attempts. All optional: null values are stripped from
+  // the query, which selects the server's standalone scope.
   @GET(ApiEndpoints.examGate)
   Future<Map<String, dynamic>> getExamGate(
     @Path('examId') int examId,
     @Query('phoneNumber') String phoneNumber,
+    @Query('nodeId') String? nodeId,
+    @Query('courseId') int? courseId,
+    @Query('folderPath') String? folderPath,
   );
 
   // ============================================================
@@ -574,10 +581,35 @@ abstract class ApiClient {
   // EXAM — History (all of the student's attempts, newest first)
   // GET /api/v1/exam/{examId}/history?phoneNumber=
   // ============================================================
+  // nodeId/courseId/folderPath say WHICH placement of this exam in course
+  // content the student opened — the same exam can sit in several courses and
+  // each keeps its own attempts. All optional: null values are stripped from
+  // the query, which selects the server's standalone scope.
   @GET(ApiEndpoints.examHistory)
   Future<Map<String, dynamic>> getExamHistory(
     @Path('examId') int examId,
     @Query('phoneNumber') String phoneNumber,
+    @Query('nodeId') String? nodeId,
+    @Query('courseId') int? courseId,
+    @Query('folderPath') String? folderPath,
+  );
+
+  // ============================================================
+  // EXAM — Leaderboard (top students here, plus where you stand)
+  // GET /api/v1/exam/{examId}/leaderboard?phoneNumber=
+  // ============================================================
+  // Scoped by the same nodeId/courseId/folderPath placement as the gate: the
+  // same exam in another course has its own separate board. `top` is a RANK
+  // cut-off rather than a row count, so the response can carry more rows than
+  // asked for when students tie at the cut-off.
+  @GET(ApiEndpoints.examLeaderboard)
+  Future<Map<String, dynamic>> getExamLeaderboard(
+    @Path('examId') int examId,
+    @Query('phoneNumber') String phoneNumber,
+    @Query('nodeId') String? nodeId,
+    @Query('courseId') int? courseId,
+    @Query('folderPath') String? folderPath,
+    @Query('top') int? top,
   );
 
   // ============================================================

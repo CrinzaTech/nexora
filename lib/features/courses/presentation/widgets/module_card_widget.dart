@@ -265,11 +265,15 @@ class ModuleCard extends StatelessWidget {
             // instead of silently mis-routing. Completion is fired inside
             // ExamPage on load (parity with image/assignment nodes).
             final examId = int.tryParse(module.url ?? '') ?? 0;
+            // nodeId/courseId/folderPath travel to ExamPage and on to the
+            // exam API: they are what keep this placement's attempts separate
+            // from the same exam sitting in another course or folder.
             context.push(
               '${AppRoutes.exam}'
               '?examId=$examId'
               '&courseId=$courseId'
               '&nodeId=${Uri.encodeComponent(module.nodeId)}'
+              '&folderPath=${Uri.encodeComponent(module.folderPath ?? '')}'
               '&coursePurchasedId=$coursePurchasedId',
             );
           } else if (module.type == CourseContentType.liveClass) {

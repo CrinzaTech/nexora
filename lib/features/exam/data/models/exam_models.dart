@@ -1088,3 +1088,136 @@ class AttemptHistoryItem {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Leaderboard
+// ─────────────────────────────────────────────────────────────────────────
+
+/// One student's standing on the board.
+///
+/// The payload goes to every student who opens the board, so it carries
+/// display names only — no user ids and no phone numbers. [isMe] is resolved
+/// server-side, and [rank] is the list key.
+class LeaderboardEntry {
+  final int rank;
+  final String name;
+  final double score;
+  final double maxScore;
+  final double percentage;
+  final int timeTakenSeconds;
+
+  /// Pre-formatted by the server, e.g. `10m 23s` or `1h 04m 12s`. Rendered as
+  /// sent so the tie-break reads identically on every platform.
+  final String timeTaken;
+
+  final int attemptNo;
+  final DateTime? submittedAt;
+
+  /// True for the viewing student. Server-resolved.
+  final bool isMe;
+
+  const LeaderboardEntry({
+    required this.rank,
+    required this.name,
+    this.score = 0,
+    this.maxScore = 0,
+    this.percentage = 0,
+    this.timeTakenSeconds = 0,
+    this.timeTaken = '',
+    this.attemptNo = 0,
+    this.submittedAt,
+    this.isMe = false,
+  });
+
+  /// Bar length as a fraction of the paper's total, not of rank position —
+  /// scaling to rank would draw a straight staircase and hide whether the top
+  /// is tightly bunched or one student is far ahead.
+  double get scoreFraction =>
+      maxScore > 0 ? (score / maxScore).clamp(0.0, 1.0) : 0.0;
+
+  factory LeaderboardEntry.fromJson(Map<String, dynamic> json) {
+    return LeaderboardEntry(
+      rank: _asInt(json['rank']) ?? 0,
+      name: (json['name'] ?? '').toString(),
+      score: _asDouble(json['score']) ?? 0,
+      maxScore: _asDouble(json['maxScore']) ?? 0,
+      percentage: _asDouble(json['percentage']) ?? 0,
+      timeTakenSeconds: _asInt(json['timeTakenSeconds']) ?? 0,
+      timeTaken: (json['timeTaken'] ?? '').toString(),
+      attemptNo: _asInt(json['attemptNo']) ?? 0,
+      submittedAt: parseExamUtc(json['submittedAt']),
+      isMe: json['isMe'] == true,
+    );
+  }
+}
+
+/// The board for one exam *placement*, plus where the viewing student stands.
+///
+/// Both halves arrive in one response, so there is no second call and no
+/// client-side ranking. Students are ranked against everyone who sat the exam
+/// from the same course-content node — the same exam in another course has its
+/// own separate board.
+class ExamLeaderboard {
+  final int examId;
+  final String examTitle;
+
+  /// False when the educator has withheld results. [top] is then empty and
+  /// [me] null *by design* — this is not an error, and must not be rendered
+  /// like [isEmptyBoard].
+  final bool resultsVisible;
+  final String resultReleaseMode;
+  final DateTime? resultsAvailableAt;
+
+  /// The rank cut-off, **not** a row count. Students tied at the cut-off are
+  /// all returned, so [top] can be longer than this.
+  final int topCount;
+
+  /// The full ranked pool — the denominator for "34 of 112".
+  final int totalRanked;
+
+  final List<LeaderboardEntry> top;
+
+  /// The viewing student's row. Populated **even when they are in [top]**, so
+  /// always branch on [isMeInTop] before rendering it, or the student appears
+  /// twice. Null when they have no evaluated attempt at this placement — they
+  /// are then unranked, not last.
+  final LeaderboardEntry? me;
+
+  final bool isMeInTop;
+
+  const ExamLeaderboard({
+    this.examId = 0,
+    this.examTitle = '',
+    this.resultsVisible = true,
+    this.resultReleaseMode = 'instant',
+    this.resultsAvailableAt,
+    this.topCount = 10,
+    this.totalRanked = 0,
+    this.top = const [],
+    this.me,
+    this.isMeInTop = false,
+  });
+
+  /// True when nobody has finished yet — distinct from results being withheld.
+  bool get isEmptyBoard => resultsVisible && top.isEmpty;
+
+  factory ExamLeaderboard.fromJson(Map<String, dynamic> json) {
+    return ExamLeaderboard(
+      examId: _asInt(json['examId']) ?? 0,
+      examTitle: (json['examTitle'] ?? '').toString(),
+      resultsVisible: json['resultsVisible'] != false,
+      resultReleaseMode: (json['resultReleaseMode'] ?? 'instant').toString(),
+      resultsAvailableAt: parseExamUtc(json['resultsAvailableAt']),
+      topCount: _asInt(json['topCount']) ?? 10,
+      totalRanked: _asInt(json['totalRanked']) ?? 0,
+      top: (json['top'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(LeaderboardEntry.fromJson)
+          .toList(growable: false),
+      me: json['me'] is Map<String, dynamic>
+          ? LeaderboardEntry.fromJson(json['me'] as Map<String, dynamic>)
+          : null,
+      isMeInTop: json['isMeInTop'] == true,
+    );
+  }
+}

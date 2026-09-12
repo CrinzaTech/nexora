@@ -8,6 +8,7 @@ import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/core/widgets/custom_appbar_widget.dart';
+import 'package:nexora/features/exam/domain/entities/exam_context.dart';
 import 'package:nexora/features/exam/presentation/bloc/exam_cubit.dart';
 import 'package:nexora/features/exam/data/models/exam_models.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_atoms.dart';
@@ -16,6 +17,7 @@ import 'package:nexora/features/exam/presentation/widgets/exam_competitive_view.
 import 'package:nexora/features/exam/presentation/widgets/exam_countdown.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_history_sheet.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_intro_view.dart';
+import 'package:nexora/features/exam/presentation/widgets/exam_leaderboard_sheet.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_paper_view.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_result_view.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_section_transition_view.dart';
@@ -29,8 +31,13 @@ class ExamPage extends StatelessWidget {
   /// Curriculum tree node id — used for completion tracking.
   final String nodeId;
 
-  /// Owning course id (kept for parity / future use).
+  /// Owning course id. Sent with the attempt so the educator's Stats page can
+  /// filter results by course.
   final int courseId;
+
+  /// Folder trail this exam node sits under, e.g. "Module 1 › Chapter 2".
+  /// Descriptive only — [nodeId] is what scopes the attempt.
+  final String folderPath;
 
   /// When non-zero, the node is marked complete on open (purchased flow).
   final int coursePurchasedId;
@@ -40,6 +47,7 @@ class ExamPage extends StatelessWidget {
     required this.examId,
     required this.nodeId,
     required this.courseId,
+    this.folderPath = '',
     this.coursePurchasedId = 0,
   });
 
@@ -51,7 +59,17 @@ class ExamPage extends StatelessWidget {
         // image/zip nodes which fire completion on load). No-ops when
         // coursePurchasedId is 0.
         _markCompleted();
-        return sl<ExamCubit>()..open(examId);
+        // The context is what makes this placement's attempts its own: the
+        // same exam in another course (or another folder) now has a separate
+        // run of attempts instead of reporting "already submitted" here.
+        return sl<ExamCubit>()..open(
+          examId,
+          context: ExamContext(
+            nodeId: nodeId,
+            courseId: courseId,
+            folderPath: folderPath.isEmpty ? null : folderPath,
+          ),
+        );
       },
       // Second trigger on the attempt actually starting. The open-time
       // call above already covers the common path, but this guarantees a
@@ -137,8 +155,7 @@ class _ExamViewState extends State<_ExamView> {
           canPop: !isTaking,
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop || !isTaking) return;
-            final leave = await _confirmLeave(context);
-            if (leave == true && context.mounted) context.pop();
+            await _handleBack(context, cubit);
           },
           child: Scaffold(
             backgroundColor: AppColors.scaffoldLight,
@@ -155,13 +172,75 @@ class _ExamViewState extends State<_ExamView> {
               titleColor: AppColors.textPrimary,
               onBackPressed: () async {
                 if (isTaking) {
-                  final leave = await _confirmLeave(context);
-                  if (leave == true && context.mounted) context.pop();
+                  await _handleBack(context, cubit);
                 } else {
                   context.pop();
                 }
               },
               actions: [
+                // Rankings for this exam placement. Only on the result
+                // screen — before that the student has no score to compare,
+                // and mid-exam it would be a way out of the paper.
+                () {
+                  final onResult = state.maybeWhen(
+                    result: (_) => true,
+                    orElse: () => false,
+                  );
+                  if (!onResult) return const SizedBox.shrink();
+                  // A bare icon on a white app bar reads as decoration, so
+                  // this is tinted, outlined and named: filled in the primary
+                  // colour with its own label, which is what makes a student
+                  // recognise it as something to tap rather than a badge.
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSizes.paddingM,
+                      vertical: 10,
+                    ),
+                    child: Material(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(
+                        AppSizes.radiusCircle,
+                      ),
+                      child: InkWell(
+                        onTap: () =>
+                            showExamLeaderboardSheet(context, cubit: cubit),
+                        borderRadius: BorderRadius.circular(
+                          AppSizes.radiusCircle,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(
+                              AppSizes.radiusCircle,
+                            ),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.40),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.leaderboard_rounded,
+                                size: 16,
+                                color: AppColors.primary,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'Rankings',
+                                style: AppTypography.bodyTextXtraSmallSemiBold
+                                    .copyWith(color: AppColors.primary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }(),
                 () {
                   final deadline = state.maybeWhen(
                     taking: (_, __, d, ___, ____) => d,
@@ -260,17 +339,72 @@ class _ExamViewState extends State<_ExamView> {
     );
   }
 
-  Future<bool?> _confirmLeave(BuildContext context) {
+  /// The single way out of a running exam, shared by the back gesture and the
+  /// app-bar button.
+  ///
+  /// A student gets [ExamCubit.maxExits] exits per attempt. Spending the last
+  /// one is still a normal exit; it is the NEXT back press that submits, so
+  /// nobody is graded by the same press that used up their allowance.
+  Future<void> _handleBack(BuildContext context, ExamCubit cubit) async {
+    final remaining = await cubit.exitsRemaining();
+    if (!context.mounted) return;
+
+    if (remaining <= 0) {
+      // Submitted before the notice, not after: an acknowledge button the
+      // student can sit on would make "automatic" theirs to postpone.
+      await cubit.submit(autoSubmitted: true);
+      if (!context.mounted) return;
+      await _showExitLimitNotice(context);
+      return;
+    }
+
+    final leave = await _confirmLeave(context, remaining: remaining);
+    if (leave != true || !context.mounted) return;
+    // Recorded only now — a cancelled dialog means they stayed put.
+    await cubit.registerExit();
+    if (context.mounted) context.pop();
+  }
+
+  Future<void> _showExitLimitNotice(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      barrierColor: AppColors.overlayMedium,
+      builder: (ctx) => ExamDialogShell(
+        icon: Icons.gavel_rounded,
+        accent: AppColors.error,
+        title: 'Exam submitted',
+        message:
+            'You left this exam ${ExamCubit.maxExits} times, which is the '
+            'limit. Your answers have been submitted for grading.',
+        actions: [
+          ExamDialogAction(
+            label: 'View result',
+            color: AppColors.error,
+            onPressed: () => Navigator.of(ctx).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool?> _confirmLeave(BuildContext context, {required int remaining}) {
+    final last = remaining == 1;
+    final allowance = last
+        ? 'This is your final exit. Leaving again after this will submit '
+              'your exam automatically.'
+        : 'You can leave $remaining more times — after that your exam is '
+              'submitted automatically.';
     return showDialog<bool>(
       context: context,
       barrierColor: AppColors.overlayMedium,
       builder: (ctx) => ExamDialogShell(
         icon: Icons.logout_rounded,
         accent: AppColors.error,
-        title: 'Leave exam?',
+        title: last ? 'Last time you can leave' : 'Leave exam?',
         message:
             'Your answers are saved automatically, but the timer keeps '
-            'running. You can resume from where you left off.',
+            'running. You can resume from where you left off.\n\n'
+            '$allowance',
         actions: [
           ExamDialogAction(
             label: 'Leave exam',

@@ -5,6 +5,7 @@ import 'package:nexora/core/error/failures.dart';
 import 'package:nexora/core/network/api_client.dart';
 import 'package:nexora/core/network/network_exception_mapper.dart';
 import 'package:nexora/features/exam/data/models/exam_models.dart';
+import 'package:nexora/features/exam/domain/entities/exam_context.dart';
 import 'package:nexora/features/exam/domain/repositories/exam_repository.dart';
 
 class ExamRepositoryImpl implements ExamRepository {
@@ -53,9 +54,16 @@ class ExamRepositoryImpl implements ExamRepository {
   Future<Either<Failure, AttemptStateResponse>> getGate({
     required int examId,
     required String phoneNumber,
+    ExamContext context = ExamContext.standalone,
   }) async {
     try {
-      final json = await _apiClient.getExamGate(examId, phoneNumber);
+      final json = await _apiClient.getExamGate(
+        examId,
+        phoneNumber,
+        context.nodeId,
+        context.courseId,
+        context.folderPath,
+      );
       return _data(json).map(AttemptStateResponse.fromJson);
     } on DioException catch (e) {
       return Left(mapDioExceptionToFailure(e));
@@ -68,10 +76,12 @@ class ExamRepositoryImpl implements ExamRepository {
   Future<Either<Failure, AttemptStateResponse>> start({
     required int examId,
     required String phoneNumber,
+    ExamContext context = ExamContext.standalone,
   }) async {
     try {
       final json = await _apiClient.startExam(examId, {
         'phoneNumber': phoneNumber,
+        ...context.toBody(),
       });
       return _data(json).map(AttemptStateResponse.fromJson);
     } on DioException catch (e) {
@@ -190,9 +200,16 @@ class ExamRepositoryImpl implements ExamRepository {
   Future<Either<Failure, List<AttemptHistoryItem>>> getHistory({
     required int examId,
     required String phoneNumber,
+    ExamContext context = ExamContext.standalone,
   }) async {
     try {
-      final json = await _apiClient.getExamHistory(examId, phoneNumber);
+      final json = await _apiClient.getExamHistory(
+        examId,
+        phoneNumber,
+        context.nodeId,
+        context.courseId,
+        context.folderPath,
+      );
       if (json['success'] == false) {
         return Left(
           Failure.server(
@@ -216,13 +233,39 @@ class ExamRepositoryImpl implements ExamRepository {
   }
 
   @override
+  Future<Either<Failure, ExamLeaderboard>> getLeaderboard({
+    required int examId,
+    required String phoneNumber,
+    ExamContext context = ExamContext.standalone,
+    int top = 10,
+  }) async {
+    try {
+      final json = await _apiClient.getExamLeaderboard(
+        examId,
+        phoneNumber,
+        context.nodeId,
+        context.courseId,
+        context.folderPath,
+        top,
+      );
+      return _data(json).map(ExamLeaderboard.fromJson);
+    } on DioException catch (e) {
+      return Left(mapDioExceptionToFailure(e));
+    } catch (e) {
+      return Left(Failure.unknown(message: e.toString()));
+    }
+  }
+
+  @override
   Future<Either<Failure, AttemptStateResponse>> reattempt({
     required int examId,
     required String phoneNumber,
+    ExamContext context = ExamContext.standalone,
   }) async {
     try {
       final json = await _apiClient.reattemptExam(examId, {
         'phoneNumber': phoneNumber,
+        ...context.toBody(),
       });
       return _data(json).map(AttemptStateResponse.fromJson);
     } on DioException catch (e) {

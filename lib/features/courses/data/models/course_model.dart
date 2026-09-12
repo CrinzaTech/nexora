@@ -598,6 +598,13 @@ class CourseContent {
   /// behave exactly as before, which is what makes the rollout safe.
   final String? liveStatus;
 
+  /// Exam nodes only: the folder trail this node sits under inside the
+  /// course, e.g. "Module 1 › Chapter 2". Stamped by the admin on every save
+  /// and passed back when an attempt starts, purely so the educator's Stats
+  /// page can show where a student sat the exam. Null on every other node
+  /// type, and on exam nodes saved before the admin started stamping it.
+  final String? folderPath;
+
   const CourseContent({
     required this.nodeId,
     required this.nodeName,
@@ -609,6 +616,7 @@ class CourseContent {
     this.children = const [],
     this.startDateTime,
     this.liveStatus,
+    this.folderPath,
   });
 
   bool get isFolder => type == CourseContentType.folder;
@@ -753,6 +761,7 @@ class CourseContent {
           ? null
           : DateTime.tryParse(startRaw.toString())?.toLocal(),
       liveStatus: json['liveStatus'] as String?,
+      folderPath: json['folderPath'] as String?,
     );
   }
 }

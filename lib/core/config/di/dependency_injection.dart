@@ -88,6 +88,7 @@ import 'package:nexora/features/exam/domain/usecases/answer_exam_question_usecas
 import 'package:nexora/features/exam/domain/usecases/get_exam_gate_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_question_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_history_usecase.dart';
+import 'package:nexora/features/exam/domain/usecases/get_exam_leaderboard_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_paper_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_result_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/reattempt_exam_usecase.dart';
@@ -381,6 +382,7 @@ Future<void> setupLocator() async {
   sl.registerLazySingleton(() => GetExamResultUseCase(sl()));
   sl.registerLazySingleton(() => GetExamHistoryUseCase(sl()));
   sl.registerLazySingleton(() => ReattemptExamUseCase(sl()));
+  sl.registerLazySingleton(() => GetExamLeaderboardUseCase(sl()));
   sl.registerFactory(
     () => ExamCubit(
       repository: sl(),
@@ -394,6 +396,7 @@ Future<void> setupLocator() async {
       getResult: sl(),
       getHistory: sl(),
       reattemptExam: sl(),
+      getLeaderboard: sl(),
     ),
   );
 
