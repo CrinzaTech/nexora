@@ -11,6 +11,19 @@ import 'package:nexora/features/home/data/models/home_model.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+/// Soft white halo behind tile labels drawn in [AppColors.primaryContent] on
+/// the dark canvas, so the purple text reads clearly. Kept wide and faint (no
+/// offset, low alpha) — a tight, strong glow thickens the letterforms and
+/// makes the labels look bolded. Null in light mode.
+List<Shadow>? _tileLabelGlow() => AppColors.isDark
+    ? [
+        Shadow(
+          color: AppColors.alwaysWhite.withValues(alpha: 0.35),
+          blurRadius: 8,
+        ),
+      ]
+    : null;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tile palette helper — derives N premium gradients from the brand config.
 //
@@ -1046,12 +1059,12 @@ class _DefaultCard extends StatelessWidget {
           textAlign: TextAlign.center,
           // primaryContent, not primary: on a white page they are the same
           // colour, and on the dark canvas this is the variant lifted far
-          // enough to stay legible. A glow behind the glyphs was the other
-          // way to buy that contrast, but any glow thickens letterforms and
-          // the labels came out looking bolded.
+          // enough to stay legible. The dark-mode glow is deliberately faint
+          // — see [_tileLabelGlow].
           style: AppTypography.bodyTextLargeSemiBold.copyWith(
             color: AppColors.primaryContent,
             fontSize: metrics.fontSize,
+            shadows: _tileLabelGlow(),
           ),
         ),
       );
@@ -1235,6 +1248,7 @@ class _DefaultCard extends StatelessWidget {
                               fontSize: rh.isLargeScreen
                                   ? rh.cappedFontSize(isFull ? 18 : 16)
                                   : Screen.getFontSizeCapped(isFull ? 16 : 13),
+                              shadows: _tileLabelGlow(),
                             ),
                           ),
                         ),
@@ -1699,6 +1713,7 @@ class _FilledCardState extends State<_FilledCard>
             style: AppTypography.bodyTextLargeSemiBold.copyWith(
               color: AppColors.primaryContent,
               fontSize: metrics.fontSize,
+              shadows: _tileLabelGlow(),
             ),
           ),
         ),

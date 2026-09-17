@@ -455,22 +455,6 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
                                 ),
                                 SizedBox(height: Screen.getVerticalSize(24)),
 
-                                // Full Name
-                                const _FormLabel(label: 'Full Name'),
-                                SizedBox(height: Screen.getVerticalSize(8)),
-                                CustomTextFormField(
-                                  controller: _nameController,
-                                  hintText: 'Enter here',
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter your full name';
-                                    }
-                                    return null;
-                                  },
-                                ),
-
-                                SizedBox(height: Screen.getVerticalSize(16)),
-
                                 // Email — locked + pre-filled when the user
                                 // signed up via email (it's already
                                 // verified); a Google account picker (no
@@ -480,6 +464,7 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
                                   label: widget.isPhone
                                       ? 'Email Address'
                                       : 'Email Address (verified)',
+                                  isRequired: true,
                                 ),
                                 SizedBox(height: Screen.getVerticalSize(8)),
                                 if (widget.isPhone)
@@ -495,6 +480,22 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
                                     keyboardType: TextInputType.emailAddress,
                                     enabled: false,
                                   ),
+                                SizedBox(height: Screen.getVerticalSize(16)),
+
+                                // Full Name
+                                const _FormLabel(label: 'Full Name', isRequired: true),
+                                SizedBox(height: Screen.getVerticalSize(8)),
+                                CustomTextFormField(
+                                  controller: _nameController,
+                                  hintText: 'Enter here',
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter your full name';
+                                    }
+                                    return null;
+                                  },
+                                ),
+
                                 SizedBox(height: Screen.getVerticalSize(16)),
 
                                 // Phone — only collected for the email-signup
@@ -524,7 +525,7 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
 
                                 SizedBox(height: Screen.getVerticalSize(16)),
                                 // Gender
-                                const _FormLabel(label: 'Gender'),
+                                const _FormLabel(label: 'Gender', isRequired: true),
                                 SizedBox(height: Screen.getVerticalSize(10)),
                                 _GenderSelector(
                                   selectedGender: _selectedGender,
@@ -621,18 +622,29 @@ class _ProfilePicturePicker extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────
 class _FormLabel extends StatelessWidget {
   final String label;
+  final bool isRequired;
 
-  const _FormLabel({required this.label});
+  const _FormLabel({required this.label, this.isRequired = false});
 
   @override
   Widget build(BuildContext context) {
+    final style = AppTypography.labelLarge.copyWith(
+      color: AppColors.textPrimary,
+      fontWeight: FontWeight.w500,
+    );
     return Align(
       alignment: Alignment.centerLeft,
-      child: Text(
-        label,
-        style: AppTypography.labelLarge.copyWith(
-          color: AppColors.textPrimary,
-          fontWeight: FontWeight.w500,
+      child: Text.rich(
+        TextSpan(
+          text: label,
+          style: style,
+          children: [
+            if (isRequired)
+              TextSpan(
+                text: ' *',
+                style: style.copyWith(color: AppColors.error),
+              ),
+          ],
         ),
       ),
     );

@@ -247,7 +247,7 @@ class _CatalogViewState extends State<CatalogView> {
                 bottom: PreferredSize(
                   preferredSize: Size.fromHeight(Screen.getVerticalSize(66)),
                   child: Container(
-                    color: AppColors.alwaysWhite,
+                    color: AppColors.white,
                     padding: Screen.getPadding(horizontal: 20, top: 12, bottom: 8),
                     child: Row(
                       children: [

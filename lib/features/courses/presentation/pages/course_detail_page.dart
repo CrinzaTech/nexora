@@ -550,7 +550,10 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   ) {
     final rh = ResponsiveHelper.of(context);
     return Container(
-      color: AppColors.white,
+      // Blends into the page — same colour as the scaffold instead of the
+      // raised card surface. Still opaque: the header is pinned, so a
+      // transparent fill would let tab content scroll visibly beneath it.
+      color: Theme.of(context).scaffoldBackgroundColor,
       padding: EdgeInsets.symmetric(
         horizontal: rh.isLargeScreen ? rh.horizontalPadding : Screen.getHorizontalSize(15),
       ),

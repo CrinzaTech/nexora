@@ -191,33 +191,67 @@ class _MyCoursesPageState extends State<MyCoursesPage>
                           ),
                         Padding(
                           padding: Screen.getPadding(horizontal: 15),
-                          child: TabBar(
-                            controller: _tabController,
-                            labelColor: AppColors.primary,
-                            unselectedLabelColor: AppColors.mutedTextPrimary
-                                .withValues(alpha: 0.5),
-                            labelStyle: AppTypography.bodyTextLargeSemiBold
-                                .copyWith(
-                                  fontSize: Screen.getFontSizeCapped(15),
+                          child: Stack(
+                            children: [
+                              // Divider under the tabs. In dark mode it is
+                              // drawn here, not via [TabBar.dividerColor],
+                              // so it can carry a soft white glow — a flat
+                              // 15%-alpha line disappears on the dark
+                              // scaffold. Painted first so the indicator
+                              // still sits on top of it.
+                              if (AppColors.isDark)
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    height: 1,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.alwaysWhite.withValues(
+                                        alpha: 0.35,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: AppColors.alwaysWhite
+                                              .withValues(alpha: 0.25),
+                                          blurRadius: 6,
+                                          spreadRadius: 0.5,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                            unselectedLabelStyle: AppTypography
-                                .bodyTextLargeMedium
-                                .copyWith(
-                                  fontSize: Screen.getFontSizeCapped(15),
+                              TabBar(
+                                controller: _tabController,
+                                labelColor: AppColors.primary,
+                                unselectedLabelColor: AppColors.mutedTextPrimary
+                                    .withValues(alpha: 0.5),
+                                labelStyle: AppTypography.bodyTextLargeSemiBold
+                                    .copyWith(
+                                      fontSize: Screen.getFontSizeCapped(15),
+                                    ),
+                                unselectedLabelStyle: AppTypography
+                                    .bodyTextLargeMedium
+                                    .copyWith(
+                                      fontSize: Screen.getFontSizeCapped(15),
+                                    ),
+                                indicatorSize: TabBarIndicatorSize.tab,
+                                indicator: UnderlineTabIndicator(
+                                  borderSide: BorderSide(
+                                    color: AppColors.primary,
+                                    width: 2.5,
+                                  ),
                                 ),
-                            indicatorSize: TabBarIndicatorSize.tab,
-                            indicator: UnderlineTabIndicator(
-                              borderSide: BorderSide(
-                                color: AppColors.primary,
-                                width: 2.5,
+                                dividerColor: AppColors.isDark
+                                    ? Colors.transparent
+                                    : AppColors.mutedTextPrimary.withValues(
+                                        alpha: 0.15,
+                                      ),
+                                tabs: const [
+                                  Tab(text: 'In Progress'),
+                                  Tab(text: 'Completed'),
+                                ],
                               ),
-                            ),
-                            dividerColor: AppColors.mutedTextPrimary.withValues(
-                              alpha: 0.15,
-                            ),
-                            tabs: const [
-                              Tab(text: 'In Progress'),
-                              Tab(text: 'Completed'),
                             ],
                           ),
                         ),
@@ -672,8 +706,10 @@ class _InProgressCard extends StatelessWidget {
       action: CustomActionButton(
         name: 'Resume Watching',
         isFormFilled: true,
+        // Straight to Content — a learner resuming wants the lessons,
+        // not the course pitch on About.
         onTap: (_, __, ___) => context.push(
-          '${AppRoutes.courseDetail}?courseId=${course.courseId}',
+          '${AppRoutes.courseDetail}?courseId=${course.courseId}&tab=content',
         ),
       ),
     );
@@ -745,7 +781,7 @@ class _CompletedCard extends StatelessWidget {
               final pid = course.purchasedId;
               if (pid == null) {
                 context.push(
-                  '${AppRoutes.courseDetail}?courseId=${course.courseId}',
+                  '${AppRoutes.courseDetail}?courseId=${course.courseId}&tab=content',
                 );
                 return;
               }
