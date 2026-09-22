@@ -1,7 +1,7 @@
 part of 'home_live_cubit.dart';
 
 @freezed
-class HomeLiveState with _$HomeLiveState {
+sealed class HomeLiveState with _$HomeLiveState {
   const factory HomeLiveState.initial() = _Initial;
   const factory HomeLiveState.loading() = _Loading;
   const factory HomeLiveState.loaded({

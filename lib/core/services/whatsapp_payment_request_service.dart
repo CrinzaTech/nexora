@@ -1,14 +1,12 @@
-import 'dart:io';
 import 'dart:ui' show Rect;
 
 import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/core/utils/share_image.dart';
 import 'package:nexora/core/utils/utils.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/profile/data/models/user_profile_model.dart';
 import 'package:nexora/features/profile/domain/usecases/get_org_info_usecase.dart';
 import 'package:nexora/features/profile/presentation/bloc/profile_cubit.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -73,14 +71,6 @@ class WhatsappPaymentRequestService {
 
   WhatsappPaymentRequestService(this._getOrgInfo);
 
-  /// The sheet should feel instant — nobody waits on a thumbnail before
-  /// asking to pay.
-  static const Duration _thumbTimeout = Duration(seconds: 6);
-
-  /// Guards against a pathological image starving the request. Course
-  /// thumbnails are small; past this it's not worth the wait.
-  static const int _maxThumbBytes = 5 * 1024 * 1024;
-
   /// [sharePositionOrigin] is the rect the share sheet anchors to. iPad
   /// presents it as a popover and throws without one, so callers pass
   /// the originating widget's bounds.
@@ -103,7 +93,11 @@ class WhatsappPaymentRequestService {
           RegExp(r'\D'),
           '',
         );
-        final thumb = await _fetchThumbnail(pricing);
+        final thumb = await ShareImage.fetch(
+          pricing.courseImageUrl,
+          title: _courseTitle(pricing),
+          fallbackName: 'course',
+        );
 
         if (thumb != null) {
           return _shareWithImage(
@@ -119,11 +113,7 @@ class WhatsappPaymentRequestService {
             WhatsappPaymentRequestResult.unavailable,
           );
         }
-        return _openChat(
-          pricing,
-          digits: digits,
-          couponCode: couponCode,
-        );
+        return _openChat(pricing, digits: digits, couponCode: couponCode);
       },
     );
   }
@@ -254,83 +244,13 @@ class WhatsappPaymentRequestService {
   List<String> _studentLines(UserProfileModel? profile) {
     if (profile == null) return const [];
     return [
-      if (profile.name?.trim().isNotEmpty ?? false) '👤 ${profile.name!.trim()}',
+      if (profile.name?.trim().isNotEmpty ?? false)
+        '👤 ${profile.name!.trim()}',
       if (profile.phoneNumber?.trim().isNotEmpty ?? false)
         '📞 ${profile.phoneNumber!.trim()}',
       if (profile.email?.trim().isNotEmpty ?? false)
         '✉️ ${profile.email!.trim()}',
     ];
-  }
-
-  /// Downloads the thumbnail to a temp file, or null if anything at all
-  /// goes wrong — which routes the caller to the text-only path.
-  Future<XFile?> _fetchThumbnail(CoursePricing pricing) async {
-    final url = pricing.courseImageUrl.trim();
-    if (url.isEmpty) return null;
-
-    try {
-      // A plain client, deliberately **not** the app's shared Dio.
-      //
-      // That instance carries AuthInterceptor, which stamps the
-      // learner's Bearer token onto every request it sends. The
-      // thumbnail is a presigned URL on an S3 host — sending our account
-      // token to AWS would hand a third party a live credential it has
-      // no business holding, and the presigned URL already carries its
-      // own authorisation.
-      final response = await http.get(Uri.parse(url)).timeout(_thumbTimeout);
-
-      if (response.statusCode != 200) return null;
-      final bytes = response.bodyBytes;
-      if (bytes.isEmpty || bytes.length > _maxThumbBytes) return null;
-
-      // Cache, not documents: this file exists only long enough for the
-      // share sheet to read it, and the OS is welcome to reclaim it
-      // afterwards.
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/${_fileName(pricing, url)}');
-      await file.writeAsBytes(bytes, flush: true);
-
-      return XFile(file.path, mimeType: _mimeType(response, url));
-    } catch (e) {
-      // Offline, timed out, an expired signature, no write access — all
-      // of it means "send the request without the picture".
-      Utils.debugLog('Course thumbnail attach skipped: $e');
-      return null;
-    }
-  }
-
-  /// A name the org sees in their gallery. Derived from the course title
-  /// rather than the S3 key, which is a hash.
-  String _fileName(CoursePricing pricing, String url) {
-    final slug = _courseTitle(pricing)
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-        .replaceAll(RegExp(r'^-+|-+$'), '');
-    final safe = slug.isEmpty ? 'course' : slug;
-    return '${safe.substring(0, safe.length.clamp(0, 40))}${_extension(url)}';
-  }
-
-  /// The extension from the URL's *path*, ignoring the query — a
-  /// presigned link ends in `…&X-Amz-Signature=…`, so the last dot in
-  /// the whole string is nowhere near the filename.
-  String _extension(String url) {
-    final path = Uri.tryParse(url)?.path ?? '';
-    final dot = path.lastIndexOf('.');
-    if (dot == -1 || dot == path.length - 1) return '.jpg';
-    final ext = path.substring(dot).toLowerCase();
-    const known = {'.jpg', '.jpeg', '.png', '.webp', '.gif'};
-    return known.contains(ext) ? ext : '.jpg';
-  }
-
-  String _mimeType(http.Response response, String url) {
-    final header = response.headers['content-type']?.split(';').first.trim();
-    if (header != null && header.startsWith('image/')) return header;
-    return switch (_extension(url)) {
-      '.png' => 'image/png',
-      '.webp' => 'image/webp',
-      '.gif' => 'image/gif',
-      _ => 'image/jpeg',
-    };
   }
 
   /// Reads the live profile off the global ProfileCubit, the same way

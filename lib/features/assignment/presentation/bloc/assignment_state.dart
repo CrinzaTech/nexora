@@ -1,7 +1,7 @@
 part of 'assignment_cubit.dart';
 
 @freezed
-class AssignmentState with _$AssignmentState {
+sealed class AssignmentState with _$AssignmentState {
   const factory AssignmentState.initial() = _Initial;
   const factory AssignmentState.loading() = _Loading;
   const factory AssignmentState.loaded(Assignment assignment) = _Loaded;

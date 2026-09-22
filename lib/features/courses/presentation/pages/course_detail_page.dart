@@ -7,6 +7,7 @@ import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/utils/utils.dart';
 import 'package:nexora/core/widgets/custom_appbar_widget.dart';
 import 'package:nexora/core/widgets/custom_network_image.dart';
+import 'package:nexora/core/widgets/custom_snackbar.dart';
 import 'package:nexora/core/widgets/custom_outlined_action_button.dart';
 import 'package:nexora/core/widgets/rating_and_review_row_widget.dart';
 import 'package:nexora/core/widgets/scrolling_title.dart';
@@ -14,6 +15,7 @@ import 'package:nexora/core/widgets/star_rating.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/presentation/bloc/course_detail_cubit.dart';
 import 'package:nexora/features/courses/presentation/bloc/course_reviews_cubit.dart';
+import 'package:nexora/features/courses/presentation/course_share.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/features/courses/presentation/folder_navigation_cache.dart';
 import 'package:nexora/features/courses/presentation/widgets/module_card_widget.dart';
@@ -217,6 +219,14 @@ class _CourseDetailViewState extends State<_CourseDetailView>
         title: _displayTitle,
         centerTitle: true,
         titleColor: AppColors.textPrimary,
+        actions: [
+          BlocBuilder<CourseDetailCubit, CourseDetailState>(
+            builder: (context, state) => state.maybeWhen(
+              loaded: (course) => _ShareCourseButton(course: course),
+              orElse: () => const SizedBox.shrink(),
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: BlocBuilder<CourseDetailCubit, CourseDetailState>(
         // Action bar is gated on the course payload — and on the active
@@ -265,6 +275,74 @@ class _CourseDetailViewState extends State<_CourseDetailView>
           },
         ),
       ),
+    );
+  }
+}
+
+/// App-bar share action: sends a link that opens this course's Content
+/// tab in the app (or the store when the recipient doesn't have it).
+///
+/// Stateful only to show progress while the cover image downloads — the
+/// share sheet can't open until the file is on disk, and a button that
+/// does nothing for a second reads as broken.
+class _ShareCourseButton extends StatefulWidget {
+  final Course course;
+
+  const _ShareCourseButton({required this.course});
+
+  @override
+  State<_ShareCourseButton> createState() => _ShareCourseButtonState();
+}
+
+class _ShareCourseButtonState extends State<_ShareCourseButton> {
+  bool _preparing = false;
+
+  Future<void> _share() async {
+    if (_preparing) return;
+    setState(() => _preparing = true);
+    try {
+      await CourseShare.share(context: context, course: widget.course);
+    } on CourseShareUnavailable {
+      if (mounted) {
+        CustomSnackbar.error(
+          context,
+          title: 'Not Available',
+          message: 'Course link is not available right now.',
+        );
+      }
+    } catch (e) {
+      Utils.debugLog('Course share failed: $e');
+      if (mounted) {
+        CustomSnackbar.error(
+          context,
+          title: 'Cannot Share',
+          message: 'Unable to open the share sheet.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _preparing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Share course',
+      onPressed: _preparing ? null : _share,
+      icon: _preparing
+          ? SizedBox(
+              width: Screen.getSize(18),
+              height: Screen.getSize(18),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.primary,
+              ),
+            )
+          : Icon(
+              Icons.share_outlined,
+              color: AppColors.textPrimary,
+              size: Screen.getSize(22),
+            ),
     );
   }
 }

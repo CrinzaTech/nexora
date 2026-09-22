@@ -2,7 +2,7 @@ part of 'otp_cubit.dart';
 
 /// OTP state with Freezed pattern
 @freezed
-class OtpState with _$OtpState {
+sealed class OtpState with _$OtpState {
   /// Initial state - waiting for user input
   const factory OtpState.initial() = _Initial;
 

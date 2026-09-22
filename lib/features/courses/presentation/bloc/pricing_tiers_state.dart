@@ -1,7 +1,7 @@
 part of 'pricing_tiers_cubit.dart';
 
 @freezed
-class PricingTiersState with _$PricingTiersState {
+sealed class PricingTiersState with _$PricingTiersState {
   const factory PricingTiersState.initial() = _Initial;
   const factory PricingTiersState.loading() = _Loading;
 

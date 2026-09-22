@@ -13,8 +13,8 @@ dependencies:
   # ── State management ──────────────────────────────────────────────
   dartz: ^0.10.1
   flutter_bloc: ^8.1.6
-  freezed_annotation: ^2.4.4
-  json_annotation: ^4.9.0
+  freezed_annotation: ^3.1.0
+  json_annotation: ^4.12.0
 
   # ── Dependency injection ─────────────────────────────────────────
   get_it: ^7.6.4
@@ -43,11 +43,10 @@ dependencies:
   # this app never screen-shares. 1.6.0 replaced it with a public-API subview
   # walk. 1.6.0 first shipped in livekit_client 2.10.0.
   #
-  # Upper bound is a freezed ceiling, not an iOS one: 2.12.0+ requires
-  # json_annotation ^4.12.0, which forces freezed 3.x, which drops
-  # `when`/`maybeWhen` in favour of Dart 3 pattern matching — a rewrite of
-  # every state class in the app. 2.11.x is the newest release that keeps
-  # json_annotation ^4.9.0 and still carries the App Store fix.
+  # Upper bound was a freezed ceiling (2.12.0+ needs json_annotation
+  # ^4.12.0, which freezed 2.x couldn't take). The app is now on freezed 4,
+  # which keeps `when`/`maybeWhen`, so the ceiling no longer applies —
+  # lifting it is a separate, tested livekit upgrade.
   livekit_client: ">=2.11.0 <2.12.0"
   # Native audio-session knobs (Android audio focus / mode, iOS
   # AVAudioSession category). Pulled in transitively by livekit_client;
@@ -168,15 +167,17 @@ dependencies:
   # math_expressions: exam calculator arithmetic (parsing, precedence, sci functions).
   math_expressions: ^3.2.0
   google_sign_in: ^7.2.0
+  app_links: ^6.4.1
+  play_install_referrer: ^0.5.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   # ── Code generation ──────────────────────────────────────────────
-  build_runner: ^2.4.13
-  freezed: ^2.5.2
-  json_serializable: ^6.8.0
+  build_runner: ^2.16.1
+  freezed: ^4.0.2
+  json_serializable: ^6.14.1
   # retrofit_generator excluded: SDK incompatibility; api_client.g.dart
   # is maintained manually.
   # retrofit_generator: ^7.0.0

@@ -54,8 +54,9 @@ subprojects {
         tasks
             .withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>()
             .configureEach {
-                kotlinOptions {
-                    jvmTarget = JavaVersion.VERSION_11.toString()
+                // Kotlin 2.2+ rejects the old kotlinOptions DSL.
+                compilerOptions {
+                    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
                 }
             }
 

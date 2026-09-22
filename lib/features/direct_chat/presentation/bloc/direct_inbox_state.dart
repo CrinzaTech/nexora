@@ -1,7 +1,7 @@
 part of 'direct_inbox_cubit.dart';
 
 @freezed
-class DirectInboxState with _$DirectInboxState {
+sealed class DirectInboxState with _$DirectInboxState {
   const factory DirectInboxState.initial() = _Initial;
   const factory DirectInboxState.loading() = _Loading;
 

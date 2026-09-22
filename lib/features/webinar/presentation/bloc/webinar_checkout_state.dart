@@ -1,7 +1,7 @@
 part of 'webinar_checkout_cubit.dart';
 
 @freezed
-class WebinarCheckoutState with _$WebinarCheckoutState {
+sealed class WebinarCheckoutState with _$WebinarCheckoutState {
   /// Nothing in flight. Also where a dismissed sheet lands — closing
   /// Razorpay charges nothing, so it is not a failure.
   const factory WebinarCheckoutState.idle() = _Idle;

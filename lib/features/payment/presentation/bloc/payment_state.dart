@@ -1,7 +1,7 @@
 part of 'payment_cubit.dart';
 
 @freezed
-class PaymentState with _$PaymentState {
+sealed class PaymentState with _$PaymentState {
   const factory PaymentState.initial() = _Initial;
   const factory PaymentState.creatingOrder() = _CreatingOrder;
   const factory PaymentState.orderReady(CreateOrderResponse order) = _OrderReady;

@@ -3,6 +3,7 @@ import 'package:nexora/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/core/services/app_link_service.dart';
 import 'package:nexora/features/courses/presentation/bloc/continue_courses_cubit.dart';
 import 'package:nexora/features/home_live/presentation/bloc/home_live_cubit.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinars_cubit.dart';
@@ -100,6 +101,12 @@ class _DashboardPageState extends State<DashboardPage> {
       const MyCoursesPage(key: ValueKey('courses')),
       const ProfilePage(key: ValueKey('profile')),
     ];
+
+    // A shared course link that arrived before there was a dashboard to
+    // push onto — cold start, signed out, or a fresh install — opens now.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => AppLinkService.consumePending(),
+    );
   }
 
   @override

@@ -2,7 +2,7 @@ part of 'profile_cubit.dart';
 
 /// Profile state with Freezed pattern
 @freezed
-class ProfileState with _$ProfileState {
+sealed class ProfileState with _$ProfileState {
   /// Initial state
   const factory ProfileState.initial() = _Initial;
 

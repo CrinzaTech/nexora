@@ -1,7 +1,7 @@
 part of 'search_courses_cubit.dart';
 
 @freezed
-class SearchCoursesState with _$SearchCoursesState {
+sealed class SearchCoursesState with _$SearchCoursesState {
   /// No active query — home should render its normal layout.
   const factory SearchCoursesState.idle() = _Idle;
 

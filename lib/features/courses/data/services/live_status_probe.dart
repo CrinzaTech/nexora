@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
+import 'package:nexora/core/error/failures.dart';
 import 'package:nexora/features/courses/domain/usecases/get_live_class_playback_usecase.dart';
 
 /// What the stream server is actually doing for a room right now.

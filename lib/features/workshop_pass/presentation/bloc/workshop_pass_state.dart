@@ -1,7 +1,7 @@
 part of 'workshop_pass_cubit.dart';
 
 @freezed
-class WorkshopPassState with _$WorkshopPassState {
+sealed class WorkshopPassState with _$WorkshopPassState {
   const factory WorkshopPassState.initial() = _Initial;
 
   /// Nothing cached and the fetch is in flight. A pass that *was* cached

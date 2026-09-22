@@ -1,7 +1,7 @@
 part of 'exam_cubit.dart';
 
 @freezed
-class ExamState with _$ExamState {
+sealed class ExamState with _$ExamState {
   const factory ExamState.initial() = _Initial;
 
   /// Busy — resolving phone, hitting the gate, fetching a paper/result, etc.

@@ -26,8 +26,32 @@ if (hasReleaseSigning) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+// ── Shared course links ──────────────────────────────────────────────
+// The App Link intent filter in AndroidManifest.xml claims
+// https://<SHARE_HOST>/<org>/course/ — read both from the same .env the
+// Dart side loads, so AppLinkService's links and the manifest can't
+// drift apart per white-label build. Last uncommented value wins, as in
+// flutter_dotenv.
+val appEnv = mutableMapOf<String, String>()
+rootProject.file("../.env").takeIf { it.exists() }?.forEachLine { raw ->
+    val line = raw.trim()
+    if (line.isEmpty() || line.startsWith("#") || !line.contains("=")) return@forEachLine
+    val (key, value) = line.split("=", limit = 2).map { it.trim() }
+    appEnv[key] = value.trim('"', '\'')
+}
+val appLinkHost = appEnv["SHARE_HOST"]?.takeIf { it.isNotEmpty() } ?: "course-share.web.app"
+// Lowercased to match AppLinkService.courseLink — pathPrefix is case-sensitive.
+val appLinkOrg = (appEnv["ORG_ID"] ?: "CRINZA").lowercase()
+
+// Kotlin 2.2+ rejects the old android.kotlinOptions DSL.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+    }
+}
+
 android {
-    namespace = "com.crinesta.crinza"
+    namespace = "co.nex.ora"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -37,10 +61,6 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
-    }
-
     defaultConfig {
         // Todo: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "co.nex.ora"
@@ -48,6 +68,8 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appLinkHost"] = appLinkHost
+        manifestPlaceholders["appLinkOrg"] = appLinkOrg
     }
 
     signingConfigs {

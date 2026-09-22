@@ -2,7 +2,7 @@ part of 'home_cubit.dart';
 
 /// Home state with Freezed pattern
 @freezed
-class HomeState with _$HomeState {
+sealed class HomeState with _$HomeState {
   /// Initial state
   const factory HomeState.initial() = _Initial;
 

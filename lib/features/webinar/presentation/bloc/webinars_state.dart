@@ -1,7 +1,7 @@
 part of 'webinars_cubit.dart';
 
 @freezed
-class WebinarsState with _$WebinarsState {
+sealed class WebinarsState with _$WebinarsState {
   const factory WebinarsState.initial() = _Initial;
   const factory WebinarsState.loading() = _Loading;
   const factory WebinarsState.loaded({

@@ -1,7 +1,7 @@
 part of 'transaction_history_cubit.dart';
 
 @freezed
-class TransactionHistoryState with _$TransactionHistoryState {
+sealed class TransactionHistoryState with _$TransactionHistoryState {
   const factory TransactionHistoryState.initial() = _Initial;
   const factory TransactionHistoryState.loading() = _Loading;
   const factory TransactionHistoryState.loaded(

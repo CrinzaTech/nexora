@@ -1,7 +1,7 @@
 part of 'direct_chat_room_cubit.dart';
 
 @freezed
-class DirectChatRoomState with _$DirectChatRoomState {
+sealed class DirectChatRoomState with _$DirectChatRoomState {
   const factory DirectChatRoomState.initial() = _Initial;
   const factory DirectChatRoomState.loading() = _Loading;
 

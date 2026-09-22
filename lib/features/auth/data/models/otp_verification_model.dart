@@ -5,7 +5,7 @@ part 'otp_verification_model.g.dart';
 
 /// OTP verification response model
 @freezed
-class OtpVerificationModel with _$OtpVerificationModel {
+abstract class OtpVerificationModel with _$OtpVerificationModel {
   const factory OtpVerificationModel({
     required bool success,
     required String message,

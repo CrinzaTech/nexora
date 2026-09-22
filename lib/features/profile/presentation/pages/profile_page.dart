@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'package:nexora/core/error/failures.dart';
 import 'package:nexora/features/profile/domain/usecases/delete_account_usecase.dart';
 import 'package:nexora/features/profile/presentation/widgets/delete_account_dialog.dart';
 

@@ -4,7 +4,7 @@ part 'failures.freezed.dart';
 
 /// Base failure class for error handling
 @freezed
-class Failure with _$Failure {
+sealed class Failure with _$Failure {
   const factory Failure.server({
     required String message,
     int? statusCode,

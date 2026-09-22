@@ -58,7 +58,7 @@ enum WebinarHandPhase {
 }
 
 @freezed
-class WebinarRoomState with _$WebinarRoomState {
+abstract class WebinarRoomState with _$WebinarRoomState {
   const WebinarRoomState._();
 
   const factory WebinarRoomState({

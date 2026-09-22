@@ -14,6 +14,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'core/config/di/dependency_injection.dart';
 import 'core/router/app_router.dart';
 import 'core/security/security_wrapper.dart';
+import 'core/services/app_link_service.dart';
 import 'core/services/content_completion_service.dart';
 import 'core/services/fcm_service.dart';
 import 'core/services/local_notification_service.dart';
@@ -158,6 +159,12 @@ void main() {
       // before runApp kicks in and the user sees the routing-error screen
       // instead of an instant exit.
       await _safeInit('di', () async => setupLocator());
+
+      // Shared course links (App Links / Universal Links, plus the Play
+      // install referrer on a fresh install). Started after DI because
+      // routing checks the session; a link that can't open yet is held
+      // until the dashboard mounts.
+      await _safeInit('app-links', () async => AppLinkService.init());
 
       // Restore the saved light/dark choice BEFORE runApp so the first
       // frame already paints in the user's theme — loading it after

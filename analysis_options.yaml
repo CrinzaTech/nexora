@@ -13,6 +13,9 @@ analyzer:
   exclude:
     # Vendored third-party package (patched upstream code, upstream style).
     - packages/**
+    - build/**
+    - android/**
+    - ios/**
 
 linter:
   # The lint rules applied to this project can be customized in the

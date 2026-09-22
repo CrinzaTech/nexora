@@ -55,7 +55,7 @@ enum HandPhase {
 }
 
 @freezed
-class LiveClassState with _$LiveClassState {
+abstract class LiveClassState with _$LiveClassState {
   const LiveClassState._();
 
   const factory LiveClassState({

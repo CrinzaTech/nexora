@@ -309,7 +309,9 @@ class ContentCompletionService {
         coursePurchasedId: entry.coursePurchasedId,
         jsonContentId: entry.jsonContentId,
       );
-      return result.fold(
+      // Explicit type argument: without it the analyzer reads the fold as
+      // returning a Future and flags an unawaited return in this try.
+      return result.fold<_Attempt>(
         (failure) {
           final outcome = _classify(failure);
           if (kDebugMode) {

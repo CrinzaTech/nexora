@@ -1,7 +1,7 @@
 part of 'course_reviews_cubit.dart';
 
 @freezed
-class CourseReviewsState with _$CourseReviewsState {
+sealed class CourseReviewsState with _$CourseReviewsState {
   const factory CourseReviewsState.initial() = _Initial;
   const factory CourseReviewsState.loading() = _Loading;
   const factory CourseReviewsState.loaded(List<CourseReview> reviews) =

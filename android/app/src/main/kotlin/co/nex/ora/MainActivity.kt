@@ -1,4 +1,4 @@
-package com.crinesta.crinza
+package co.nex.ora
 
 import android.os.Bundle
 import android.provider.Settings

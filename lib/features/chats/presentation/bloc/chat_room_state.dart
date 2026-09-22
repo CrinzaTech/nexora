@@ -1,7 +1,7 @@
 part of 'chat_room_cubit.dart';
 
 @freezed
-class ChatRoomState with _$ChatRoomState {
+sealed class ChatRoomState with _$ChatRoomState {
   const factory ChatRoomState.initial() = _Initial;
   const factory ChatRoomState.loading() = _Loading;
 
