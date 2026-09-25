@@ -19,6 +19,8 @@ import 'package:nexora/features/exam/presentation/widgets/exam_history_sheet.dar
 import 'package:nexora/features/exam/presentation/widgets/exam_intro_view.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_leaderboard_sheet.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_paper_view.dart';
+import 'package:nexora/features/exam/presentation/widgets/exam_practice_view.dart';
+import 'package:nexora/features/exam/presentation/widgets/exam_quiz_view.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_result_view.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_section_transition_view.dart';
 
@@ -82,10 +84,27 @@ class ExamPage extends StatelessWidget {
           final started = state.maybeWhen(
             taking: (_, __, ___, ____, _____) => true,
             competitiveQuestion: (_, __, ___, ____) => true,
+            quizQuestion:
+                (
+                  _,
+                  __,
+                  ___,
+                  ____,
+                  _____,
+                  ______,
+                  _______,
+                  ________,
+                  _________,
+                  __________,
+                ) => true,
             sectionTransition: (_, __, ___, ____) => true,
             orElse: () => false,
           );
-          if (started) _markCompleted();
+          // A practice run records nothing server-side, but opening one is
+          // still working through the content.
+          final practising =
+              state.mapOrNull(practiceQuestion: (_) => true) ?? false;
+          if (started || practising) _markCompleted();
         },
         child: const _ExamView(),
       ),
@@ -128,6 +147,19 @@ class _ExamViewState extends State<_ExamView> {
         final isTaking = state.maybeWhen(
           taking: (_, __, ___, ____, _____) => true,
           competitiveQuestion: (_, __, ___, ____) => true,
+          quizQuestion:
+              (
+                _,
+                __,
+                ___,
+                ____,
+                _____,
+                ______,
+                _______,
+                ________,
+                _________,
+                __________,
+              ) => true,
           sectionTransition: (_, __, ___, ____) => true,
           orElse: () => false,
         );
@@ -145,11 +177,38 @@ class _ExamViewState extends State<_ExamView> {
             _calculatorAllowed = data.allowCalculator;
             _calculatorType = data.calculatorType;
           },
+          quizQuestion:
+              (
+                data,
+                _,
+                __,
+                ___,
+                ____,
+                _____,
+                ______,
+                _______,
+                ________,
+                _________,
+              ) {
+                _calculatorAllowed = data.allowCalculator;
+                _calculatorType = data.calculatorType;
+              },
           orElse: () {},
+        );
+        // A practice question isn't guarded like a running exam (nothing
+        // is recorded, so leaving costs nothing), but it still offers the
+        // calculator.
+        final practising = state.mapOrNull(
+          practiceQuestion: (s) {
+            _calculatorAllowed = s.allowCalculator;
+            _calculatorType = s.calculatorType;
+            return true;
+          },
         );
         // The paper is closed once grading starts; the calculator goes
         // with it rather than floating over the result screen.
-        final showCalculator = _calculatorAllowed && isTaking;
+        final showCalculator =
+            _calculatorAllowed && (isTaking || practising == true);
 
         return PopScope(
           canPop: !isTaking,
@@ -160,13 +219,31 @@ class _ExamViewState extends State<_ExamView> {
           child: Scaffold(
             backgroundColor: AppColors.scaffoldLight,
             appBar: CustomAppBar(
-              title: state.maybeWhen(
-                gate: (g) => g.examTitle,
-                taking: (paper, _, __, ___, ____) => paper.examTitle,
-                competitiveQuestion: (data, _, __, ___) => data.examTitle,
-                result: (r) => r.examTitle,
-                orElse: () => 'Exam',
-              ),
+              title:
+                  state.mapOrNull(
+                    practiceQuestion: (s) => s.examTitle,
+                    practiceSummary: (s) => s.examTitle,
+                  ) ??
+                  state.maybeWhen(
+                    gate: (g) => g.examTitle,
+                    taking: (paper, _, __, ___, ____) => paper.examTitle,
+                    competitiveQuestion: (data, _, __, ___) => data.examTitle,
+                    quizQuestion:
+                        (
+                          data,
+                          _,
+                          __,
+                          ___,
+                          ____,
+                          _____,
+                          ______,
+                          _______,
+                          ________,
+                          _________,
+                        ) => data.examTitle,
+                    result: (r, _) => r.examTitle,
+                    orElse: () => 'Exam',
+                  ),
               centerTitle: false,
               backgroundColor: AppColors.white,
               titleColor: AppColors.textPrimary,
@@ -183,7 +260,7 @@ class _ExamViewState extends State<_ExamView> {
                 // and mid-exam it would be a way out of the paper.
                 () {
                   final onResult = state.maybeWhen(
-                    result: (_) => true,
+                    result: (_, __) => true,
                     orElse: () => false,
                   );
                   if (!onResult) return const SizedBox.shrink();
@@ -245,6 +322,19 @@ class _ExamViewState extends State<_ExamView> {
                   final deadline = state.maybeWhen(
                     taking: (_, __, d, ___, ____) => d,
                     competitiveQuestion: (_, __, d, ___) => d,
+                    quizQuestion:
+                        (
+                          _,
+                          __,
+                          ___,
+                          d,
+                          ____,
+                          _____,
+                          ______,
+                          _______,
+                          ________,
+                          _________,
+                        ) => d,
                     sectionTransition: (_, __, d, ___) => d,
                     orElse: () => null,
                   );
@@ -317,6 +407,80 @@ class _ExamViewState extends State<_ExamView> {
             onAnswerChanged: cubit.updateCompetitiveAnswer,
             onSaveNext: cubit.answerCurrent,
           ),
+      quizQuestion:
+          (
+            data,
+            draft,
+            feedback,
+            deadline,
+            submitting,
+            retryPointsUsed,
+            retryPoints,
+            wrongOptionIds,
+            pinnedQuestionNumbers,
+            reviewableQuestionNumbers,
+          ) => ExamQuizView(
+            data: data,
+            draft: draft,
+            feedback: feedback,
+            submitting: submitting,
+            retryPointsUsed: retryPointsUsed,
+            retryPoints: retryPoints,
+            wrongOptionIds: wrongOptionIds,
+            pinnedQuestionNumbers: pinnedQuestionNumbers,
+            reviewableQuestionNumbers: reviewableQuestionNumbers,
+            onReviewQuestion: cubit.quizReviewFor,
+            onReviseQuestion: (number, draft) =>
+                cubit.reviseQuizAnswer(questionNumber: number, draft: draft),
+            // Pins are held by question id, so they survive into the
+            // result screen and work on a question being looked back at.
+            onTogglePin: cubit.togglePin,
+            onAnswerChanged: cubit.updateQuizAnswer,
+            onCheck: ({bool moveOn = false}) =>
+                cubit.checkQuizAnswer(moveOn: moveOn),
+            onContinue: cubit.continueAfterQuizFeedback,
+            onReveal: cubit.revealQuizAnswerForCurrent,
+            onRevealQuestion: (number) =>
+                cubit.revealQuizAnswerFor(questionNumber: number),
+            shouldShowRulesOnOpen: cubit.takeFirstQuizRulesView,
+          ),
+      practiceQuestion:
+          (
+            _,
+            item,
+            number,
+            total,
+            draft,
+            verdict,
+            checking,
+            error,
+            _,
+            __,
+            outcomes,
+            visited,
+          ) => ExamPracticeView(
+            item: item,
+            number: number,
+            total: total,
+            draft: draft,
+            verdict: verdict,
+            checking: checking,
+            error: error,
+            outcomes: outcomes,
+            visited: visited,
+            onAnswerChanged: cubit.updatePracticeAnswer,
+            onCheck: cubit.checkPracticeAnswer,
+            onNext: cubit.nextPracticeQuestion,
+            onPrevious: cubit.previousPracticeQuestion,
+            onJumpTo: cubit.goToPracticeQuestion,
+          ),
+      practiceSummary: (_, correct, answered, total) => ExamPracticeSummaryView(
+        correct: correct,
+        answered: answered,
+        total: total,
+        onPracticeAgain: cubit.restartPractice,
+        onDone: () => context.pop(),
+      ),
       sectionTransition: (from, next, deadline, loading) =>
           ExamSectionTransitionView(
             fromSectionName: from,
@@ -325,8 +489,9 @@ class _ExamViewState extends State<_ExamView> {
             onContinue: cubit.continueToNextSection,
           ),
       submitting: () => const _Busy(label: 'Grading your answers…'),
-      result: (result) => ExamResultView(
+      result: (result, pinnedQuestionIds) => ExamResultView(
         result: result,
+        pinnedQuestionIds: pinnedQuestionIds,
         onReattempt: cubit.reattempt,
         onOpenHistory: () => showExamHistorySheet(context, cubit: cubit),
       ),
@@ -392,7 +557,7 @@ class _ExamViewState extends State<_ExamView> {
     final allowance = last
         ? 'This is your final exit. Leaving again after this will submit '
               'your exam automatically.'
-        : 'You can leave $remaining more times — after that your exam is '
+        : 'You can leave $remaining more times. After that your exam is '
               'submitted automatically.';
     return showDialog<bool>(
       context: context,

@@ -24,6 +24,13 @@ enum ExamPaletteStatus {
 
   /// Graded but left blank.
   skipped,
+
+  /// Quiz/competitive progress: the question on screen right now.
+  current,
+
+  /// Quiz/competitive progress: the server hasn't served it yet. Distinct
+  /// from [unanswered], which the student could still go and answer.
+  upcoming,
 }
 
 /// One cell of the palette: a question's display number and its state.
@@ -37,34 +44,57 @@ class ExamPaletteEntry {
   /// moves to a dot in the corner rather than being lost.
   final bool pinned;
 
+  /// Whether tapping this cell does anything. False for the questions a
+  /// quiz hasn't served yet — there is nothing to show, and a cell that
+  /// looks tappable but isn't is worse than one that plainly isn't.
+  final bool selectable;
+
   const ExamPaletteEntry({
     required this.number,
     required this.status,
     this.pinned = false,
+    this.selectable = true,
   });
 }
 
 /// Opens the question grid. Resolves to the 0-based index of the question
 /// the student tapped, or null if they dismissed the sheet.
+///
+/// [jumpable] false marks the grid as a *progress* view rather than a
+/// navigable paper: the quiz and competitive flows are paced by the
+/// server, so tapping a cell reopens a question the client already saw
+/// instead of moving the paper to it. Which cells respond is decided per
+/// entry by [ExamPaletteEntry.selectable]; this flag only picks the
+/// wording.
 Future<int?> showExamQuestionPalette(
   BuildContext context, {
   required List<ExamPaletteEntry> entries,
   required bool reviewMode,
+  bool jumpable = true,
 }) {
   return showModalBottomSheet<int>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.overlayMedium,
     isScrollControlled: true,
-    builder: (ctx) => _PaletteSheet(entries: entries, reviewMode: reviewMode),
+    builder: (ctx) => _PaletteSheet(
+      entries: entries,
+      reviewMode: reviewMode,
+      jumpable: jumpable,
+    ),
   );
 }
 
 class _PaletteSheet extends StatelessWidget {
   final List<ExamPaletteEntry> entries;
   final bool reviewMode;
+  final bool jumpable;
 
-  const _PaletteSheet({required this.entries, required this.reviewMode});
+  const _PaletteSheet({
+    required this.entries,
+    required this.reviewMode,
+    this.jumpable = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -99,7 +129,12 @@ class _PaletteSheet extends StatelessWidget {
             const _SheetGrabber(),
             _header(),
             const SizedBox(height: AppSizes.paddingS),
-            _Legend(reviewMode: reviewMode, counts: counts, pinned: pinned),
+            _Legend(
+              reviewMode: reviewMode,
+              jumpable: jumpable,
+              counts: counts,
+              pinned: pinned,
+            ),
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSizes.paddingM,
@@ -124,7 +159,9 @@ class _PaletteSheet extends StatelessWidget {
                 itemCount: entries.length,
                 itemBuilder: (_, i) => ExamPaletteCell(
                   entry: entries[i],
-                  onTap: () => Navigator.of(context).pop(i),
+                  onTap: entries[i].selectable
+                      ? () => Navigator.of(context).pop(i)
+                      : null,
                 ),
               ),
             ),
@@ -138,14 +175,18 @@ class _PaletteSheet extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    Icons.touch_app_outlined,
+                    jumpable ? Icons.touch_app_outlined : Icons.history_rounded,
                     size: 15,
                     color: AppColors.mutedTextPrimary,
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Tap any number to jump straight to that question.',
+                      jumpable
+                          ? 'Tap any number to jump straight to that question.'
+                          : 'Tap a question you have already seen to look back '
+                                'at it. One you skipped can still be answered for '
+                                'free; a wrong answer can be changed for a point.',
                       style: AppTypography.bodyTextSmallMedium.copyWith(
                         color: AppColors.mutedTextPrimary,
                       ),
@@ -179,7 +220,11 @@ class _PaletteSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
-              reviewMode ? Icons.fact_check_outlined : Icons.grid_view_rounded,
+              reviewMode
+                  ? Icons.fact_check_outlined
+                  : (jumpable
+                        ? Icons.grid_view_rounded
+                        : Icons.timeline_rounded),
               size: 20,
               color: AppColors.primary,
             ),
@@ -190,7 +235,9 @@ class _PaletteSheet extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  reviewMode ? 'Question review' : 'Question overview',
+                  reviewMode
+                      ? 'Question review'
+                      : (jumpable ? 'Question overview' : 'Your progress'),
                   style: AppTypography.bodyTextXtraLargeSemiBold.copyWith(
                     color: AppColors.textPrimary,
                   ),
@@ -233,11 +280,13 @@ class _SheetGrabber extends StatelessWidget {
 
 class _Legend extends StatelessWidget {
   final bool reviewMode;
+  final bool jumpable;
   final Map<ExamPaletteStatus, int> counts;
   final int pinned;
 
   const _Legend({
     required this.reviewMode,
+    required this.jumpable,
     required this.counts,
     required this.pinned,
   });
@@ -251,19 +300,36 @@ class _Legend extends StatelessWidget {
       items.add(_LegendPill(color: _accentFor(status), label: label, count: n));
     }
 
+    void addPinned() {
+      if (pinned == 0) return;
+      items.add(
+        _LegendPill(color: AppColors.warning, label: 'Pinned', count: pinned),
+      );
+    }
+
     if (reviewMode) {
       add(ExamPaletteStatus.correct, 'Correct');
       add(ExamPaletteStatus.wrong, 'Wrong');
       add(ExamPaletteStatus.skipped, 'Skipped');
+      // Only a practice run has these; a finished paper never does, and a
+      // zero count draws no pill.
+      add(ExamPaletteStatus.current, 'On this one');
+      add(ExamPaletteStatus.upcoming, 'Not seen');
+      // Pins made during the exam are the student's own "come back to
+      // this" marks, and they are most useful afterwards — this is the
+      // screen where they finally get to act on them.
+      addPinned();
+    } else if (!jumpable) {
+      add(ExamPaletteStatus.answered, 'Answered');
+      add(ExamPaletteStatus.skipped, 'Skipped');
+      add(ExamPaletteStatus.current, 'On this one');
+      add(ExamPaletteStatus.upcoming, 'To come');
+      addPinned();
     } else {
       add(ExamPaletteStatus.answered, 'Attempted');
       add(ExamPaletteStatus.partial, 'Partly done');
       add(ExamPaletteStatus.unanswered, 'Not attempted');
-      if (pinned > 0) {
-        items.add(
-          _LegendPill(color: AppColors.warning, label: 'Pinned', count: pinned),
-        );
-      }
+      addPinned();
     }
 
     if (items.isEmpty) return const SizedBox.shrink();
@@ -340,7 +406,10 @@ Color _accentFor(ExamPaletteStatus status) {
       return AppColors.info;
     case ExamPaletteStatus.unanswered:
     case ExamPaletteStatus.skipped:
+    case ExamPaletteStatus.upcoming:
       return AppColors.grey400;
+    case ExamPaletteStatus.current:
+      return AppColors.primary;
   }
 }
 
@@ -351,10 +420,14 @@ bool _isSolid(ExamPaletteStatus status) {
     case ExamPaletteStatus.answered:
     case ExamPaletteStatus.correct:
     case ExamPaletteStatus.wrong:
+    case ExamPaletteStatus.current:
+    // Solid grey, so a question the student passed over reads as settled
+    // but empty — not mistaken for answered green or a still-to-come cell.
+    case ExamPaletteStatus.skipped:
       return true;
     case ExamPaletteStatus.partial:
     case ExamPaletteStatus.unanswered:
-    case ExamPaletteStatus.skipped:
+    case ExamPaletteStatus.upcoming:
       return false;
   }
 }
@@ -363,13 +436,12 @@ bool _isSolid(ExamPaletteStatus status) {
 /// the numeral then carries whether the question was actually answered.
 class ExamPaletteCell extends StatelessWidget {
   final ExamPaletteEntry entry;
-  final VoidCallback onTap;
 
-  const ExamPaletteCell({
-    super.key,
-    required this.entry,
-    required this.onTap,
-  });
+  /// Null in the read-only progress view, where there is nothing to jump
+  /// to — the cell then renders identically but doesn't respond.
+  final VoidCallback? onTap;
+
+  const ExamPaletteCell({super.key, required this.entry, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -380,8 +452,8 @@ class ExamPaletteCell extends StatelessWidget {
     final fill = solid
         ? accent
         : (entry.status == ExamPaletteStatus.partial
-            ? accent.withValues(alpha: 0.10)
-            : AppColors.grey50);
+              ? accent.withValues(alpha: 0.10)
+              : AppColors.grey50);
     final foreground = solid ? AppColors.alwaysWhite : AppColors.textPrimary;
 
     return DecoratedBox(
@@ -539,11 +611,7 @@ class ExamStatsFab extends StatelessWidget {
             ),
           ),
           if (pinnedCount > 0)
-            Positioned(
-              top: 0,
-              right: 0,
-              child: _PinBadge(count: pinnedCount),
-            ),
+            Positioned(top: 0, right: 0, child: _PinBadge(count: pinnedCount)),
         ],
       ),
     );
@@ -617,9 +685,9 @@ Future<ExamPinnedGateOutcome?> showExamPinnedGate(
       title: n == 1 ? '1 pinned question left' : '$n pinned questions left',
       message: n == 1
           ? 'You pinned this one to come back to. Tap it to revisit, or '
-              'proceed to submit anyway.'
+                'proceed to submit anyway.'
           : 'You pinned these to come back to. Tap one to revisit, or '
-              'proceed to submit anyway.',
+                'proceed to submit anyway.',
       extra: Wrap(
         alignment: WrapAlignment.center,
         spacing: 10,
@@ -631,9 +699,9 @@ Future<ExamPinnedGateOutcome?> showExamPinnedGate(
               height: 48,
               child: ExamPaletteCell(
                 entry: pinnedEntries[i],
-                onTap: () => Navigator.of(ctx).pop(
-                  ExamPinnedGateOutcome(jumpToIndex: pinnedIndexes[i]),
-                ),
+                onTap: () => Navigator.of(
+                  ctx,
+                ).pop(ExamPinnedGateOutcome(jumpToIndex: pinnedIndexes[i])),
               ),
             ),
         ],
@@ -642,9 +710,8 @@ Future<ExamPinnedGateOutcome?> showExamPinnedGate(
         ExamDialogAction(
           label: 'Proceed to submit',
           icon: Icons.arrow_forward_rounded,
-          onPressed: () => Navigator.of(ctx).pop(
-            const ExamPinnedGateOutcome(proceed: true),
-          ),
+          onPressed: () =>
+              Navigator.of(ctx).pop(const ExamPinnedGateOutcome(proceed: true)),
         ),
         ExamDialogGhostAction(
           label: 'Keep working',

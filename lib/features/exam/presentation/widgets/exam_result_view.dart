@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -20,11 +22,18 @@ class ExamResultView extends StatefulWidget {
   final VoidCallback onReattempt;
   final VoidCallback onOpenHistory;
 
+  /// Questions the student flagged while sitting this attempt. This is the
+  /// screen those flags were for — in quiz and competitive mode a pin can
+  /// never mean "go back", so reviewing afterwards is the whole payoff.
+  /// Empty when reopening an older attempt from history.
+  final Set<int> pinnedQuestionIds;
+
   const ExamResultView({
     super.key,
     required this.result,
     required this.onReattempt,
     required this.onOpenHistory,
+    this.pinnedQuestionIds = const {},
   });
 
   @override
@@ -38,6 +47,27 @@ class _ExamResultViewState extends State<ExamResultView> {
 
   /// One key per top-level question so the palette can scroll to it.
   final Map<int, GlobalKey> _questionKeys = {};
+
+  /// The question the palette last jumped to, highlighted for a moment so
+  /// the jump is visible. A short paper may have only a few pixels of
+  /// scroll (or none), in which case the scroll alone tells the student
+  /// nothing about where they landed.
+  int? _highlightedQuestionId;
+  Timer? _highlightTimer;
+
+  @override
+  void dispose() {
+    _highlightTimer?.cancel();
+    super.dispose();
+  }
+
+  void _highlight(int questionId) {
+    _highlightTimer?.cancel();
+    setState(() => _highlightedQuestionId = questionId);
+    _highlightTimer = Timer(const Duration(milliseconds: 1800), () {
+      if (mounted) setState(() => _highlightedQuestionId = null);
+    });
+  }
 
   GlobalKey _keyFor(int questionId) =>
       _questionKeys.putIfAbsent(questionId, () => GlobalKey());
@@ -61,18 +91,31 @@ class _ExamResultViewState extends State<ExamResultView> {
   List<ExamResultQuestion> get _allQuestions =>
       result.sections.expand((s) => s.questions).toList(growable: false);
 
+  /// Pins that land on a question actually present in this result. Counted
+  /// rather than taken from the set's length so a pin on a question the
+  /// server didn't return can't inflate the badge.
+  int get _pinnedCount => _allQuestions
+      .where((q) => widget.pinnedQuestionIds.contains(q.id))
+      .length;
+
   Future<void> _openPalette() async {
     final questions = _allQuestions;
     final index = await showExamQuestionPalette(
       context,
       entries: [
         for (var i = 0; i < questions.length; i++)
-          ExamPaletteEntry(number: i + 1, status: _statusOf(questions[i])),
+          ExamPaletteEntry(
+            number: i + 1,
+            status: _statusOf(questions[i]),
+            pinned: widget.pinnedQuestionIds.contains(questions[i].id),
+          ),
       ],
       reviewMode: true,
     );
     if (index == null || !mounted) return;
-    final ctx = _questionKeys[questions[index].id]?.currentContext;
+    if (index < 0 || index >= questions.length) return;
+    final target = questions[index];
+    final ctx = _questionKeys[target.id]?.currentContext;
     if (ctx == null || !ctx.mounted) return;
     await Scrollable.ensureVisible(
       ctx,
@@ -80,6 +123,8 @@ class _ExamResultViewState extends State<ExamResultView> {
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
     );
+    if (!mounted) return;
+    _highlight(target.id);
   }
 
   /// Sum of per-question time (competitive mode only; normal mode reports
@@ -119,6 +164,10 @@ class _ExamResultViewState extends State<ExamResultView> {
                 _scoreCard(),
                 const SizedBox(height: AppSizes.paddingM),
                 _tallyRow(),
+                if (result.quizMode && result.retryPoints > 0) ...[
+                  const SizedBox(height: AppSizes.paddingS),
+                  _retriesNote(),
+                ],
                 const SizedBox(height: AppSizes.paddingS),
                 for (final section in result.sections) ...[
                   const SizedBox(height: AppSizes.paddingS),
@@ -130,6 +179,9 @@ class _ExamResultViewState extends State<ExamResultView> {
                       child: ResultQuestionCard(
                         question: q,
                         number: '${++runningNumber}',
+                        onNumberTap: _openPalette,
+                        isPinned: widget.pinnedQuestionIds.contains(q.id),
+                        isHighlighted: _highlightedQuestionId == q.id,
                       ),
                     ),
                 ],
@@ -143,7 +195,7 @@ class _ExamResultViewState extends State<ExamResultView> {
           child: DraggableFab(
             margin: const EdgeInsets.all(AppSizes.paddingM),
             builder: (context, _) =>
-                ExamStatsFab(pinnedCount: 0, onTap: _openPalette),
+                ExamStatsFab(pinnedCount: _pinnedCount, onTap: _openPalette),
           ),
         ),
       ],
@@ -154,8 +206,8 @@ class _ExamResultViewState extends State<ExamResultView> {
 
   Widget _held() {
     final availableAt = result.resultsAvailableAt;
-    final scheduled = result.resultReleaseMode == 'scheduled' &&
-        availableAt != null;
+    final scheduled =
+        result.resultReleaseMode == 'scheduled' && availableAt != null;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppSizes.paddingL),
@@ -175,7 +227,7 @@ class _ExamResultViewState extends State<ExamResultView> {
             Text(
               scheduled
                   ? 'Your results will be available on '
-                      '${DateFormat('d MMM yyyy, h:mm a').format(availableAt.toLocal())}.'
+                        '${DateFormat('d MMM yyyy, h:mm a').format(availableAt.toLocal())}.'
                   : 'Your results are not available to view.',
               style: AppTypography.bodyTextLargeMedium.copyWith(
                 color: AppColors.textSecondary,
@@ -200,19 +252,13 @@ class _ExamResultViewState extends State<ExamResultView> {
     final Color accent = passed == false
         ? AppColors.error
         : passed == true
-            ? AppColors.success
-            : AppColors.primary;
+        ? AppColors.success
+        : AppColors.primary;
     return ExamCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            result.examTitle,
-            style: AppTypography.bodyTextLargeSemiBold.copyWith(
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: AppSizes.paddingM),
+          // No exam title here: the app bar already carries it.
           Row(
             children: [
               _scoreRing(percentage, accent),
@@ -251,8 +297,11 @@ class _ExamResultViewState extends State<ExamResultView> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.timer_outlined,
-                              size: 14, color: AppColors.mutedTextPrimary),
+                          Icon(
+                            Icons.timer_outlined,
+                            size: 14,
+                            color: AppColors.mutedTextPrimary,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             'Time taken: ${formatDurationSeconds(_totalTimeSeconds)}',
@@ -272,8 +321,9 @@ class _ExamResultViewState extends State<ExamResultView> {
                         ),
                         decoration: BoxDecoration(
                           color: accent.withValues(alpha: 0.12),
-                          borderRadius:
-                              BorderRadius.circular(AppSizes.radiusCircle),
+                          borderRadius: BorderRadius.circular(
+                            AppSizes.radiusCircle,
+                          ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -286,8 +336,7 @@ class _ExamResultViewState extends State<ExamResultView> {
                             const SizedBox(width: 6),
                             Text(
                               passed ? 'Passed' : 'Failed',
-                              style:
-                                  AppTypography.bodyTextSemiBold.copyWith(
+                              style: AppTypography.bodyTextSemiBold.copyWith(
                                 color: accent,
                               ),
                             ),
@@ -334,8 +383,11 @@ class _ExamResultViewState extends State<ExamResultView> {
     return Row(
       children: [
         Expanded(
-          child: _tile('${result.correctCount ?? 0}', 'CORRECT',
-              AppColors.success),
+          child: _tile(
+            '${result.correctCount ?? 0}',
+            'CORRECT',
+            AppColors.success,
+          ),
         ),
         const SizedBox(width: AppSizes.paddingS),
         Expanded(
@@ -343,10 +395,50 @@ class _ExamResultViewState extends State<ExamResultView> {
         ),
         const SizedBox(width: AppSizes.paddingS),
         Expanded(
-          child: _tile('${result.skippedCount ?? 0}', 'SKIPPED',
-              AppColors.grey400),
+          child: _tile(
+            '${result.skippedCount ?? 0}',
+            'SKIPPED',
+            AppColors.grey400,
+          ),
         ),
       ],
+    );
+  }
+
+  /// Quiz mode only. Spelled out because the obvious reading of "you
+  /// spent 3 points" is that it cost marks. It never does — a corrected
+  /// answer scores what it would have scored if it were right first time,
+  /// and a bought answer earns the question's marks outright. The whole
+  /// price is paid in rank, through the leaderboard's effective score, so
+  /// this can now say "marks untouched" without qualification.
+  Widget _retriesNote() {
+    final used = result.retryPointsUsed;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSizes.paddingM),
+      decoration: BoxDecoration(
+        color: AppColors.infoBackground,
+        borderRadius: BorderRadius.circular(AppSizes.radiusL),
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.replay_rounded, size: 18, color: AppColors.info),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              used == 0
+                  ? 'No points used. Full rank kept.'
+                  : '$used of ${result.retryPoints} points used. Marks '
+                        'unchanged. Rank score −$used%.',
+              style: AppTypography.bodyTextSmallMedium.copyWith(
+                color: AppColors.info,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -355,10 +447,7 @@ class _ExamResultViewState extends State<ExamResultView> {
       padding: const EdgeInsets.symmetric(vertical: AppSizes.paddingM),
       child: Column(
         children: [
-          Text(
-            value,
-            style: AppTypography.h3Bold.copyWith(color: color),
-          ),
+          Text(value, style: AppTypography.h3Bold.copyWith(color: color)),
           const SizedBox(height: 2),
           Text(
             label,
@@ -420,11 +509,26 @@ class ResultQuestionCard extends StatelessWidget {
   /// Nested child cards use a lighter, borderless look.
   final bool nested;
 
+  /// Opens the review palette from the number badge. Null on nested child
+  /// cards — the palette only indexes top-level questions.
+  final VoidCallback? onNumberTap;
+
+  /// The student flagged this question during the exam.
+  final bool isPinned;
+
+  /// Briefly true right after the palette jumped here. On a short paper
+  /// the scroll can be a few pixels or none at all, so without this the
+  /// jump is invisible and reads as "the button did nothing".
+  final bool isHighlighted;
+
   const ResultQuestionCard({
     super.key,
     required this.question,
     required this.number,
     this.nested = false,
+    this.onNumberTap,
+    this.isPinned = false,
+    this.isHighlighted = false,
   });
 
   ExamStatusKind get _status {
@@ -459,14 +563,17 @@ class ResultQuestionCard extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              number,
-              style: AppTypography.bodyTextSmallBold.copyWith(
-                color: AppColors.mutedTextPrimary,
-              ),
-            ),
+            ExamQuestionNumberBadge(number, onTap: onNumberTap),
             const SizedBox(width: 8),
             ExamStatusPill(_status),
+            if (isPinned) ...[
+              const SizedBox(width: 8),
+              ExamChip(
+                'Flagged',
+                color: AppColors.warning,
+                icon: Icons.push_pin,
+              ),
+            ],
             if (question.timeTakenSeconds != null) ...[
               const SizedBox(width: 8),
               _timeChip(question.timeTakenSeconds!),
@@ -474,9 +581,7 @@ class ResultQuestionCard extends StatelessWidget {
             const Spacer(),
             Text(
               '${formatMarks(question.marksAwarded)} / ${formatMarks(_totalPositive)}',
-              style: AppTypography.bodyTextSmallBold.copyWith(
-                color: _accent,
-              ),
+              style: AppTypography.bodyTextSmallBold.copyWith(color: _accent),
             ),
           ],
         ),
@@ -507,12 +612,28 @@ class ResultQuestionCard extends StatelessWidget {
         child: content,
       );
     }
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOut,
       padding: const EdgeInsets.all(AppSizes.paddingM),
       decoration: BoxDecoration(
-        color: AppColors.white,
+        color: isHighlighted
+            ? AppColors.primary.withValues(alpha: 0.06)
+            : AppColors.white,
         borderRadius: BorderRadius.circular(AppSizes.radiusL),
-        border: Border.all(color: AppColors.dividerLight),
+        border: Border.all(
+          color: isHighlighted ? AppColors.primary : AppColors.dividerLight,
+          width: isHighlighted ? 2 : 1,
+        ),
+        boxShadow: isHighlighted
+            ? [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.22),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
         // Accent stripe on the left edge.
       ),
       child: Container(
@@ -603,9 +724,17 @@ class ResultQuestionCard extends StatelessWidget {
       spacing: 10,
       runSpacing: 8,
       children: [
-        _pill('Your answer: $your', yourColor, yourColor.withValues(alpha: 0.1)),
-        _pill('Correct: $correct', AppColors.success,
-            AppColors.grey50, textOnly: true),
+        _pill(
+          'Your answer: $your',
+          yourColor,
+          yourColor.withValues(alpha: 0.1),
+        ),
+        _pill(
+          'Correct: $correct',
+          AppColors.success,
+          AppColors.grey50,
+          textOnly: true,
+        ),
       ],
     );
   }

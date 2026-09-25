@@ -49,6 +49,74 @@ class ExamChip extends StatelessWidget {
   }
 }
 
+/// A question's number, doubling as the way into the question palette.
+///
+/// The floating palette button is easy to miss, and the number is what a
+/// student is already looking at when they want to be somewhere else in
+/// the paper — so the number itself is the jump control.
+///
+/// [onTap] is null wherever jumping isn't possible: comprehension children
+/// (the palette only indexes top-level questions) and the quiz/competitive
+/// flows, where the server decides which question comes next. It then
+/// renders as a plain label with no affordance, rather than a button that
+/// does nothing.
+class ExamQuestionNumberBadge extends StatelessWidget {
+  final String number;
+  final VoidCallback? onTap;
+
+  const ExamQuestionNumberBadge(this.number, {super.key, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final interactive = onTap != null;
+    // minWidth rather than a fixed width: nested numbers ("1.2") are wider
+    // than a single digit and must not be clipped.
+    final badge = Container(
+      constraints: const BoxConstraints(minWidth: 24),
+      height: 24,
+      padding: EdgeInsets.symmetric(horizontal: interactive ? 7 : 4),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppSizes.radiusS),
+        border: interactive
+            ? Border.all(color: AppColors.primary.withValues(alpha: 0.35))
+            : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            number,
+            style: AppTypography.bodyTextXtraSmallBold.copyWith(
+              color: AppColors.primary,
+            ),
+          ),
+          // The grid glyph is what says "there are other questions behind
+          // this" — a bare number reads as a label, not a button.
+          if (interactive) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.grid_view_rounded, size: 11, color: AppColors.primary),
+          ],
+        ],
+      ),
+    );
+
+    if (!interactive) return badge;
+    return Tooltip(
+      message: 'Jump to another question',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppSizes.radiusS),
+          child: badge,
+        ),
+      ),
+    );
+  }
+}
+
 /// Status pill used on result questions: Correct / Wrong / Partial / Skipped.
 enum ExamStatusKind { correct, wrong, partial, skipped }
 
@@ -139,6 +207,7 @@ class ExamCard extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final Color? borderColor;
   final Color? background;
+  final double borderWidth;
 
   const ExamCard({
     super.key,
@@ -146,6 +215,7 @@ class ExamCard extends StatelessWidget {
     this.padding,
     this.borderColor,
     this.background,
+    this.borderWidth = 1,
   });
 
   @override
@@ -158,7 +228,7 @@ class ExamCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppSizes.radiusL),
         border: Border.all(
           color: borderColor ?? AppColors.dividerLight,
-          width: 1,
+          width: borderWidth,
         ),
       ),
       child: child,
@@ -200,8 +270,11 @@ class ExamInstructionCallout extends StatelessWidget {
               color: AppColors.warning.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.push_pin_outlined,
-                size: 16, color: AppColors.warningDark),
+            child: Icon(
+              Icons.push_pin_outlined,
+              size: 16,
+              color: AppColors.warningDark,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(

@@ -34,7 +34,7 @@ class PauseDrainBanner extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              'The host is pausing — finishing what was said…',
+              'The host is pausing, finishing what was said…',
               style: AppTypography.bodyTextSemiBold.copyWith(
                 color: AppColors.alwaysWhite,
                 fontSize: 12,

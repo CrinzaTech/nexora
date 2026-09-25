@@ -568,6 +568,35 @@ abstract class ApiClient {
   );
 
   // ============================================================
+  // EXAM — Answer current question (quiz mode)
+  // POST /api/v1/exam/attempt/{attemptId}/quiz-answer
+  // Body: { phoneNumber, answer: StudentAnswerRequest, moveOn }
+  // Grades immediately and reports correctness + the retry budget. The
+  // competitive endpoint above REJECTS a quiz-mode attempt (it neither
+  // grades nor honours retries), so the two are never interchangeable.
+  // ============================================================
+  @POST(ApiEndpoints.examQuizAnswer)
+  Future<Map<String, dynamic>> quizAnswerExamQuestion(
+    @Path('attemptId') int attemptId,
+    @Body() Map<String, dynamic> body,
+  );
+
+  // ============================================================
+  // EXAM — Reveal the answer (quiz mode)
+  // POST /api/v1/exam/attempt/{attemptId}/reveal-answer
+  // Body: { phoneNumber, questionId? }
+  // Spends 3 retry points; the question then earns its full marks (points
+  // cost rank, not score). Without questionId it acts on the question the
+  // attempt is on and advances; with one it reveals that earlier question
+  // and leaves the position alone. Refused with 400 below 3 points.
+  // ============================================================
+  @POST(ApiEndpoints.examRevealAnswer)
+  Future<Map<String, dynamic>> revealExamAnswer(
+    @Path('attemptId') int attemptId,
+    @Body() Map<String, dynamic> body,
+  );
+
+  // ============================================================
   // EXAM — Autosave (normal mode; ungraded bulk save)
   // POST /api/v1/exam/attempt/{attemptId}/save
   // Body: { phoneNumber, answers: [StudentAnswerRequest] }
@@ -640,6 +669,30 @@ abstract class ApiClient {
   // ============================================================
   @POST(ApiEndpoints.examReattempt)
   Future<Map<String, dynamic>> reattemptExam(
+    @Path('examId') int examId,
+    @Body() Map<String, dynamic> body,
+  );
+
+  // ============================================================
+  // EXAM — Practice paper (quizMode on, retryMode off)
+  // GET /api/v1/exam/{examId}/practice?phoneNumber=
+  // Whole paper, reshuffled on every call. attemptId is 0 and there is no
+  // deadline — nothing about a drill is recorded.
+  // ============================================================
+  @GET(ApiEndpoints.examPractice)
+  Future<Map<String, dynamic>> getExamPractice(
+    @Path('examId') int examId,
+    @Query('phoneNumber') String phoneNumber,
+  );
+
+  // ============================================================
+  // EXAM — Grade one practice answer (stateless)
+  // POST /api/v1/exam/{examId}/practice-answer
+  // Body: { phoneNumber, answer: StudentAnswerRequest }
+  // Always returns the correct option and explanation, right or wrong.
+  // ============================================================
+  @POST(ApiEndpoints.examPracticeAnswer)
+  Future<Map<String, dynamic>> practiceExamAnswer(
     @Path('examId') int examId,
     @Body() Map<String, dynamic> body,
   );

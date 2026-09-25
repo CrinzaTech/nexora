@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:nexora/core/theme/app_colors.dart';
@@ -53,10 +55,26 @@ class _ExamPaperViewState extends State<ExamPaperView> {
   /// it. Keyed by question id because the section on screen changes.
   final Map<int, GlobalKey> _questionKeys = {};
 
+  /// The question the palette last jumped to, highlighted for a moment so
+  /// the jump is visible. A short section may have only a few pixels of
+  /// scroll (or none at all), in which case the scroll alone tells the
+  /// student nothing about where they landed.
+  int? _highlightedQuestionId;
+  Timer? _highlightTimer;
+
   @override
   void dispose() {
+    _highlightTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _highlight(int questionId) {
+    _highlightTimer?.cancel();
+    setState(() => _highlightedQuestionId = questionId);
+    _highlightTimer = Timer(const Duration(milliseconds: 1800), () {
+      if (mounted) setState(() => _highlightedQuestionId = null);
+    });
   }
 
   List<ExamSection> get _sections => widget.paper.sections;
@@ -161,6 +179,8 @@ class _ExamPaperViewState extends State<ExamPaperView> {
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
     );
+    if (!mounted) return;
+    _highlight(question.id);
   }
 
   Future<void> _openPalette() async {
@@ -239,15 +259,22 @@ class _ExamPaperViewState extends State<ExamPaperView> {
                                   child: ExamQuestionInput(
                                     question: section.questions[i],
                                     number: startNumber + i + 1,
-                                    draft: widget
-                                            .answers[section.questions[i].id] ??
+                                    draft:
+                                        widget.answers[section
+                                            .questions[i]
+                                            .id] ??
                                         const ExamAnswerDraft(),
                                     onChanged: widget.onUpdateAnswer,
-                                    isPinned: widget.pinnedQuestionIds
-                                        .contains(section.questions[i].id),
+                                    isPinned: widget.pinnedQuestionIds.contains(
+                                      section.questions[i].id,
+                                    ),
                                     onTogglePin: () => widget.onTogglePin(
                                       section.questions[i].id,
                                     ),
+                                    onNumberTap: _openPalette,
+                                    isHighlighted:
+                                        _highlightedQuestionId ==
+                                        section.questions[i].id,
                                   ),
                                 ),
                             ],
@@ -340,7 +367,10 @@ class _ExamPaperViewState extends State<ExamPaperView> {
       ),
       child: Row(
         children: [
-          _metaPill(Icons.help_outline, '${widget.paper.totalQuestions} Questions'),
+          _metaPill(
+            Icons.help_outline,
+            '${widget.paper.totalQuestions} Questions',
+          ),
           const SizedBox(width: 8),
           _metaPill(Icons.star_outline, '${widget.paper.totalMarks} Marks'),
         ],
@@ -532,9 +562,9 @@ class _ExamPaperViewState extends State<ExamPaperView> {
         title: 'Submit exam?',
         message: unanswered > 0
             ? "You still have unanswered questions. Once submitted you can't "
-                'change your answers.'
+                  'change your answers.'
             : "You've answered everything. Once submitted you can't change "
-                'your answers.',
+                  'your answers.',
         extra: _submitSummary(answered: answered, unanswered: unanswered),
         actions: [
           ExamDialogAction(

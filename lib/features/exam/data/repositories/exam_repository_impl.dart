@@ -19,13 +19,17 @@ class ExamRepositoryImpl implements ExamRepository {
   Either<Failure, Map<String, dynamic>> _data(Map<String, dynamic> json) {
     if (json['success'] == false) {
       return Left(
-        Failure.server(message: json['message']?.toString() ?? 'Request failed'),
+        Failure.server(
+          message: json['message']?.toString() ?? 'Request failed',
+        ),
       );
     }
     final data = json['data'];
     if (data is Map<String, dynamic>) return Right(data);
     return Left(
-      Failure.server(message: json['message']?.toString() ?? 'No data returned'),
+      Failure.server(
+        message: json['message']?.toString() ?? 'No data returned',
+      ),
     );
   }
 
@@ -141,6 +145,51 @@ class ExamRepositoryImpl implements ExamRepository {
   }
 
   @override
+  Future<Either<Failure, QuizAnswerResultResponse>> quizAnswerQuestion({
+    required int attemptId,
+    required String phoneNumber,
+    required Map<String, dynamic> answer,
+    bool moveOn = false,
+    bool revise = false,
+  }) async {
+    try {
+      final json = await _apiClient.quizAnswerExamQuestion(attemptId, {
+        'phoneNumber': phoneNumber,
+        'answer': answer,
+        'moveOn': moveOn,
+        'revise': revise,
+      });
+      return _data(json).map(QuizAnswerResultResponse.fromJson);
+    } on DioException catch (e) {
+      return Left(mapDioExceptionToFailure(e));
+    } catch (e) {
+      return Left(Failure.unknown(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, QuizAnswerResultResponse>> revealAnswer({
+    required int attemptId,
+    required String phoneNumber,
+    int? questionId,
+  }) async {
+    try {
+      final json = await _apiClient.revealExamAnswer(attemptId, {
+        'phoneNumber': phoneNumber,
+        // Omitted entirely rather than sent as null: absent means "the
+        // question the attempt is on", which is the server's default and
+        // the only form older builds send.
+        if (questionId != null) 'questionId': questionId,
+      });
+      return _data(json).map(QuizAnswerResultResponse.fromJson);
+    } on DioException catch (e) {
+      return Left(mapDioExceptionToFailure(e));
+    } catch (e) {
+      return Left(Failure.unknown(message: e.toString()));
+    }
+  }
+
+  @override
   Future<Either<Failure, SaveProgressResponse>> saveProgress({
     required int attemptId,
     required String phoneNumber,
@@ -220,9 +269,9 @@ class ExamRepositoryImpl implements ExamRepository {
       final data = json['data'];
       final list = data is List
           ? data
-              .whereType<Map<String, dynamic>>()
-              .map(AttemptHistoryItem.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(AttemptHistoryItem.fromJson)
+                .toList(growable: false)
           : <AttemptHistoryItem>[];
       return Right(list);
     } on DioException catch (e) {
@@ -268,6 +317,40 @@ class ExamRepositoryImpl implements ExamRepository {
         ...context.toBody(),
       });
       return _data(json).map(AttemptStateResponse.fromJson);
+    } on DioException catch (e) {
+      return Left(mapDioExceptionToFailure(e));
+    } catch (e) {
+      return Left(Failure.unknown(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, ExamPaperResponse>> getPracticePaper({
+    required int examId,
+    required String phoneNumber,
+  }) async {
+    try {
+      final json = await _apiClient.getExamPractice(examId, phoneNumber);
+      return _data(json).map(ExamPaperResponse.fromJson);
+    } on DioException catch (e) {
+      return Left(mapDioExceptionToFailure(e));
+    } catch (e) {
+      return Left(Failure.unknown(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, PracticeAnswerResultResponse>> practiceAnswer({
+    required int examId,
+    required String phoneNumber,
+    required Map<String, dynamic> answer,
+  }) async {
+    try {
+      final json = await _apiClient.practiceExamAnswer(examId, {
+        'phoneNumber': phoneNumber,
+        'answer': answer,
+      });
+      return _data(json).map(PracticeAnswerResultResponse.fromJson);
     } on DioException catch (e) {
       return Left(mapDioExceptionToFailure(e));
     } catch (e) {

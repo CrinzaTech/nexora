@@ -182,10 +182,21 @@ class ApiEndpoints {
   static const String examGate = '/api/v1/exam/{examId}/gate';
   static const String examStart = '/api/v1/exam/{examId}/start';
   static const String examPaper = '/api/v1/exam/attempt/{attemptId}/paper';
-  // Competitive mode (one question at a time).
+  // Competitive AND quiz mode (one question at a time) both page through
+  // this endpoint; only the answer endpoint below differs between them.
   static const String examQuestion =
       '/api/v1/exam/attempt/{attemptId}/question';
   static const String examAnswer = '/api/v1/exam/attempt/{attemptId}/answer';
+  // Quiz mode only — grades the one question immediately and reports back
+  // whether it was right, plus what is left of the retry budget.
+  static const String examQuizAnswer =
+      '/api/v1/exam/attempt/{attemptId}/quiz-answer';
+  // Quiz mode only — spends 3 retry points to show the answer and its
+  // explanation. The question then earns its full marks; the points cost
+  // rank, not score. With no `questionId` it acts on the current question
+  // and advances; with one it reveals that earlier question in place.
+  static const String examRevealAnswer =
+      '/api/v1/exam/attempt/{attemptId}/reveal-answer';
   static const String examSave = '/api/v1/exam/attempt/{attemptId}/save';
   static const String examSubmit = '/api/v1/exam/attempt/{attemptId}/submit';
   static const String examResult = '/api/v1/exam/attempt/{attemptId}/result';
@@ -196,6 +207,12 @@ class ApiEndpoints {
   // Takes the same phoneNumber + nodeId/courseId/folderPath as `examGate`,
   // and an optional `top` (default 10, clamped server-side to 1-50).
   static const String examLeaderboard = '/api/v1/exam/{examId}/leaderboard';
+
+  // Practice drills (quizMode on, retryMode off). Keyed by examId, not an
+  // attempt: nothing about a drill is recorded, so there is no attempt.
+  static const String examPractice = '/api/v1/exam/{examId}/practice';
+  static const String examPracticeAnswer =
+      '/api/v1/exam/{examId}/practice-answer';
 
   // ============================================================
   // WEBINARS (public live classes)

@@ -8,6 +8,28 @@ import 'package:nexora/features/exam/data/models/exam_models.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_atoms.dart';
 import 'package:nexora/features/exam/presentation/widgets/exam_html_text.dart';
 
+/// Quiz-mode option colouring. Quiz mode is the one flow that reveals
+/// correctness mid-paper, so this is the only thing that ever paints a
+/// right/wrong answer onto a *pre-submit* question.
+///
+/// [correctOptionId] arrives only once the question is settled — the API
+/// withholds it while a retry is still on the table, or the client would
+/// be holding the answer the student is being asked to find.
+class ExamQuizFeedback {
+  final int? correctOptionId;
+
+  /// Options already tried and found wrong on this question, so a student
+  /// spending a retry can see what they've already ruled out.
+  final Set<int> wrongOptionIds;
+
+  const ExamQuizFeedback({
+    this.correctOptionId,
+    this.wrongOptionIds = const {},
+  });
+
+  bool get isEmpty => correctOptionId == null && wrongOptionIds.isEmpty;
+}
+
 /// Renders one question (any type) with its input controls during the
 /// exam. Emits an updated [ExamAnswerDraft] via [onChanged].
 ///
@@ -34,6 +56,20 @@ class ExamQuestionInput extends StatelessWidget {
   /// which has no pinning, gets left alone.
   final VoidCallback? onTogglePin;
 
+  /// Quiz mode only. Null everywhere else, which is what keeps every other
+  /// flow structurally incapable of leaking correctness before submit.
+  final ExamQuizFeedback? quizFeedback;
+
+  /// Opens the question palette from the number badge. Null where jumping
+  /// isn't possible — the quiz and competitive flows are paced by the
+  /// server, so there is no other question to jump to.
+  final VoidCallback? onNumberTap;
+
+  /// Briefly true right after the palette jumped here. A short section may
+  /// have only a few pixels of scroll (or none), so without this the jump
+  /// is invisible and reads as "the button did nothing".
+  final bool isHighlighted;
+
   const ExamQuestionInput({
     super.key,
     required this.question,
@@ -42,12 +78,24 @@ class ExamQuestionInput extends StatelessWidget {
     required this.onChanged,
     this.isPinned = false,
     this.onTogglePin,
+    this.quizFeedback,
+    this.onNumberTap,
+    this.isHighlighted = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return ExamCard(
-      borderColor: isPinned ? AppColors.warning : null,
+      // The jump flash outranks the pin tint for the moment it is on —
+      // it is answering "where did I just land", which the student asked
+      // for a half-second ago.
+      borderColor: isHighlighted
+          ? AppColors.primary
+          : (isPinned ? AppColors.warning : null),
+      borderWidth: isHighlighted ? 2 : 1,
+      background: isHighlighted
+          ? AppColors.primary.withValues(alpha: 0.06)
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -56,6 +104,7 @@ class ExamQuestionInput extends StatelessWidget {
             number: '$number',
             isPinned: isPinned,
             onTogglePin: onTogglePin,
+            onNumberTap: onNumberTap,
           ),
           // `match_the_column` always sends an empty questionText — the
           // pairs are the question. Skip the block entirely so no empty
@@ -98,6 +147,7 @@ class ExamQuestionInput extends StatelessWidget {
           question: question,
           draft: draft,
           onChanged: (d) => onChanged(question.id, d),
+          quizFeedback: quizFeedback,
         );
     }
   }
@@ -122,7 +172,8 @@ class ExamChildQuestionInput extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final childDraft =
-        _ChildDraftScope.of(context)?.call(question.id) ?? const ExamAnswerDraft();
+        _ChildDraftScope.of(context)?.call(question.id) ??
+        const ExamAnswerDraft();
     return Container(
       padding: const EdgeInsets.all(AppSizes.paddingM),
       decoration: BoxDecoration(
@@ -155,10 +206,7 @@ class ExamChildQuestionInput extends StatelessWidget {
 class _ChildDraftScope extends InheritedWidget {
   final ExamAnswerDraft Function(int questionId) resolver;
 
-  const _ChildDraftScope({
-    required this.resolver,
-    required super.child,
-  });
+  const _ChildDraftScope({required this.resolver, required super.child});
 
   static ExamAnswerDraft Function(int)? of(BuildContext context) {
     return context
@@ -196,11 +244,16 @@ class _QuestionHeader extends StatelessWidget {
   final bool isPinned;
   final VoidCallback? onTogglePin;
 
+  /// Null leaves the number badge as a plain label — see
+  /// [ExamQuestionNumberBadge].
+  final VoidCallback? onNumberTap;
+
   const _QuestionHeader({
     required this.question,
     required this.number,
     this.isPinned = false,
     this.onTogglePin,
+    this.onNumberTap,
   });
 
   @override
@@ -209,28 +262,14 @@ class _QuestionHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Number badge
-        Container(
-          width: 24,
-          height: 24,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(AppSizes.radiusS),
-          ),
-          child: Text(
-            number,
-            style: AppTypography.bodyTextXtraSmallBold.copyWith(
-              color: AppColors.primary,
-            ),
-          ),
-        ),
+        // Number badge — also the jump control where the paper allows it.
+        ExamQuestionNumberBadge(number, onTap: onNumberTap),
         const SizedBox(width: 8),
         // Only the difficulty chip here — the question-type label
         // ("Single Selection", etc.) is intentionally not shown.
         Expanded(
-          child: (question.difficulty != null &&
-                  question.difficulty!.isNotEmpty)
+          child:
+              (question.difficulty != null && question.difficulty!.isNotEmpty)
               ? Align(
                   alignment: Alignment.centerLeft,
                   child: ExamChip(
@@ -304,11 +343,13 @@ class _AnswerControls extends StatelessWidget {
   final ExamQuestion question;
   final ExamAnswerDraft draft;
   final ValueChanged<ExamAnswerDraft> onChanged;
+  final ExamQuizFeedback? quizFeedback;
 
   const _AnswerControls({
     required this.question,
     required this.draft,
     required this.onChanged,
+    this.quizFeedback,
   });
 
   @override
@@ -319,15 +360,16 @@ class _AnswerControls extends StatelessWidget {
           question: question,
           selectedIds: draft.optionId == null ? const {} : {draft.optionId!},
           multi: false,
-          onToggle: (id) => onChanged(
-            draft.copyWith(optionId: id, clearOptionId: false),
-          ),
+          quizFeedback: quizFeedback,
+          onToggle: (id) =>
+              onChanged(draft.copyWith(optionId: id, clearOptionId: false)),
         );
       case ExamQuestionType.multipleSelect:
         return _ChoiceOptions(
           question: question,
           selectedIds: draft.optionIds.toSet(),
           multi: true,
+          quizFeedback: quizFeedback,
           onToggle: (id) {
             final next = draft.optionIds.toList();
             if (next.contains(id)) {
@@ -378,12 +420,14 @@ class _ChoiceOptions extends StatelessWidget {
   final Set<int> selectedIds;
   final bool multi;
   final ValueChanged<int> onToggle;
+  final ExamQuizFeedback? quizFeedback;
 
   const _ChoiceOptions({
     required this.question,
     required this.selectedIds,
     required this.multi,
     required this.onToggle,
+    this.quizFeedback,
   });
 
   @override
@@ -411,13 +455,27 @@ class _ChoiceOptions extends StatelessWidget {
             text: i < texts.length ? texts[i] : '',
             selected: selectedIds.contains(ids[i]),
             multi: multi,
+            verdict: _verdictFor(ids[i]),
             onTap: () => onToggle(ids[i]),
           ),
         ],
       ],
     );
   }
+
+  /// Quiz mode only: the colour this option should carry. Neutral when
+  /// there is no feedback, which is every other flow.
+  _OptionVerdict _verdictFor(int id) {
+    final feedback = quizFeedback;
+    if (feedback == null) return _OptionVerdict.none;
+    if (feedback.correctOptionId == id) return _OptionVerdict.correct;
+    if (feedback.wrongOptionIds.contains(id)) return _OptionVerdict.wrong;
+    return _OptionVerdict.none;
+  }
 }
+
+/// Quiz-mode verdict painted onto one option.
+enum _OptionVerdict { none, correct, wrong }
 
 class _OptionTile extends StatelessWidget {
   final String letter;
@@ -426,16 +484,32 @@ class _OptionTile extends StatelessWidget {
   final bool multi;
   final VoidCallback onTap;
 
+  /// Quiz mode only — [_OptionVerdict.none] everywhere else.
+  final _OptionVerdict verdict;
+
   const _OptionTile({
     required this.letter,
     required this.text,
     required this.selected,
     required this.multi,
     required this.onTap,
+    this.verdict = _OptionVerdict.none,
   });
+
+  /// The tile's accent. A quiz verdict outranks selection: once the
+  /// server has said an option is right or wrong, that is the more
+  /// important thing to show.
+  Color? get _verdictColor => switch (verdict) {
+    _OptionVerdict.correct => AppColors.success,
+    _OptionVerdict.wrong => AppColors.error,
+    _OptionVerdict.none => null,
+  };
 
   @override
   Widget build(BuildContext context) {
+    final verdictColor = _verdictColor;
+    final accent = verdictColor ?? AppColors.primary;
+    final outlined = verdictColor != null || selected;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -445,13 +519,13 @@ class _OptionTile extends StatelessWidget {
           duration: const Duration(milliseconds: 120),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
-            color: selected
-                ? AppColors.primary.withValues(alpha: 0.06)
+            color: outlined
+                ? accent.withValues(alpha: verdictColor != null ? 0.08 : 0.06)
                 : AppColors.white,
             borderRadius: BorderRadius.circular(AppSizes.radiusM),
             border: Border.all(
-              color: selected ? AppColors.primary : AppColors.dividerLight,
-              width: selected ? 1.5 : 1,
+              color: outlined ? accent : AppColors.dividerLight,
+              width: outlined ? 1.5 : 1,
             ),
           ),
           child: Row(
@@ -461,7 +535,7 @@ class _OptionTile extends StatelessWidget {
               Text(
                 '$letter)',
                 style: AppTypography.bodyTextMedium.copyWith(
-                  color: AppColors.mutedTextPrimary,
+                  color: verdictColor ?? AppColors.mutedTextPrimary,
                 ),
               ),
               const SizedBox(width: 6),
@@ -472,6 +546,18 @@ class _OptionTile extends StatelessWidget {
                   color: AppColors.textPrimary,
                 ),
               ),
+              // Named as well as coloured, so the verdict doesn't rest on
+              // colour alone.
+              if (verdict != _OptionVerdict.none) ...[
+                const SizedBox(width: 8),
+                Icon(
+                  verdict == _OptionVerdict.correct
+                      ? Icons.check_circle_rounded
+                      : Icons.cancel_rounded,
+                  size: 20,
+                  color: accent,
+                ),
+              ],
             ],
           ),
         ),
@@ -480,15 +566,18 @@ class _OptionTile extends StatelessWidget {
   }
 
   Widget _indicator() {
+    // A verdict replaces the radio/checkbox tint — a green "correct" dot
+    // next to a red tile would be two accents fighting.
+    final accent = _verdictColor ?? AppColors.primary;
     if (multi) {
       return Container(
         width: 20,
         height: 20,
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary : Colors.transparent,
+          color: selected ? accent : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: selected ? AppColors.primary : AppColors.grey200,
+            color: selected ? accent : AppColors.grey200,
             width: 1.5,
           ),
         ),
@@ -503,7 +592,7 @@ class _OptionTile extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(
-          color: selected ? AppColors.primary : AppColors.grey200,
+          color: selected ? accent : AppColors.grey200,
           width: selected ? 6 : 1.5,
         ),
       ),
@@ -523,13 +612,9 @@ class _TrueFalseInput extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(
-          child: _pill('True', value == true, () => onChanged(true)),
-        ),
+        Expanded(child: _pill('True', value == true, () => onChanged(true))),
         const SizedBox(width: 10),
-        Expanded(
-          child: _pill('False', value == false, () => onChanged(false)),
-        ),
+        Expanded(child: _pill('False', value == false, () => onChanged(false))),
       ],
     );
   }
@@ -599,9 +684,7 @@ class _IntegerInputState extends State<_IntegerInput> {
       child: TextField(
         controller: _controller,
         keyboardType: const TextInputType.numberWithOptions(signed: true),
-        inputFormatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'^-?\d*')),
-        ],
+        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^-?\d*'))],
         style: AppTypography.bodyTextLargeMedium,
         decoration: _fieldDecoration('Your answer'),
         onChanged: (v) => widget.onChanged(int.tryParse(v.trim())),
@@ -855,19 +938,23 @@ class _PromptRowState extends State<_PromptRow> {
     final Color borderColor = selected
         ? AppColors.primary
         : _hovered
-            ? AppColors.primary.withValues(alpha: 0.55)
-            : AppColors.dividerLight;
+        ? AppColors.primary.withValues(alpha: 0.55)
+        : AppColors.dividerLight;
 
     // Menu rows are a fixed height, so derive one that fits two lines of
     // option text plus the highlight's padding. Both the design system's
     // responsive font size and the system text scale feed into it — a
     // hardcoded height clips on a large screen.
-    final double lineHeight = MediaQuery.textScalerOf(context)
-            .scale(AppTypography.bodyTextMedium.fontSize ?? 14) *
+    final double lineHeight =
+        MediaQuery.textScalerOf(
+          context,
+        ).scale(AppTypography.bodyTextMedium.fontSize ?? 14) *
         (22 / 14);
     final double itemHeight =
-        (lineHeight * 2 + _matchOptionPadding.vertical + 2)
-            .clamp(kMinInteractiveDimension, 140.0);
+        (lineHeight * 2 + _matchOptionPadding.vertical + 2).clamp(
+          kMinInteractiveDimension,
+          140.0,
+        );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -999,8 +1086,10 @@ class _PromptRowState extends State<_PromptRow> {
 
 /// Inset of an option's highlight inside its menu row. Shared with the
 /// row-height calculation so the two can't drift apart.
-const EdgeInsets _matchOptionPadding =
-    EdgeInsets.symmetric(horizontal: 10, vertical: 6);
+const EdgeInsets _matchOptionPadding = EdgeInsets.symmetric(
+  horizontal: 10,
+  vertical: 6,
+);
 
 /// One option inside an open match-the-column menu.
 ///
@@ -1035,13 +1124,13 @@ class _MatchMenuOptionState extends State<_MatchMenuOption> {
     final Color background = _hovered
         ? AppColors.primary.withValues(alpha: 0.14)
         : widget.selected
-            ? AppColors.primary.withValues(alpha: 0.07)
-            : Colors.transparent;
+        ? AppColors.primary.withValues(alpha: 0.07)
+        : Colors.transparent;
     final Color textColor = _hovered || widget.selected
         ? AppColors.primary
         : widget.placeholder
-            ? AppColors.mutedTextPrimary
-            : AppColors.textPrimary;
+        ? AppColors.mutedTextPrimary
+        : AppColors.textPrimary;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -1058,10 +1147,11 @@ class _MatchMenuOptionState extends State<_MatchMenuOption> {
           widget.label,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: (_hovered || widget.selected
-                  ? AppTypography.bodyTextSemiBold
-                  : AppTypography.bodyTextMedium)
-              .copyWith(color: textColor),
+          style:
+              (_hovered || widget.selected
+                      ? AppTypography.bodyTextSemiBold
+                      : AppTypography.bodyTextMedium)
+                  .copyWith(color: textColor),
         ),
       ),
     );

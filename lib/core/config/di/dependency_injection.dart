@@ -87,10 +87,14 @@ import 'package:nexora/features/assignment/presentation/bloc/assignment_cubit.da
 import 'package:nexora/features/exam/data/repositories/exam_repository_impl.dart';
 import 'package:nexora/features/exam/domain/repositories/exam_repository.dart';
 import 'package:nexora/features/exam/domain/usecases/answer_exam_question_usecase.dart';
+import 'package:nexora/features/exam/domain/usecases/quiz_answer_question_usecase.dart';
+import 'package:nexora/features/exam/domain/usecases/reveal_quiz_answer_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_gate_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_question_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_history_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_leaderboard_usecase.dart';
+import 'package:nexora/features/exam/domain/usecases/get_practice_paper_usecase.dart';
+import 'package:nexora/features/exam/domain/usecases/practice_answer_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_paper_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/get_exam_result_usecase.dart';
 import 'package:nexora/features/exam/domain/usecases/reattempt_exam_usecase.dart';
@@ -381,12 +385,16 @@ Future<void> setupLocator() async {
   sl.registerLazySingleton(() => GetExamPaperUseCase(sl()));
   sl.registerLazySingleton(() => GetExamQuestionUseCase(sl()));
   sl.registerLazySingleton(() => AnswerExamQuestionUseCase(sl()));
+  sl.registerLazySingleton(() => QuizAnswerQuestionUseCase(sl()));
+  sl.registerLazySingleton(() => RevealQuizAnswerUseCase(sl()));
   sl.registerLazySingleton(() => SaveExamProgressUseCase(sl()));
   sl.registerLazySingleton(() => SubmitExamUseCase(sl()));
   sl.registerLazySingleton(() => GetExamResultUseCase(sl()));
   sl.registerLazySingleton(() => GetExamHistoryUseCase(sl()));
   sl.registerLazySingleton(() => ReattemptExamUseCase(sl()));
   sl.registerLazySingleton(() => GetExamLeaderboardUseCase(sl()));
+  sl.registerLazySingleton(() => GetPracticePaperUseCase(sl()));
+  sl.registerLazySingleton(() => PracticeAnswerUseCase(sl()));
   sl.registerFactory(
     () => ExamCubit(
       repository: sl(),
@@ -395,12 +403,16 @@ Future<void> setupLocator() async {
       getPaper: sl(),
       getQuestion: sl(),
       answerQuestion: sl(),
+      quizAnswerQuestion: sl(),
+      revealQuizAnswer: sl(),
       saveProgress: sl(),
       submitExam: sl(),
       getResult: sl(),
       getHistory: sl(),
       reattemptExam: sl(),
       getLeaderboard: sl(),
+      getPracticePaper: sl(),
+      practiceAnswer: sl(),
     ),
   );
 

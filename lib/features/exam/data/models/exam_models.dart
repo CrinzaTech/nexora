@@ -99,8 +99,7 @@ DateTime? parseExamUtc(dynamic raw) {
   if (raw == null) return null;
   final s = raw.toString().trim();
   if (s.isEmpty) return null;
-  final hasZone = s.endsWith('Z') ||
-      RegExp(r'[+-]\d{2}:?\d{2}$').hasMatch(s);
+  final hasZone = s.endsWith('Z') || RegExp(r'[+-]\d{2}:?\d{2}$').hasMatch(s);
   final normalised = hasZone ? s : '${s}Z';
   return DateTime.tryParse(normalised)?.toUtc();
 }
@@ -151,6 +150,29 @@ class AttemptStateResponse {
   /// `normal` or `competitive`. This app only supports `normal`.
   final String examMode;
 
+  /// Instant-feedback mode. **Read this BEFORE [examMode]** — it always
+  /// wins on pacing: a quiz-mode exam is served one question at a time
+  /// even when [examMode] is `normal`, because instant feedback on a
+  /// whole visible paper would hand over the answer key.
+  final bool quizMode;
+
+  /// Quiz mode: the budget of retry POINTS for the whole attempt (not per
+  /// question). Points buy two different things — see [QuizPointCosts].
+  /// 0 means no second chances and no reveals.
+  final int retryPoints;
+
+  /// Quiz mode: how much of [retryPoints] is already spent on this attempt.
+  final int retryPointsUsed;
+
+  /// Quiz mode only. `true` (the default, and what older servers imply by
+  /// omitting it) is a graded quiz; `false` turns the exam into a practice
+  /// drill — see [isPractice].
+  final bool retryMode;
+
+  /// Server-computed `quizMode && !retryMode`. Read through [isPractice],
+  /// which also derives it for a server that only sends the two flags.
+  final bool isPracticeMode;
+
   final bool hasInstructions;
   final String? instructions;
   final int? durationMinutes;
@@ -184,6 +206,11 @@ class AttemptStateResponse {
     required this.examId,
     required this.examTitle,
     required this.examMode,
+    this.quizMode = false,
+    this.retryPoints = 0,
+    this.retryPointsUsed = 0,
+    this.retryMode = true,
+    this.isPracticeMode = false,
     required this.hasInstructions,
     this.instructions,
     this.durationMinutes,
@@ -203,6 +230,21 @@ class AttemptStateResponse {
   });
 
   bool get isCompetitive => examMode.trim().toLowerCase() == 'competitive';
+
+  /// A practice drill: every answer is checked on the spot and the right
+  /// one shown, and nothing is recorded — no attempt, no submit, no result,
+  /// no ranking. **Check this before anything else when routing**: a drill
+  /// has no `attemptId`, so every attempt-based endpoint refuses it.
+  bool get isPractice => isPracticeMode || (quizMode && !retryMode);
+
+  /// Whether the paper is served one question at a time. Quiz mode forces
+  /// it regardless of [examMode] — check [quizMode] first when routing.
+  bool get isOneAtATime => quizMode || isCompetitive;
+
+  /// Points still available on this attempt, floored at zero.
+  int get pointsRemaining =>
+      (retryPoints - retryPointsUsed).clamp(0, retryPoints);
+
   bool get isOpen => gateState == ExamGateState.open;
   bool get hasInProgressAttempt =>
       attemptId != null && (attemptStatus ?? '') == 'in_progress';
@@ -215,6 +257,12 @@ class AttemptStateResponse {
       examId: _asInt(json['examId']) ?? 0,
       examTitle: (json['examTitle'] ?? '').toString(),
       examMode: (json['examMode'] ?? 'normal').toString(),
+      quizMode: json['quizMode'] == true,
+      retryPoints: _asInt(json['retryPoints']) ?? 0,
+      retryPointsUsed: _asInt(json['retryPointsUsed']) ?? 0,
+      // Absent means a graded quiz — the default before drills existed.
+      retryMode: json['retryMode'] != false,
+      isPracticeMode: json['isPracticeMode'] == true,
       hasInstructions: json['hasInstructions'] == true,
       instructions: json['instructions']?.toString(),
       durationMinutes: _asInt(json['durationMinutes']),
@@ -276,7 +324,9 @@ class ExamPaperResponse {
       sections.expand((s) => s.questions).toList(growable: false);
 
   int get totalQuestions => allQuestions.length;
-  int get totalMarks => allQuestions.fold<double>(0, (sum, q) => sum + q.totalMarksRollup).round();
+  int get totalMarks => allQuestions
+      .fold<double>(0, (sum, q) => sum + q.totalMarksRollup)
+      .round();
 
   factory ExamPaperResponse.fromJson(Map<String, dynamic> json) {
     final rawSections = json['sections'];
@@ -294,9 +344,9 @@ class ExamPaperResponse {
       ),
       sections: rawSections is List
           ? rawSections
-              .whereType<Map<String, dynamic>>()
-              .map(ExamSection.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(ExamSection.fromJson)
+                .toList(growable: false)
           : const [],
     );
   }
@@ -320,9 +370,9 @@ class ExamSection {
       instructions: json['instructions']?.toString(),
       questions: rawQuestions is List
           ? rawQuestions
-              .whereType<Map<String, dynamic>>()
-              .map(ExamQuestion.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(ExamQuestion.fromJson)
+                .toList(growable: false)
           : const [],
     );
   }
@@ -411,10 +461,8 @@ class ExamQuestion {
         : matchRightTokens.length;
     return List.generate(
       count,
-      (i) => ExamMatchOption(
-        token: matchRightTokens[i],
-        text: matchRightTexts[i],
-      ),
+      (i) =>
+          ExamMatchOption(token: matchRightTokens[i], text: matchRightTexts[i]),
       growable: false,
     );
   }
@@ -443,19 +491,21 @@ class ExamQuestion {
   /// Builds the initial in-progress draft from any autosaved answer so the
   /// UI repaints where the student left off.
   ExamAnswerDraft toInitialDraft() => ExamAnswerDraft(
-        optionId: savedOptionId,
-        optionIds: List<int>.from(savedOptionIds),
-        integer: savedInteger,
-        boolean: savedBoolean,
-        blanks: Map<int, String>.from(savedBlanks),
-        matches: Map<int, String>.from(validSavedMatches),
-      );
+    optionId: savedOptionId,
+    optionIds: List<int>.from(savedOptionIds),
+    integer: savedInteger,
+    boolean: savedBoolean,
+    blanks: Map<int, String>.from(savedBlanks),
+    matches: Map<int, String>.from(validSavedMatches),
+  );
 
   factory ExamQuestion.fromJson(Map<String, dynamic> json) {
     final rawChildren = json['children'];
     return ExamQuestion(
       id: _asInt(json['id']) ?? 0,
-      questionType: ExamQuestionType.fromString(json['questionType']?.toString()),
+      questionType: ExamQuestionType.fromString(
+        json['questionType']?.toString(),
+      ),
       questionText: (json['questionText'] ?? '').toString(),
       positiveMarks: _asDouble(json['positiveMarks']) ?? 0,
       negativeMarks: _asDouble(json['negativeMarks']) ?? 0,
@@ -472,9 +522,9 @@ class ExamQuestion {
       matchRightTokens: _asStringList(json['matchRightTokens']),
       children: rawChildren is List
           ? rawChildren
-              .whereType<Map<String, dynamic>>()
-              .map(ExamQuestion.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(ExamQuestion.fromJson)
+                .toList(growable: false)
           : const [],
       savedOptionId: _asInt(json['savedOptionId']),
       savedOptionIds: _asIntList(json['savedOptionIds']),
@@ -600,6 +650,355 @@ class CompetitiveAnswerResultResponse {
       deadlineUtc: parseExamUtc(json['deadlineUtc']),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Practice drill (quizMode on, retryMode off — nothing recorded)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Response of `POST /{examId}/practice-answer`. Stateless: the server
+/// grades and forgets.
+///
+/// Unlike a graded quiz, the answer and explanation come back **whether
+/// the pick was right or wrong** — showing the right answer the moment a
+/// student gets it wrong is the whole point of a drill, and there is no
+/// score or rank to protect.
+class PracticeAnswerResultResponse {
+  final bool isCorrect;
+
+  /// Only set for `multiple_choice`; every other type relies on
+  /// [solutionText] to explain the answer.
+  final int? correctOptionId;
+
+  /// Worked explanation (sanitised HTML). Often null — show nothing then.
+  final String? solutionText;
+
+  /// What the answer would have scored in a graded run. For the client's
+  /// own end-of-run tally only; nothing is banked.
+  final double marksAwarded;
+  final double maxMarks;
+
+  const PracticeAnswerResultResponse({
+    required this.isCorrect,
+    this.correctOptionId,
+    this.solutionText,
+    this.marksAwarded = 0,
+    this.maxMarks = 0,
+  });
+
+  bool get hasSolution => (solutionText ?? '').trim().isNotEmpty;
+
+  factory PracticeAnswerResultResponse.fromJson(Map<String, dynamic> json) {
+    return PracticeAnswerResultResponse(
+      isCorrect: json['isCorrect'] == true,
+      correctOptionId: _asInt(json['correctOptionId']),
+      solutionText: json['solutionText']?.toString(),
+      marksAwarded: _asDouble(json['marksAwarded']) ?? 0,
+      maxMarks: _asDouble(json['maxMarks']) ?? 0,
+    );
+  }
+}
+
+/// One answerable question in a practice run.
+///
+/// A comprehension block is split into its children — each is checked on
+/// its own (the server refuses the block's id) — and every child carries
+/// its [passage] so the student is never asked about text they can't see.
+class PracticeItem {
+  final ExamQuestion question;
+
+  /// The comprehension parent this question belongs to, if any.
+  final ExamQuestion? passage;
+
+  final String sectionName;
+  final String? sectionInstructions;
+
+  const PracticeItem({
+    required this.question,
+    this.passage,
+    required this.sectionName,
+    this.sectionInstructions,
+  });
+
+  /// Flattens a practice paper into the order it is asked in.
+  static List<PracticeItem> fromPaper(ExamPaperResponse paper) {
+    final items = <PracticeItem>[];
+    for (final section in paper.sections) {
+      for (final q in section.questions) {
+        if (q.isComprehension) {
+          for (final child in q.children) {
+            items.add(
+              PracticeItem(
+                question: child,
+                passage: q,
+                sectionName: section.name,
+                sectionInstructions: section.instructions,
+              ),
+            );
+          }
+        } else {
+          items.add(
+            PracticeItem(
+              question: q,
+              sectionName: section.name,
+              sectionInstructions: section.instructions,
+            ),
+          );
+        }
+      }
+    }
+    return items;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Quiz mode (one question at a time, graded on the spot)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// What the two quiz-mode spends cost out of the attempt's retry-point
+/// budget. The server enforces both prices; these mirror them so the UI can
+/// quote the cost and disable what the student can't afford.
+abstract final class QuizPointCosts {
+  /// Changing an answer after being told it was wrong. The first answer to
+  /// a question is always free, and so is waving one through.
+  static const int retry = 1;
+
+  /// Being shown the answer and its explanation. The question then earns
+  /// its **full marks** — points buy the mark outright. What they cost is
+  /// **rank**: every point spent takes one percent of the paper off the
+  /// leaderboard's [LeaderboardEntry.effectiveScore].
+  static const int reveal = 3;
+}
+
+/// Response of `POST /attempt/{attemptId}/quiz-answer` — the one place in
+/// this API that reveals correctness mid-paper.
+///
+/// A quiz-mode exam is always paged one question at a time (regardless of
+/// `examMode`), so it fetches through the same
+/// `GET /attempt/{attemptId}/question` as competitive mode but answers
+/// here. The competitive endpoint rejects a quiz-mode attempt outright.
+class QuizAnswerResultResponse {
+  /// `false` means the deadline had already passed when this landed —
+  /// nothing was recorded; the client should submit.
+  final bool accepted;
+
+  /// Always `false` on a reveal — read [answerRevealed] to tell "they got
+  /// it wrong" apart from "they were shown it". The UI must say the
+  /// second thing, not the first.
+  final bool isCorrect;
+
+  /// **Withheld until the question is settled.** Null while [canRetry] is
+  /// true, or the client would be holding the answer the student is being
+  /// asked to find. Populated once they got it right, spent their last
+  /// retry, or waved the question through.
+  final int? correctOptionId;
+
+  /// The question's worked explanation (sanitised HTML) — the same field
+  /// the post-submit result sheet shows. Withheld alongside
+  /// [correctOptionId] until the question is settled.
+  ///
+  /// **Very often null**: explanations are optional per question and many
+  /// are written without one. Absent means "show nothing", never an error
+  /// or an empty box.
+  final String? solutionText;
+
+  /// Whether another go at THIS question is still on the table. When true
+  /// the paper did not move — the question endpoint returns the same
+  /// question.
+  final bool canRetry;
+
+  /// Points left in the attempt's budget after this call.
+  final int pointsRemaining;
+
+  /// Points spent across the whole attempt so far.
+  final int retryPointsUsed;
+
+  /// Whether this particular submission spent points. The first answer to
+  /// a question is always free; so is `moveOn`.
+  final bool pointsSpent;
+
+  /// The student paid to be shown the answer. The question still earns
+  /// its marks — see [marksAwarded] — but they were **bought rather than
+  /// earned**, which is what the ranking penalty prices.
+  ///
+  /// [isCorrect] stays `false` on a reveal even though the question
+  /// scored, because the student did not answer it correctly. Read this
+  /// to tell the two apart: the UI must say "answer shown", never
+  /// "correct".
+  final bool answerRevealed;
+
+  /// What this question scored. Populated on a reveal, where the marks
+  /// are bought rather than earned and the student is owed a straight
+  /// answer about what they got for the price.
+  final double marksAwarded;
+
+  /// This graded a question the paper had already gone past, rather than
+  /// the one the attempt is on. The position did not move.
+  final bool revised;
+
+  /// Whether the server moved on to the next question.
+  final bool advanced;
+
+  final bool finished;
+  final bool willChangeSection;
+  final String? fromSectionName;
+  final String? nextSectionName;
+  final DateTime? deadlineUtc;
+
+  const QuizAnswerResultResponse({
+    required this.accepted,
+    required this.isCorrect,
+    this.correctOptionId,
+    this.solutionText,
+    this.canRetry = false,
+    this.pointsRemaining = 0,
+    this.retryPointsUsed = 0,
+    this.pointsSpent = false,
+    this.answerRevealed = false,
+    this.marksAwarded = 0,
+    this.revised = false,
+    this.advanced = false,
+    this.finished = false,
+    this.willChangeSection = false,
+    this.fromSectionName,
+    this.nextSectionName,
+    this.deadlineUtc,
+  });
+
+  /// The question is done with — right, out of points, waved through, or
+  /// revealed. The student can only go forward from here.
+  bool get isSettled => advanced || !canRetry;
+
+  /// Whether the student has **earned or paid for** the right to see the
+  /// answer: they got it right, or they spent the reveal price.
+  ///
+  /// The server also sends `correctOptionId`/`solutionText` on a question
+  /// that settled wrong — after a *free* `moveOn`, or once retries run
+  /// out. Rendering it there breaks the points economy outright: guess,
+  /// move on for nothing, read the answer, then change it for
+  /// [QuizPointCosts.retry] — the same full marks a [QuizPointCosts.reveal]
+  /// hint gives, for a third of the price, so nobody would ever buy a
+  /// hint. Withholding the answer is what leaves the reveal as the only
+  /// way to learn one the student does not know. Everything on screen goes
+  /// through the `shown*` getters below so that path cannot be taken by
+  /// accident.
+  bool get disclosesAnswer => isCorrect || answerRevealed;
+
+  /// The correct option, but only when it has been earned or paid for.
+  int? get shownCorrectOptionId => disclosesAnswer ? correctOptionId : null;
+
+  /// The worked explanation, on the same terms.
+  String? get shownSolutionText => disclosesAnswer ? solutionText : null;
+
+  /// Whether there is an explanation the student is entitled to see.
+  bool get hasSolution => (shownSolutionText ?? '').trim().isNotEmpty;
+
+  factory QuizAnswerResultResponse.fromJson(Map<String, dynamic> json) {
+    return QuizAnswerResultResponse(
+      accepted: json['accepted'] == true,
+      isCorrect: json['isCorrect'] == true,
+      correctOptionId: _asInt(json['correctOptionId']),
+      solutionText: json['solutionText']?.toString(),
+      canRetry: json['canRetry'] == true,
+      pointsRemaining: _asInt(json['pointsRemaining']) ?? 0,
+      retryPointsUsed: _asInt(json['retryPointsUsed']) ?? 0,
+      pointsSpent: json['pointsSpent'] == true,
+      answerRevealed: json['answerRevealed'] == true,
+      marksAwarded: _asDouble(json['marksAwarded']) ?? 0,
+      revised: json['revised'] == true,
+      advanced: json['advanced'] == true,
+      finished: json['finished'] == true,
+      willChangeSection: json['willChangeSection'] == true,
+      fromSectionName: json['fromSectionName']?.toString(),
+      nextSectionName: json['nextSectionName']?.toString(),
+      deadlineUtc: parseExamUtc(json['deadlineUtc']),
+    );
+  }
+}
+
+/// One settled quiz question, kept client-side so the student can look
+/// back at it.
+///
+/// Quiz mode only ever serves the question the server is on — there is no
+/// endpoint that fetches an earlier one — so remembering what was already
+/// shown is the only way to open question 1 while sitting on question 3.
+///
+/// Showing it back leaks nothing: a question only lands here once it has
+/// settled, and settling is precisely when the API hands over
+/// `correctOptionId` and `solutionText`. The student has already seen
+/// everything in here.
+class QuizReviewEntry {
+  /// 1-based position in the paper, matching the progress grid.
+  final int number;
+
+  final String? sectionName;
+  final ExamQuestion question;
+
+  /// What the student had entered when the question settled.
+  final ExamAnswerDraft answer;
+
+  /// The verdict, the correct answer and the explanation.
+  final QuizAnswerResultResponse outcome;
+
+  const QuizReviewEntry({
+    required this.number,
+    required this.question,
+    required this.answer,
+    required this.outcome,
+    this.sectionName,
+  });
+
+  /// Whether this question can be changed at all, ignoring the budget.
+  ///
+  /// Only a question whose answer the student has **not** been shown can
+  /// be changed. Once they have seen it — by getting it right, or by
+  /// paying the reveal price — a revision would be transcription rather
+  /// than a second attempt, and would sell full marks for the price of a
+  /// retry. A comprehension parent carries no answer of its own; its
+  /// children are revised individually.
+  bool get isRevisable => !outcome.disclosesAnswer && !question.isComprehension;
+
+  /// The student never actually answered this — they skipped past it.
+  ///
+  /// It settles like a wrong answer server-side, but it is nothing of the
+  /// kind: there was no attempt to be wrong. Answering it later is their
+  /// **first** try, so it is free and should read as untouched rather
+  /// than as a mistake.
+  bool get wasUnattempted => answer.isEmpty && !outcome.answerRevealed;
+
+  /// What answering this costs now. Nothing when it was never attempted —
+  /// the first answer to a question is always free.
+  int get revisionCost => wasUnattempted ? 0 : QuizPointCosts.retry;
+
+  /// Whether the student can afford to answer it right now. [pointsLeft]
+  /// is the attempt's current balance, not the one cached on [outcome] —
+  /// that was the balance when this question settled.
+  bool canRevise(int pointsLeft) => isRevisable && pointsLeft >= revisionCost;
+}
+
+/// What came back from changing an answer on a question already passed.
+///
+/// Refusals are expected here rather than exceptional — the budget runs
+/// out, the answer was revealed — so the message is carried back to the
+/// sheet that asked, instead of tearing down the exam screen.
+class QuizRevisionOutcome {
+  /// The refreshed question on success.
+  final QuizReviewEntry? entry;
+
+  /// Why it was refused, in the server's own words.
+  final String? error;
+
+  /// The deadline had passed, so the attempt is being graded. The sheet
+  /// should close rather than report a failure.
+  final bool attemptEnded;
+
+  const QuizRevisionOutcome({
+    this.entry,
+    this.error,
+    this.attemptEnded = false,
+  });
+
+  bool get ok => entry != null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -751,6 +1150,16 @@ class ExamResultResponse {
   final int maxAttempts;
   final bool isCompetitive;
 
+  /// Whether this attempt was taken in instant-feedback quiz mode, and
+  /// how much of the points budget went on it. Points never reduced the
+  /// marks below: a corrected answer scored what it would have scored if
+  /// it were right first time, and a bought answer earned the question's
+  /// marks outright. The whole price is paid in rank — see
+  /// [LeaderboardEntry.effectiveScore].
+  final bool quizMode;
+  final int retryPoints;
+  final int retryPointsUsed;
+
   final List<ExamResultSection> sections;
 
   const ExamResultResponse({
@@ -769,6 +1178,9 @@ class ExamResultResponse {
     this.attemptsUsed = 0,
     this.maxAttempts = 1,
     this.isCompetitive = false,
+    this.quizMode = false,
+    this.retryPoints = 0,
+    this.retryPointsUsed = 0,
     this.sections = const [],
   });
 
@@ -792,11 +1204,14 @@ class ExamResultResponse {
       attemptsUsed: _asInt(json['attemptsUsed']) ?? 0,
       maxAttempts: _asInt(json['maxAttempts']) ?? 1,
       isCompetitive: json['isCompetitive'] == true,
+      quizMode: json['quizMode'] == true,
+      retryPoints: _asInt(json['retryPoints']) ?? 0,
+      retryPointsUsed: _asInt(json['retryPointsUsed']) ?? 0,
       sections: rawSections is List
           ? rawSections
-              .whereType<Map<String, dynamic>>()
-              .map(ExamResultSection.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(ExamResultSection.fromJson)
+                .toList(growable: false)
           : const [],
     );
   }
@@ -814,9 +1229,9 @@ class ExamResultSection {
       name: (json['name'] ?? '').toString(),
       questions: rawQuestions is List
           ? rawQuestions
-              .whereType<Map<String, dynamic>>()
-              .map(ExamResultQuestion.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(ExamResultQuestion.fromJson)
+                .toList(growable: false)
           : const [],
     );
   }
@@ -886,7 +1301,9 @@ class ExamResultQuestion {
       case ExamQuestionType.matchTheColumn:
         // A row is blank only when studentRightText is null — a wrong pick
         // still resolves to the text the student chose.
-        return matchRows.every((r) => (r.studentRightText ?? '').trim().isEmpty);
+        return matchRows.every(
+          (r) => (r.studentRightText ?? '').trim().isEmpty,
+        );
       case ExamQuestionType.comprehension:
         return children.every((c) => c.isSkipped);
       case ExamQuestionType.unknown:
@@ -901,7 +1318,9 @@ class ExamResultQuestion {
     final rawChildren = json['children'];
     return ExamResultQuestion(
       id: _asInt(json['id']) ?? 0,
-      questionType: ExamQuestionType.fromString(json['questionType']?.toString()),
+      questionType: ExamQuestionType.fromString(
+        json['questionType']?.toString(),
+      ),
       questionText: (json['questionText'] ?? '').toString(),
       solutionText: json['solutionText']?.toString(),
       positiveMarks: _asDouble(json['positiveMarks']) ?? 0,
@@ -912,9 +1331,9 @@ class ExamResultQuestion {
       timeTakenSeconds: _asInt(json['timeTakenSeconds']),
       options: rawOptions is List
           ? rawOptions
-              .whereType<Map<String, dynamic>>()
-              .map(ExamResultOption.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(ExamResultOption.fromJson)
+                .toList(growable: false)
           : const [],
       correctInteger: _asInt(json['correctInteger']),
       studentInteger: _asInt(json['studentInteger']),
@@ -922,21 +1341,21 @@ class ExamResultQuestion {
       studentBoolean: json['studentBoolean'] as bool?,
       blanks: rawBlanks is List
           ? rawBlanks
-              .whereType<Map<String, dynamic>>()
-              .map(ExamResultBlank.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(ExamResultBlank.fromJson)
+                .toList(growable: false)
           : const [],
       matchRows: rawMatchRows is List
           ? rawMatchRows
-              .whereType<Map<String, dynamic>>()
-              .map(ExamResultMatchRow.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(ExamResultMatchRow.fromJson)
+                .toList(growable: false)
           : const [],
       children: rawChildren is List
           ? rawChildren
-              .whereType<Map<String, dynamic>>()
-              .map(ExamResultQuestion.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(ExamResultQuestion.fromJson)
+                .toList(growable: false)
           : const [],
     );
   }
@@ -1104,6 +1523,24 @@ class LeaderboardEntry {
   final double score;
   final double maxScore;
   final double percentage;
+
+  /// Quiz mode: points this student spent on the attempt. 0 outside quiz
+  /// mode, and on any attempt that bought nothing.
+  final int retryPointsUsed;
+
+  /// **What the rank was actually computed from**, not the marks:
+  /// `score − (retryPointsUsed × maxScore × 0.01)`, i.e. one percent of
+  /// the paper per point spent.
+  ///
+  /// [score] is what the student finished with and is what to show them;
+  /// this is why they sit where they sit. The two diverge only in quiz
+  /// mode, and only once points have been spent — which is exactly when a
+  /// student asks why someone with the same score placed above them.
+  ///
+  /// Falls back to [score] when the server does not send it, so a board
+  /// from an older API still renders sensibly.
+  final double effectiveScore;
+
   final int timeTakenSeconds;
 
   /// Pre-formatted by the server, e.g. `10m 23s` or `1h 04m 12s`. Rendered as
@@ -1122,12 +1559,21 @@ class LeaderboardEntry {
     this.score = 0,
     this.maxScore = 0,
     this.percentage = 0,
+    this.retryPointsUsed = 0,
+    double? effectiveScore,
     this.timeTakenSeconds = 0,
     this.timeTaken = '',
     this.attemptNo = 0,
     this.submittedAt,
     this.isMe = false,
-  });
+  }) : effectiveScore = effectiveScore ?? score;
+
+  /// Whether points actually moved this student, i.e. whether the rank and
+  /// the marks tell different stories. False on every non-quiz board.
+  bool get rankWasPenalised => retryPointsUsed > 0 && effectiveScore < score;
+
+  /// How much of the paper the penalty cost, in marks.
+  double get rankPenalty => (score - effectiveScore).clamp(0.0, score);
 
   /// Bar length as a fraction of the paper's total, not of rank position —
   /// scaling to rank would draw a straight staircase and hide whether the top
@@ -1142,6 +1588,8 @@ class LeaderboardEntry {
       score: _asDouble(json['score']) ?? 0,
       maxScore: _asDouble(json['maxScore']) ?? 0,
       percentage: _asDouble(json['percentage']) ?? 0,
+      retryPointsUsed: _asInt(json['retryPointsUsed']) ?? 0,
+      effectiveScore: _asDouble(json['effectiveScore']),
       timeTakenSeconds: _asInt(json['timeTakenSeconds']) ?? 0,
       timeTaken: (json['timeTaken'] ?? '').toString(),
       attemptNo: _asInt(json['attemptNo']) ?? 0,

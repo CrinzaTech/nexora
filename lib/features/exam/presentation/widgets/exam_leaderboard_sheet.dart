@@ -369,6 +369,25 @@ class _LeaderboardRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSizes.paddingS),
+              // The rank is computed from the effective score, not the marks
+              // above it. Where points moved a student, say so on the row —
+              // otherwise two identical scores in different positions read
+              // as a bug in the board.
+              if (entry.rankWasPenalised) ...[
+                Icon(
+                  Icons.remove_circle_outline_rounded,
+                  size: 12,
+                  color: AppColors.warning,
+                ),
+                const SizedBox(width: 3),
+                Text(
+                  formatMarks(entry.rankPenalty),
+                  style: AppTypography.bodyTextXtraSmallMedium.copyWith(
+                    color: AppColors.warning,
+                  ),
+                ),
+                const SizedBox(width: AppSizes.paddingS),
+              ],
               // Pre-formatted by the server and rendered as sent, so the
               // tie-break reads identically on every platform. Shown on every
               // row so equal scores in a different order never look arbitrary.

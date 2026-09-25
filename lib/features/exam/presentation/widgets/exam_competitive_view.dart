@@ -91,11 +91,7 @@ class ExamCompetitiveView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            data.examTitle,
-            style: AppTypography.h3Bold.copyWith(color: AppColors.textPrimary),
-          ),
-          const SizedBox(height: 6),
+          // No exam title here: the app bar already carries it.
           Text(
             'Question ${data.questionNumber} of ${data.totalQuestions}',
             style: AppTypography.bodyTextMedium.copyWith(

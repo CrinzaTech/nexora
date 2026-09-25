@@ -481,7 +481,8 @@ const crinestaBranding = BrandingConfig(
   tileFullLength: false,
   tileDark: true,
   
-  // ── Tile Only-Icon Theme ─────────────────────────────────────────
+  // ── Tile Only-Icon Theme ──────────────────────────────────
+  // ───────
   tileOnlyIcon: false,
   tile3x3: false,
   tileBg: true,

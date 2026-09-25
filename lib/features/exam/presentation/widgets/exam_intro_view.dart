@@ -39,11 +39,24 @@ class ExamIntroView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _headerCard(),
-          if (gate.isCompetitive) ...[
+          // Quiz mode is checked first and shown alone: it already says
+          // the paper comes one question at a time, so pairing it with the
+          // competitive notice would tell the student the same thing twice
+          // in two different voices.
+          // A practice drill is a quiz with nothing at stake, so it gets
+          // its own note instead of the quiz one about points and rank.
+          if (gate.isPractice) ...[
+            const SizedBox(height: AppSizes.paddingM),
+            _practiceNotice(),
+          ] else if (gate.quizMode) ...[
+            const SizedBox(height: AppSizes.paddingM),
+            _quizNotice(),
+          ] else if (gate.isCompetitive) ...[
             const SizedBox(height: AppSizes.paddingM),
             _competitiveNotice(),
           ],
-          if (gate.hasLastEvaluated) ...[
+          // Practice records nothing, so there is no last score or history.
+          if (gate.hasLastEvaluated && !gate.isPractice) ...[
             const SizedBox(height: AppSizes.paddingM),
             _lastScoreBanner(),
           ],
@@ -54,16 +67,14 @@ class ExamIntroView extends StatelessWidget {
           ],
           const SizedBox(height: AppSizes.paddingL),
           _cta(),
-          if (gate.attemptsUsed > 0) ...[
+          if (gate.attemptsUsed > 0 && !gate.isPractice) ...[
             const SizedBox(height: AppSizes.paddingS),
             Center(
               child: TextButton.icon(
                 onPressed: onOpenHistory,
                 icon: const Icon(Icons.history, size: 18),
                 label: const Text('View attempt history'),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                ),
+                style: TextButton.styleFrom(foregroundColor: AppColors.primary),
               ),
             ),
           ],
@@ -92,14 +103,39 @@ class ExamIntroView extends StatelessWidget {
                   color: AppColors.info,
                   icon: Icons.timer_outlined,
                 ),
-              ExamChip(
-                gate.isCompetitive ? 'Competitive mode' : 'Normal mode',
-                color:
-                    gate.isCompetitive ? AppColors.warning : AppColors.success,
-                icon: gate.isCompetitive
-                    ? Icons.bolt_outlined
-                    : Icons.assignment_outlined,
-              ),
+              // Quiz mode outranks examMode here for the same reason it
+              // does when routing: it is what actually decides how the
+              // paper behaves.
+              if (gate.isPractice)
+                ExamChip(
+                  'Practice mode',
+                  color: AppColors.success,
+                  icon: Icons.school_outlined,
+                )
+              else if (gate.quizMode)
+                ExamChip(
+                  'Quiz mode',
+                  color: AppColors.info,
+                  icon: Icons.quiz_outlined,
+                )
+              else
+                ExamChip(
+                  gate.isCompetitive ? 'Competitive mode' : 'Normal mode',
+                  color: gate.isCompetitive
+                      ? AppColors.warning
+                      : AppColors.success,
+                  icon: gate.isCompetitive
+                      ? Icons.bolt_outlined
+                      : Icons.assignment_outlined,
+                ),
+              if (gate.quizMode && !gate.isPractice && gate.retryPoints > 0)
+                ExamChip(
+                  gate.retryPoints == 1
+                      ? '1 retry point'
+                      : '${gate.retryPoints} retry points',
+                  color: AppColors.warning,
+                  icon: Icons.toll_outlined,
+                ),
               // Said here, before the clock starts, so nobody discovers
               // mid-paper that they didn't need to do it by hand.
               if (gate.allowCalculator)
@@ -111,6 +147,69 @@ class ExamIntroView extends StatelessWidget {
                   icon: Icons.calculate_outlined,
                 ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _quizNotice() {
+    final retryLine = gate.retryPoints > 0
+        ? ' You get ${gate.retryPoints} points to spend on the way through: '
+              '${QuizPointCosts.retry} changes an answer you got wrong, and '
+              '${QuizPointCosts.reveal} shows you the answer outright and '
+              'takes the marks with it. Points never reduce your marks. '
+              'What they cost is your ranking, so a student who spends '
+              'none finishes above one who bought the same score.'
+        : ' There are no retry points on this exam, so each answer is '
+              'final.';
+    return Container(
+      padding: const EdgeInsets.all(AppSizes.paddingM),
+      decoration: BoxDecoration(
+        color: AppColors.infoBackground,
+        borderRadius: BorderRadius.circular(AppSizes.radiusL),
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.quiz_outlined, size: 18, color: AppColors.info),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'This is a quiz: one question at a time, and you are told '
+              'straight away whether your answer is right.$retryLine',
+              style: AppTypography.bodyTextSmallMedium.copyWith(
+                color: AppColors.info,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _practiceNotice() {
+    return Container(
+      padding: const EdgeInsets.all(AppSizes.paddingM),
+      decoration: BoxDecoration(
+        color: AppColors.successBackground,
+        borderRadius: BorderRadius.circular(AppSizes.radiusL),
+        border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.school_outlined, size: 18, color: AppColors.success),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Practice only. Pick an answer to see if it is right. '
+              'Nothing is scored or saved.',
+              style: AppTypography.bodyTextSmallMedium.copyWith(
+                color: AppColors.success,
+              ),
+            ),
           ),
         ],
       ),
@@ -231,13 +330,22 @@ class ExamIntroView extends StatelessWidget {
       return _closedState();
     }
 
+    // Practice has no attempts to resume, reattempt or run out of.
+    if (gate.isPractice) {
+      return CustomActionButton(
+        name: 'Start practice',
+        isFormFilled: true,
+        onTap: (start, stop, state) => onStart(),
+      );
+    }
+
     final bool resume = gate.hasInProgressAttempt;
     final bool reattempt = !resume && gate.attemptsUsed > 0;
     final String label = resume
         ? 'Resume Exam'
         : reattempt
-            ? 'Reattempt Exam'
-            : 'Start Exam';
+        ? 'Reattempt Exam'
+        : 'Start Exam';
 
     // Attempts fully used and none in progress → no CTA, just last result.
     if (reattempt && !gate.canReattempt) {

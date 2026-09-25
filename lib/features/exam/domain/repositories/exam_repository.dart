@@ -48,6 +48,49 @@ abstract class ExamRepository {
     required Map<String, dynamic> answer,
   });
 
+  /// Quiz mode: grade the current question on the spot and report back
+  /// whether it was right, plus what is left of the retry budget.
+  ///
+  /// [moveOn] is "I know it's wrong, keep it and go on" — it costs no
+  /// retry, and without it a student out of ideas but not out of retries
+  /// would be stuck, since quiz mode otherwise holds the paper until the
+  /// answer is right or the budget is gone.
+  ///
+  /// [revise] re-answers a question the paper has already gone past:
+  /// `answer.questionId` becomes the identity rather than a label, the
+  /// server grades that question instead of the current one, and the
+  /// position does not move. It costs the same point as any other
+  /// re-submission and is refused on a revealed question.
+  Future<Either<Failure, QuizAnswerResultResponse>> quizAnswerQuestion({
+    required int attemptId,
+    required String phoneNumber,
+    required Map<String, dynamic> answer,
+    bool moveOn,
+    bool revise,
+  });
+
+  /// Quiz mode: spend [QuizPointCosts.reveal] points to be shown the
+  /// answer and its explanation.
+  ///
+  /// That question then earns its **full marks** — the points buy the
+  /// mark, and what they cost is rank. Refused by the server below the
+  /// price, so check affordability before offering it.
+  ///
+  /// [questionId] decides which question is revealed:
+  ///
+  ///  - **null** — the question the attempt is on. The paper then
+  ///    **advances**; there is nothing left to answer once the answer has
+  ///    been shown.
+  ///  - **set** — that question instead, one the paper has already gone
+  ///    past. Same price, same marks, but `advanced` comes back false and
+  ///    `current_question_index` is untouched: the student is mid-question
+  ///    somewhere else and must not be dragged backwards.
+  Future<Either<Failure, QuizAnswerResultResponse>> revealAnswer({
+    required int attemptId,
+    required String phoneNumber,
+    int? questionId,
+  });
+
   /// Ungraded bulk autosave.
   Future<Either<Failure, SaveProgressResponse>> saveProgress({
     required int attemptId,
@@ -92,5 +135,22 @@ abstract class ExamRepository {
     required String phoneNumber,
     ExamContext context,
     int top,
+  });
+
+  /// Practice drill: the whole paper, freshly shuffled on every call.
+  /// Keyed by exam, not attempt — a drill has no attempt (`attemptId` is 0,
+  /// never send it anywhere) and no deadline.
+  Future<Either<Failure, ExamPaperResponse>> getPracticePaper({
+    required int examId,
+    required String phoneNumber,
+  });
+
+  /// Practice drill: grade one answer. Stateless — nothing is written, and
+  /// the right answer comes back whether this one was right or wrong.
+  /// [answer] is a single `StudentAnswerRequest` map.
+  Future<Either<Failure, PracticeAnswerResultResponse>> practiceAnswer({
+    required int examId,
+    required String phoneNumber,
+    required Map<String, dynamic> answer,
   });
 }
