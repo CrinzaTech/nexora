@@ -96,7 +96,6 @@ class AppImages {
   static const String verifiedIcon = 'assets/icons/verified.png';
   static const String verticalMenuIcon = 'assets/icons/vertical_menu.png';
   static const String folderIcon = 'assets/icons/folder.png';
-  static const String videoIcon = 'assets/icons/live.png';
   static const String emailIcon = 'assets/icons/email.png';
   static const String editIcon = 'assets/icons/edit.png';
   static const String notificationIcon = 'assets/icons/bell.png';

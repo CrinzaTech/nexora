@@ -10,7 +10,13 @@ import 'package:flutter/material.dart';
 /// Account Settings, Help & Support, Legal).
 class CustomProfileListTileWidget extends StatelessWidget {
   final String title;
-  final String leadingIcon;
+
+  /// Asset path for the leading icon. Give this or [leadingIconData].
+  final String? leadingIcon;
+
+  /// A Material icon instead of an asset — for rows with no matching
+  /// monochrome PNG. Drawn at the asset's size, in the text colour.
+  final IconData? leadingIconData;
   final Widget? trailing;
   final VoidCallback? onTap;
 
@@ -27,10 +33,14 @@ class CustomProfileListTileWidget extends StatelessWidget {
     super.key,
     this.onTap,
     required this.title,
-    required this.leadingIcon,
+    this.leadingIcon,
+    this.leadingIconData,
     this.trailing,
     this.tintLeadingIcon = true,
-  });
+  }) : assert(
+         leadingIcon != null || leadingIconData != null,
+         'Give leadingIcon or leadingIconData',
+       );
 
   @override
   Widget build(BuildContext context) {
@@ -50,12 +60,18 @@ class CustomProfileListTileWidget extends StatelessWidget {
               children: [
                 SizedBox.square(
                   dimension: Screen.getSize(20),
-                  child: Image.asset(
-                    leadingIcon,
-                    fit: BoxFit.cover,
-                    filterQuality: FilterQuality.high,
-                    color: tintLeadingIcon ? AppColors.textPrimary : null,
-                  ),
+                  child: leadingIconData != null
+                      ? Icon(
+                          leadingIconData,
+                          size: Screen.getSize(20),
+                          color: AppColors.textPrimary,
+                        )
+                      : Image.asset(
+                          leadingIcon!,
+                          fit: BoxFit.cover,
+                          filterQuality: FilterQuality.high,
+                          color: tintLeadingIcon ? AppColors.textPrimary : null,
+                        ),
                 ),
                 SizedBox(width: Screen.getHorizontalSize(15)),
                 Expanded(

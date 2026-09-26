@@ -602,7 +602,10 @@ class _ProfilePageState extends State<ProfilePage>
                             // morning of an event, not months later.
                             CustomProfileListTileWidget(
                               title: "My Bookings",
-                              leadingIcon: AppImages.videoIcon,
+                              // A ticket: these are passes for webinars and
+                              // workshops. No monochrome asset exists for it.
+                              leadingIconData:
+                                  Icons.confirmation_number_outlined,
                               onTap: () => context.push(AppRoutes.myBookings),
                             ),
                             // Completed courses + their certificates.
