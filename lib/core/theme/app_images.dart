@@ -96,16 +96,30 @@ class AppImages {
   static const String verifiedIcon = 'assets/icons/verified.png';
   static const String verticalMenuIcon = 'assets/icons/vertical_menu.png';
   static const String folderIcon = 'assets/icons/folder.png';
-  static const String videoIcon = 'assets/icons/video.png';
+  static const String videoIcon = 'assets/icons/live.png';
   static const String emailIcon = 'assets/icons/email.png';
   static const String editIcon = 'assets/icons/edit.png';
   static const String notificationIcon = 'assets/icons/bell.png';
   static const String closeIcon = 'assets/icons/close.png';
 
   // ============================================
+  // CONTENT ICONS (course content list, one per content type)
+  // ============================================
+  static const String contentVideoIcon = 'assets/icons/content_icon/videos.png';
+  static const String contentLiveIcon = 'assets/icons/content_icon/live.png';
+  static const String contentImageIcon = 'assets/icons/content_icon/Images.png';
+  static const String contentNotesIcon = 'assets/icons/content_icon/notes.png';
+  static const String contentZipIcon = 'assets/icons/content_icon/zip_file.png';
+  static const String contentAssignmentIcon =
+      'assets/icons/content_icon/assignment.png';
+  static const String contentExamIcon = 'assets/icons/content_icon/exam.png';
+  static const String contentQuizIcon = 'assets/icons/content_icon/quiz.png';
+  static const String contentPracticeIcon =
+      'assets/icons/content_icon/practice_quiz.png';
+
+  // ============================================
   // COLORED ICONS
   // ============================================
-  static const String documentIconColored = 'assets/icons/document_colored.png';
   static const String starIconColored = 'assets/icons/star_colored.png';
   static const String sortIconColored = 'assets/icons/sort_colored.png';
 }

@@ -163,7 +163,8 @@ class ModuleCard extends StatelessWidget {
           // Common query-param pair appended to every viewer route so
           // it can fire the /completion POST at the right threshold.
           // Empty when the user is previewing — viewers skip tracking.
-          final completionArgs = '&coursePurchasedId=$coursePurchasedId'
+          final completionArgs =
+              '&coursePurchasedId=$coursePurchasedId'
               '&nodeId=${Uri.encodeComponent(module.nodeId)}';
 
           if (module.isFolder) {
@@ -221,7 +222,10 @@ class ModuleCard extends StatelessWidget {
                   '&url=${Uri.encodeComponent(module.pdfUrl!)}',
                 );
               } else {
-                launchUrl(Uri.parse(module.pdfUrl!), mode: LaunchMode.externalApplication);
+                launchUrl(
+                  Uri.parse(module.pdfUrl!),
+                  mode: LaunchMode.externalApplication,
+                );
               }
             }
           } else if ((module.type == CourseContentType.video ||
@@ -376,7 +380,9 @@ class ModuleCard extends StatelessWidget {
             Text(
               module.nodeName,
               style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                fontSize: rh.isLargeScreen ? rh.cappedFontSize(14) : Screen.getFontSize(14),
+                fontSize: rh.isLargeScreen
+                    ? rh.cappedFontSize(14)
+                    : Screen.getFontSize(14),
               ),
             ),
             if (freeCount > 0) ...[
@@ -399,7 +405,9 @@ class ModuleCard extends StatelessWidget {
                 module.formattedDuration!,
                 style: AppTypography.bodyTextMedium.copyWith(
                   color: AppColors.mutedTextPrimary,
-                  fontSize: rh.isLargeScreen ? rh.cappedFontSize(12) : Screen.getFontSize(12),
+                  fontSize: rh.isLargeScreen
+                      ? rh.cappedFontSize(12)
+                      : Screen.getFontSize(12),
                 ),
               ),
             ],
@@ -408,7 +416,9 @@ class ModuleCard extends StatelessWidget {
                 _getDocumentLabel(module.pdfUrl),
                 style: AppTypography.bodyTextMedium.copyWith(
                   color: AppColors.mutedTextPrimary,
-                  fontSize: rh.isLargeScreen ? rh.cappedFontSize(12) : Screen.getFontSize(12),
+                  fontSize: rh.isLargeScreen
+                      ? rh.cappedFontSize(12)
+                      : Screen.getFontSize(12),
                 ),
               ),
 
@@ -417,7 +427,9 @@ class ModuleCard extends StatelessWidget {
                 "Image",
                 style: AppTypography.bodyTextMedium.copyWith(
                   color: AppColors.mutedTextPrimary,
-                  fontSize: rh.isLargeScreen ? rh.cappedFontSize(12) : Screen.getFontSize(12),
+                  fontSize: rh.isLargeScreen
+                      ? rh.cappedFontSize(12)
+                      : Screen.getFontSize(12),
                 ),
               ),
 
@@ -426,7 +438,9 @@ class ModuleCard extends StatelessWidget {
                 "Assignment",
                 style: AppTypography.bodyTextMedium.copyWith(
                   color: AppColors.mutedTextPrimary,
-                  fontSize: rh.isLargeScreen ? rh.cappedFontSize(12) : Screen.getFontSize(12),
+                  fontSize: rh.isLargeScreen
+                      ? rh.cappedFontSize(12)
+                      : Screen.getFontSize(12),
                 ),
               ),
 
@@ -435,7 +449,9 @@ class ModuleCard extends StatelessWidget {
                 "Exam",
                 style: AppTypography.bodyTextMedium.copyWith(
                   color: AppColors.mutedTextPrimary,
-                  fontSize: rh.isLargeScreen ? rh.cappedFontSize(12) : Screen.getFontSize(12),
+                  fontSize: rh.isLargeScreen
+                      ? rh.cappedFontSize(12)
+                      : Screen.getFontSize(12),
                 ),
               ),
 
@@ -481,8 +497,9 @@ class ModuleCard extends StatelessWidget {
   /// Coloured status pill for a live-class row, derived from the node's
   /// time state at build time (the row rebuilds on a 30s tick).
   Widget _buildLiveClassSubtitle(ResponsiveHelper rh) {
-    final fontSize =
-        rh.isLargeScreen ? rh.cappedFontSize(12) : Screen.getFontSize(12);
+    final fontSize = rh.isLargeScreen
+        ? rh.cappedFontSize(12)
+        : Screen.getFontSize(12);
     if (module.isLiveNow) {
       if (_offAir) {
         return Text(
@@ -605,44 +622,42 @@ Widget _getLeading(CourseContent module, {bool offAir = false}) {
       // YouTube nodes deliberately use the same icon as a regular video
       // node — the curriculum list shouldn't reveal that some lectures
       // are externally hosted.
-      return Image.asset(
-        AppImages.videoIcon,
-        width: Screen.getSize(16),
-        height: Screen.getSize(16),
-      );
+      return _contentIcon(AppImages.contentVideoIcon);
     case CourseContentType.image:
+      return _contentIcon(AppImages.contentImageIcon);
     case CourseContentType.document:
+      return _contentIcon(AppImages.contentNotesIcon);
     case CourseContentType.zip:
-      return Image.asset(
-        AppImages.documentIconColored,
-        width: Screen.getSize(16),
-        height: Screen.getSize(16),
-      );
+      return _contentIcon(AppImages.contentZipIcon);
     case CourseContentType.assignment:
-      // No dedicated assignment asset yet — re-use the document icon so
-      // the row stays visually consistent with PDF/image entries.
-      return Icon(
-        Icons.assignment_outlined,
-        size: Screen.getSize(20),
-        color: AppColors.primary,
-      );
+      return _contentIcon(AppImages.contentAssignmentIcon);
     case CourseContentType.exam:
-      return Icon(
-        Icons.quiz_outlined,
-        size: Screen.getSize(20),
-        color: AppColors.primary,
-      );
+      return _contentIcon(switch (module.examKind) {
+        ExamNodeKind.exam => AppImages.contentExamIcon,
+        ExamNodeKind.quiz => AppImages.contentQuizIcon,
+        ExamNodeKind.practice => AppImages.contentPracticeIcon,
+      });
     case CourseContentType.liveClass:
-      // Broadcast icon, tinted red only while the class is actually on
-      // air and muted once it has ended.
-      return Icon(
-        Icons.sensors,
-        size: Screen.getSize(20),
-        color: module.isLiveNow && !offAir
-            ? AppColors.error
-            : (module.isEnded ? AppColors.mutedTextPrimary : AppColors.primary),
-      );
+      // The illustration is full colour, so the old red/muted tint can't
+      // carry the state any more: the "LIVE NOW" subtitle and the Join
+      // pill say it's on air, and an ended class is simply faded.
+      return _contentIcon(AppImages.contentLiveIcon, faded: module.isEnded);
   }
+}
+
+/// A content-type illustration filling the leading slot.
+///
+/// Decoded at a small size ([Image.cacheWidth]) — the source PNGs range up
+/// to 1254 px, and a long course list would otherwise hold every one of
+/// them in memory at full resolution.
+Widget _contentIcon(String asset, {bool faded = false}) {
+  final icon = Image.asset(
+    asset,
+    fit: BoxFit.contain,
+    cacheWidth: 160,
+    filterQuality: FilterQuality.medium,
+  );
+  return faded ? Opacity(opacity: 0.45, child: icon) : icon;
 }
 
 Widget? _getTrailing(CourseContent module, {bool offAir = false}) {
@@ -716,9 +731,18 @@ String _getDocumentLabel(String? url) {
   final lowerUrl = url.toLowerCase();
   final path = Uri.tryParse(url)?.path.toLowerCase() ?? '';
   if (path.endsWith('.pdf')) return "PDF";
-  if (path.endsWith('.doc') || path.endsWith('.docx') || lowerUrl.contains('docs.google.com/document')) return "Word Document";
-  if (path.endsWith('.xls') || path.endsWith('.xlsx') || lowerUrl.contains('docs.google.com/spreadsheets')) return "Excel Sheet";
-  if (path.endsWith('.ppt') || path.endsWith('.pptx') || lowerUrl.contains('docs.google.com/presentation')) return "Presentation";
+  if (path.endsWith('.doc') ||
+      path.endsWith('.docx') ||
+      lowerUrl.contains('docs.google.com/document'))
+    return "Word Document";
+  if (path.endsWith('.xls') ||
+      path.endsWith('.xlsx') ||
+      lowerUrl.contains('docs.google.com/spreadsheets'))
+    return "Excel Sheet";
+  if (path.endsWith('.ppt') ||
+      path.endsWith('.pptx') ||
+      lowerUrl.contains('docs.google.com/presentation'))
+    return "Presentation";
   if (lowerUrl.contains('docs.google.com/forms')) return "Google Form";
   if (lowerUrl.contains('drive.google.com')) return "Google Drive Link";
   return "Document";

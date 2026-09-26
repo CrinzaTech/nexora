@@ -605,6 +605,12 @@ class CourseContent {
   /// type, and on exam nodes saved before the admin started stamping it.
   final String? folderPath;
 
+  /// Exam nodes only: what kind of exam this is, so the list can show the
+  /// right icon before it is opened. The curriculum API does not send the
+  /// mode yet — until it does this stays [ExamNodeKind.exam], and the exam
+  /// screen itself still decides the real mode from its own gate call.
+  final ExamNodeKind examKind;
+
   const CourseContent({
     required this.nodeId,
     required this.nodeName,
@@ -617,6 +623,7 @@ class CourseContent {
     this.startDateTime,
     this.liveStatus,
     this.folderPath,
+    this.examKind = ExamNodeKind.exam,
   });
 
   bool get isFolder => type == CourseContentType.folder;
@@ -762,7 +769,28 @@ class CourseContent {
           : DateTime.tryParse(startRaw.toString())?.toLocal(),
       liveStatus: json['liveStatus'] as String?,
       folderPath: json['folderPath'] as String?,
+      examKind: ExamNodeKind.fromJson(json),
     );
+  }
+}
+
+/// Which icon an exam node gets in the content list.
+enum ExamNodeKind {
+  exam,
+  quiz,
+  practice;
+
+  /// Reads the same flags the exam gate returns (`quizMode`, `retryMode`,
+  /// `isPracticeMode`), should the curriculum node ever carry them.
+  /// Absent flags mean a regular exam; `retryMode` absent means graded,
+  /// exactly as the gate treats it.
+  static ExamNodeKind fromJson(Map<String, dynamic> json) {
+    final quiz = json['quizMode'] == true;
+    if (json['isPracticeMode'] == true ||
+        (quiz && json['retryMode'] == false)) {
+      return ExamNodeKind.practice;
+    }
+    return quiz ? ExamNodeKind.quiz : ExamNodeKind.exam;
   }
 }
 

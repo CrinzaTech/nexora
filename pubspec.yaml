@@ -199,6 +199,7 @@ flutter:
 
     - assets/icons/
     - assets/icons/navbar/
+    - assets/icons/content_icon/
 
     - assets/fonts/
     - assets/animations/
