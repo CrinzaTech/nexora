@@ -41,6 +41,13 @@ void main() {
       // (e.g. dotenv missing the asset, Firebase mismatch, secure-storage
       // refusing to talk to the platform keystore on a hardened OEM ROM)
       // logs and keeps moving instead of taking the whole app down.
+      //
+      // Every awaited step is also time-boxed (see [_safeInit]). The
+      // native launch window is a plain white screen, and it stays up
+      // until `runApp` draws the first frame — so one platform call that
+      // never answers leaves the user on a blank white page with no way
+      // forward. Anything slow and non-essential (FCM permission + token)
+      // runs after `runApp` instead.
       // DM Sans ships in `assets/fonts/` (DMSans-Regular/Medium/SemiBold/
       // Bold.ttf). google_fonts resolves a family from the asset manifest
       // before it considers the network, so those four files are all it
@@ -58,6 +65,7 @@ void main() {
         () => Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         ),
+        timeout: const Duration(seconds: 10),
       );
 
       // Crashlytics — gate collection on release/profile so debug stack
@@ -113,7 +121,14 @@ void main() {
       // out from under it and the session reads back null on the next
       // launch. See core/storage/secure_storage.dart.
       final sessionService = SessionService(secureStorage);
-      await _safeInit('session', () => sessionService.init());
+      // Generous limit: a timeout here reads as "logged out" and sends a
+      // valid session to the login page, so only a truly stuck keystore
+      // should trip it.
+      await _safeInit(
+        'session',
+        () => sessionService.init(),
+        timeout: const Duration(seconds: 10),
+      );
       sl.registerLazySingleton<SessionService>(() => sessionService);
 
       final localNotifications = LocalNotificationService();
@@ -148,6 +163,10 @@ void main() {
       // Deep-link tap routing — fires for warm-resume (`onMessageOpenedApp`)
       // and cold-start (`getInitialMessage`, deferred to the first frame
       // by FcmService so the router has mounted).
+      //
+      // Only the fast half of FCM setup runs here — listeners plus the
+      // cold-start tap, which must be parked before the splash replays
+      // it. Permission + token run after `runApp` (see below).
       fcmService.onNotificationTap = NotificationRouter.route;
       // Cold-start taps get parked, not routed — see NotificationRouter's
       // "Cold-start parking" note. SplashScreen replays them.
@@ -172,14 +191,6 @@ void main() {
       // cubit on ThemeMode.system, which is a fine default.
       await _safeInit('theme', () => sl<ThemeCubit>().load());
 
-      // Push the freshest FCM token to the backend on every cold start.
-      // Fire-and-forget: ProfileCubit.syncFcmToken silently no-ops if not
-      // logged in or no token cached, so this is safe even on the very
-      // first launch before signup.
-      unawaited(
-        _safeInit('fcm-token-sync', () => sl<ProfileCubit>().syncFcmToken()),
-      );
-
       // Redeliver any content completions stranded by a previous run
       // (student cleared 75% / opened a doc while offline) and start
       // watching connectivity so a later reconnect drains the queue.
@@ -188,23 +199,37 @@ void main() {
         _safeInit(
           'completion-queue',
           () => sl<ContentCompletionService>().init(),
+          timeout: null,
         ),
       );
 
-      try {
-        await SystemChrome.setPreferredOrientations([
+      await _safeInit(
+        'orientation',
+        () => SystemChrome.setPreferredOrientations([
           DeviceOrientation.portraitUp,
           DeviceOrientation.portraitDown,
-        ]);
-      } catch (e) {
-        debugPrint('setPreferredOrientations failed: $e');
-      }
+        ]),
+      );
 
       // Splash removal at the end so the user only sees the Flutter UI once
       // bootstrapping is past the worst of the failure window.
       FlutterNativeSplash.remove();
 
       runApp(const CrinzaApp());
+
+      // FCM permission + token, then push the token to the backend.
+      // Deliberately after `runApp`: the permission prompt needs the app
+      // on screen, and `getToken` is a Play Services / APNs round trip
+      // that can stall for seconds — awaiting it before the first frame
+      // is what stranded notification-launched users on a white screen.
+      // ProfileCubit.syncFcmToken silently no-ops when logged out or with
+      // no token, so this is safe before signup too.
+      unawaited(
+        _safeInit('fcm-register', () async {
+          await fcmService.registerDevice();
+          await sl<ProfileCubit>().syncFcmToken();
+        }, timeout: null),
+      );
     },
     (error, stack) {
       // better_player_plus bug, not ours: its position-polling timer calls
@@ -290,10 +315,30 @@ class _SafePhaseNotifier extends ChangeNotifier {
 
 /// Run [init], log on failure, never throw. Each call site can read the
 /// log to know which step actually failed instead of "the app crashed".
-Future<void> _safeInit(String name, Future<dynamic> Function() init) async {
+///
+/// Gives up waiting after [timeout] so a platform call that never
+/// answers can't hold `runApp` — and the user — behind the white native
+/// launch window. The abandoned future keeps running in the background;
+/// startup just stops waiting for it. Pass `null` for fire-and-forget
+/// steps, where nothing is waiting and a timeout would only log noise.
+Future<void> _safeInit(
+  String name,
+  Future<dynamic> Function() init, {
+  Duration? timeout = const Duration(seconds: 5),
+}) async {
   try {
-    await init();
+    final future = init();
+    await (timeout == null ? future : future.timeout(timeout));
     if (kDebugMode) debugPrint('init OK: $name');
+  } on TimeoutException {
+    // Always logged, release included — a stalled step is exactly the
+    // kind of field issue that can't be reproduced at a desk.
+    debugPrint('init TIMEOUT [$name]: gave up after ${timeout!.inSeconds}s');
+    try {
+      FirebaseCrashlytics.instance.log('init timeout: $name');
+    } catch (_) {
+      // Crashlytics not up — the debugPrint above is all we can do.
+    }
   } catch (e, st) {
     debugPrint('init FAIL [$name]: $e');
     debugPrintStack(stackTrace: st);
