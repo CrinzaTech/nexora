@@ -244,6 +244,12 @@ class ApiEndpoints {
   /// GET /api/v1/webinars/{slug}
   static const String webinarDetail = '/api/v1/webinars/{slug}';
 
+  /// L1 — record that the learner opened this webinar, for the host's
+  /// lead report (WEBINAR_LEADS_API.md). Fire-and-forget: the screen
+  /// never waits on it and never shows its failure.
+  /// POST /api/v1/webinars/{slug}/visit
+  static const String webinarVisit = '/api/v1/webinars/{slug}/visit';
+
   /// Takes the seat. No body — the learner is identified entirely from
   /// the account token, because in the app they are already a registered
   /// user. **Idempotent**: a second tap, a retry after a dropped

@@ -201,7 +201,8 @@ class _WebinarTile extends StatelessWidget {
         child: InkWell(
           onTap: () => context.push(
             '${AppRoutes.webinarDetail}'
-            '?slug=${Uri.encodeComponent(webinar.slug)}',
+            '?slug=${Uri.encodeComponent(webinar.slug)}'
+            '&from=list',
           ),
           child: Padding(
             padding: Screen.getPadding(all: 10),

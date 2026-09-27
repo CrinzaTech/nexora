@@ -279,6 +279,19 @@ abstract class ApiClient {
   Future<Map<String, dynamic>> getWebinarDetail(@Path('slug') String slug);
 
   // ============================================================
+  // WEBINARS — Visit (lead tracking)
+  // POST /api/v1/webinars/{slug}/visit
+  //
+  // The learner is identified from the account token; the body only says
+  // where in the app they tapped from. See WEBINAR_LEADS_API.md.
+  // ============================================================
+  @POST(ApiEndpoints.webinarVisit)
+  Future<void> recordWebinarVisit(
+    @Path('slug') String slug,
+    @Body() Map<String, dynamic> body,
+  );
+
+  // ============================================================
   // WEBINARS — Join (take the seat)
   // POST /api/v1/webinars/{slug}/join
   //

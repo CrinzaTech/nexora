@@ -14,6 +14,7 @@ import 'package:nexora/core/widgets/custom_action_button.dart';
 import 'package:nexora/core/widgets/custom_appbar_widget.dart';
 import 'package:nexora/core/widgets/custom_network_image.dart';
 import 'package:nexora/core/widgets/custom_snackbar.dart';
+import 'package:nexora/features/webinar/data/models/webinar_lead_model.dart';
 import 'package:nexora/features/webinar/data/models/webinar_model.dart';
 import 'package:nexora/features/webinar/data/models/webinar_payment_model.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinar_checkout_cubit.dart';
@@ -42,7 +43,14 @@ import 'package:nexora/features/workshop_pass/presentation/workshop_pass_entry.d
 class WebinarDetailPage extends StatelessWidget {
   final String slug;
 
-  const WebinarDetailPage({super.key, required this.slug});
+  /// Where the learner tapped in from, for the host's lead report.
+  final WebinarEntry entry;
+
+  const WebinarDetailPage({
+    super.key,
+    required this.slug,
+    this.entry = WebinarEntry.direct,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +58,9 @@ class WebinarDetailPage extends StatelessWidget {
 
     return MultiBlocProvider(
       providers: [
-        BlocProvider(create: (_) => sl<WebinarDetailCubit>()..load(slug)),
+        BlocProvider(
+          create: (_) => sl<WebinarDetailCubit>()..load(slug, entry: entry),
+        ),
         // Created alongside the detail rather than on demand: the Razorpay
         // sheet reports through listeners the widget registers in
         // initState, so the cubit that receives them has to exist before

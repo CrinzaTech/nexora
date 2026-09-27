@@ -491,7 +491,8 @@ class _NeedsPurchase extends StatelessWidget {
                   return;
                 }
                 context.pushReplacement(
-                  '${AppRoutes.webinarDetail}?slug=${Uri.encodeComponent(slug)}',
+                  '${AppRoutes.webinarDetail}?slug=${Uri.encodeComponent(slug)}'
+                  '&from=my_bookings',
                 );
               },
             ),

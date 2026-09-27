@@ -1279,7 +1279,8 @@ class _StageError extends StatelessWidget {
                       final slug = context.read<WebinarRoomCubit>().slug;
                       context.go(
                         '${AppRoutes.webinarDetail}'
-                        '?slug=${Uri.encodeComponent(slug)}',
+                        '?slug=${Uri.encodeComponent(slug)}'
+                        '&from=room',
                       );
                     },
                   ),

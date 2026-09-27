@@ -4,10 +4,12 @@ import 'package:dio/dio.dart';
 import 'package:nexora/core/error/failures.dart';
 import 'package:nexora/core/network/api_client.dart';
 import 'package:nexora/core/network/network_exception_mapper.dart';
+import 'package:nexora/core/utils/utils.dart';
 import 'package:nexora/features/courses/data/models/live_class_models.dart';
 import 'package:nexora/features/webinar/data/models/webinar_model.dart';
 import 'package:nexora/features/webinar/data/models/webinar_payment_model.dart';
 import 'package:nexora/features/webinar/domain/repositories/webinar_repository.dart';
+import 'package:nexora/features/webinar/data/models/webinar_lead_model.dart';
 
 class WebinarRepositoryImpl implements WebinarRepository {
   final ApiClient _apiClient;
@@ -44,6 +46,21 @@ class WebinarRepositoryImpl implements WebinarRepository {
       return Left(_mapDetailFailure(e));
     } catch (e) {
       return Left(Failure.unknown(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<void> recordWebinarVisit(
+    String slug, {
+    required WebinarEntry entry,
+  }) async {
+    try {
+      await _apiClient.recordWebinarVisit(slug, {
+        'platform': 'app',
+        'entry': entry.wire,
+      });
+    } catch (e) {
+      Utils.debugLog('Webinar visit not recorded: $e');
     }
   }
 

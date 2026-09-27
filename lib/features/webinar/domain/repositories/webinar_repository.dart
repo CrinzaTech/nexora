@@ -4,6 +4,7 @@ import 'package:nexora/core/error/failures.dart';
 import 'package:nexora/features/courses/data/models/live_class_models.dart';
 import 'package:nexora/features/webinar/data/models/webinar_model.dart';
 import 'package:nexora/features/webinar/data/models/webinar_payment_model.dart';
+import 'package:nexora/features/webinar/data/models/webinar_lead_model.dart';
 
 abstract class WebinarRepository {
   /// `GET /api/v1/webinars` — live and upcoming webinars for the
@@ -19,6 +20,15 @@ abstract class WebinarRepository {
   /// branding and the join gate. Still answers for ended and cancelled
   /// webinars, so a stale card gets an explanation rather than a 404.
   Future<Either<Failure, WebinarDetail>> getWebinarDetail(String slug);
+
+  /// `POST /api/v1/webinars/{slug}/visit` — L1, the lead report's "who
+  /// looked". The learner comes from the account token; [entry] is where
+  /// in the app they tapped from.
+  ///
+  /// **Never fails.** Every error — including a 404 from a server that
+  /// has not shipped L1 yet — is swallowed here, so no caller has to
+  /// remember to ignore it.
+  Future<void> recordWebinarVisit(String slug, {required WebinarEntry entry});
 
   /// `POST /api/v1/webinars/{slug}/join` — takes the seat on the account
   /// token. This is the app's entire registration step: the learner is

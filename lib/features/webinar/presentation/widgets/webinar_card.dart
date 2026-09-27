@@ -105,7 +105,8 @@ class WebinarCard extends StatelessWidget {
         child: InkWell(
           onTap: () => context.push(
             '${AppRoutes.webinarDetail}'
-            '?slug=${Uri.encodeComponent(webinar.slug)}',
+            '?slug=${Uri.encodeComponent(webinar.slug)}'
+            '&from=home',
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,

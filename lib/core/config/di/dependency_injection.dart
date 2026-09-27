@@ -129,6 +129,7 @@ import 'package:nexora/features/webinar/data/repositories/webinar_repository_imp
 import 'package:nexora/features/webinar/domain/repositories/webinar_repository.dart';
 import 'package:nexora/features/webinar/domain/usecases/get_webinar_detail_usecase.dart';
 import 'package:nexora/features/webinar/domain/usecases/get_webinars_usecase.dart';
+import 'package:nexora/features/webinar/domain/usecases/record_webinar_visit_usecase.dart';
 import 'package:nexora/features/webinar/domain/usecases/webinar_payment_usecases.dart';
 import 'package:nexora/features/webinar/domain/usecases/webinar_session_usecases.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinar_checkout_cubit.dart';
@@ -511,6 +512,7 @@ Future<void> setupLocator() async {
   );
   sl.registerLazySingleton(() => GetWebinarsUseCase(sl()));
   sl.registerLazySingleton(() => GetWebinarDetailUseCase(sl()));
+  sl.registerLazySingleton(() => RecordWebinarVisitUseCase(sl()));
   // Factories, not singletons: the Dashboard owns one WebinarsCubit for
   // the Home rail while the "View All" page pages through its own.
   sl.registerFactory(() => WebinarsCubit(getWebinarsUseCase: sl()));
@@ -521,7 +523,12 @@ Future<void> setupLocator() async {
   );
   sl.registerLazySingleton(() => GetHomeLiveSessionsUseCase(sl()));
   sl.registerFactory(() => HomeLiveCubit(getHomeLiveSessionsUseCase: sl()));
-  sl.registerFactory(() => WebinarDetailCubit(getWebinarDetailUseCase: sl()));
+  sl.registerFactory(
+    () => WebinarDetailCubit(
+      getWebinarDetailUseCase: sl(),
+      recordWebinarVisitUseCase: sl(),
+    ),
+  );
   // A3–A7 — the room. Joining is a plain authenticated call here: in the
   // app the learner already has an account, so there is no registration
   // step and no webinar-scoped token to manage.

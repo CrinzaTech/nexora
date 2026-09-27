@@ -38,6 +38,7 @@ import 'package:nexora/features/transaction/presentation/pages/transaction_histo
 import 'package:nexora/features/certificate/data/models/completed_course_model.dart';
 import 'package:nexora/features/certificate/presentation/pages/certificate_preview_page.dart';
 import 'package:nexora/features/certificate/presentation/pages/certificates_page.dart';
+import 'package:nexora/features/webinar/data/models/webinar_lead_model.dart';
 import 'package:nexora/features/webinar/presentation/pages/webinar_detail_page.dart';
 import 'package:nexora/features/webinar/presentation/pages/webinar_room_page.dart';
 import 'package:nexora/features/webinar/presentation/pages/webinars_page.dart';
@@ -601,7 +602,10 @@ class AppRouter {
           final slug = state.uri.queryParameters['slug'] ?? '';
           // An empty slug can only come from a malformed link — the page
           // says so itself rather than firing a request that would 400.
-          return WebinarDetailPage(slug: slug);
+          return WebinarDetailPage(
+            slug: slug,
+            entry: WebinarEntry.fromWire(state.uri.queryParameters['from']),
+          );
         },
       ),
       GoRoute(
