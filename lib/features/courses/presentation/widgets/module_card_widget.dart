@@ -612,11 +612,7 @@ class _PeriodicRebuildState extends State<_PeriodicRebuild> {
 Widget _getLeading(CourseContent module, {bool offAir = false}) {
   switch (module.type) {
     case CourseContentType.folder:
-      return Image.asset(
-        AppImages.folderIcon,
-        width: Screen.getSize(16),
-        height: Screen.getSize(16),
-      );
+      return _contentIcon(AppImages.contentFolderIcon);
     case CourseContentType.video:
     case CourseContentType.youtube:
       // YouTube nodes deliberately use the same icon as a regular video

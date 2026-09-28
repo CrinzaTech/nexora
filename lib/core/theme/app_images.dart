@@ -104,6 +104,8 @@ class AppImages {
   // ============================================
   // CONTENT ICONS (course content list, one per content type)
   // ============================================
+  static const String contentFolderIcon =
+      'assets/icons/content_icon/folder_icon.png';
   static const String contentVideoIcon = 'assets/icons/content_icon/videos.png';
   static const String contentLiveIcon = 'assets/icons/content_icon/live.png';
   static const String contentImageIcon = 'assets/icons/content_icon/Images.png';
