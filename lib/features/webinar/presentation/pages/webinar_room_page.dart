@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'package:nexora/core/utils/platform_guards.dart';
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/config/live_playback.dart';
 import 'package:nexora/core/router/app_routes.dart';
@@ -197,7 +197,7 @@ class _WebinarRoomViewState extends State<_WebinarRoomView>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     // A webinar is watched, not tapped.
-    WakelockPlus.enable();
+    setWakelock(true);
   }
 
   @override
@@ -214,7 +214,7 @@ class _WebinarRoomViewState extends State<_WebinarRoomView>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    WakelockPlus.disable();
+    setWakelock(false);
     _duckReleaseTimer?.cancel();
     _drainStallTimer?.cancel();
     // Restore the app-wide portrait lock from `main()`. Expanding the

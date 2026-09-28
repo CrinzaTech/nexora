@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:nexora/core/utils/platform_guards.dart';
+import 'package:nexora/core/bloc/safe_cubit.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -24,7 +25,7 @@ part 'live_class_cubit.freezed.dart';
 /// the StreamApi SignalR hub (chat, moderation, lifecycle), and the
 /// raise-hand → LiveKit speak flow. Drives one [LiveClassState] with an
 /// explicit [LiveViewPhase] so the UI never shows a bare spinner.
-class LiveClassCubit extends Cubit<LiveClassState> {
+class LiveClassCubit extends SafeCubit<LiveClassState> {
   final GetLiveClassPlaybackUseCase getLiveClassPlaybackUseCase;
   final GetStreamTokenUseCase getStreamTokenUseCase;
   final GetLiveClassChatUseCase getLiveClassChatUseCase;
@@ -854,7 +855,7 @@ class LiveClassCubit extends Cubit<LiveClassState> {
     if (state.flags.micBlocked) return;
     emit(state.copyWith(handPhase: HandPhase.granted));
 
-    final status = await Permission.microphone.request();
+    final status = await requestMicPermission();
     if (!status.isGranted) {
       emit(state.copyWith(
         handPhase: HandPhase.idle,

@@ -178,9 +178,12 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
       'setTrackParameters',
       <String, dynamic>{
         'textureId': textureId,
-        'width': width,
-        'height': height,
-        'bitrate': bitrate,
+        // Crinza patch: an HLS variant without RESOLUTION/BANDWIDTH parses
+        // to null here, and the Android side unwraps these with `!!` —
+        // a NullPointerException. 0 already means "no constraint".
+        'width': width ?? 0,
+        'height': height ?? 0,
+        'bitrate': bitrate ?? 0,
       },
     );
   }

@@ -402,6 +402,13 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     if (!_creatingCompleter.isCompleted) await _creatingCompleter.future;
 
     _initializingCompleter = Completer<void>();
+    // Crinza patch: if `setDataSource` below throws, this future is never
+    // returned — yet the event stream's `errorListener` still completes it
+    // with the player's `VideoError`. An errored future nobody listens to
+    // is reported to the zone as uncaught, which Crashlytics filed as a
+    // crash. `ignore()` only marks it handled; a caller awaiting the
+    // returned future still receives the error.
+    _initializingCompleter.future.ignore();
 
     await VideoPlayerPlatform.instance.setDataSource(_textureId, dataSourceDescription);
     return _initializingCompleter.future;

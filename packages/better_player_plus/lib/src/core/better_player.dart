@@ -102,7 +102,10 @@ class _BetterPlayerState extends State<BetterPlayer>
     ///full screen is on, then full screen route must be pop and return to normal
     ///state.
     if (_isFullScreen) {
-      WakelockPlus.disable();
+      // Crinza patch: wakelock_plus throws when toggled without a
+      // foreground activity (dispose / fullscreen exit after the app is
+      // backgrounded). Un-awaited, that throw reached the zone as a crash.
+      WakelockPlus.disable().catchError((Object _) {});
       _navigatorState.maybePop();
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
           overlays: _betterPlayerConfiguration.systemOverlaysAfterFullScreen);
@@ -244,7 +247,7 @@ class _BetterPlayerState extends State<BetterPlayer>
     }
 
     if (!_betterPlayerConfiguration.allowedScreenSleep) {
-      WakelockPlus.enable();
+      WakelockPlus.enable().catchError((Object _) {});
     }
 
     await Navigator.of(context, rootNavigator: true).push(route);
@@ -253,7 +256,7 @@ class _BetterPlayerState extends State<BetterPlayer>
 
     // The wakelock plugins checks whether it needs to perform an action internally,
     // so we do not need to check Wakelock.isEnabled.
-    WakelockPlus.disable();
+    WakelockPlus.disable().catchError((Object _) {});
 
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: _betterPlayerConfiguration.systemOverlaysAfterFullScreen);

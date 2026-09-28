@@ -209,10 +209,13 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             }
 
             SET_TRACK_PARAMETERS_METHOD -> {
+                // Crinza patch: was `!!` on each argument — a null (HLS
+                // variant with no RESOLUTION) crashed with an NPE. 0 means
+                // "no constraint", which is what iOS already does for nil.
                 player.setTrackParameters(
-                    call.argument(WIDTH_PARAMETER)!!,
-                    call.argument(HEIGHT_PARAMETER)!!,
-                    call.argument(BITRATE_PARAMETER)!!
+                    call.argument<Int>(WIDTH_PARAMETER) ?: 0,
+                    call.argument<Int>(HEIGHT_PARAMETER) ?: 0,
+                    call.argument<Int>(BITRATE_PARAMETER) ?: 0
                 )
                 result.success(null)
             }

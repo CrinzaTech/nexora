@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:nexora/core/utils/platform_guards.dart';
+import 'package:nexora/core/bloc/safe_cubit.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -29,7 +30,7 @@ part 'webinar_room_cubit.freezed.dart';
 /// The socket is the same StreamApi class hub live classes use, so
 /// [LiveClassHubService] is reused verbatim; only the token source
 /// differs (A7 rather than the generic stream token).
-class WebinarRoomCubit extends Cubit<WebinarRoomState> {
+class WebinarRoomCubit extends SafeCubit<WebinarRoomState> {
   final JoinWebinarUseCase joinWebinarUseCase;
   final GetWebinarStateUseCase getWebinarStateUseCase;
   final GetWebinarPlaybackUseCase getWebinarPlaybackUseCase;
@@ -731,7 +732,7 @@ class WebinarRoomCubit extends Cubit<WebinarRoomState> {
     if (state.flags.micBlocked) return;
     emit(state.copyWith(handPhase: WebinarHandPhase.granted));
 
-    final status = await Permission.microphone.request();
+    final status = await requestMicPermission();
     if (isClosed) return;
     if (!status.isGranted) {
       emit(

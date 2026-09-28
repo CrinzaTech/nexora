@@ -237,3 +237,9 @@ flutter_native_splash:
 dependency_overrides:
   better_player_plus:
     path: packages/better_player_plus
+  # Vendored pod_player 0.2.2 (MIT). Patched so a playback error no
+  # longer triggers overlapping re-initialize() calls ("Future already
+  # completed" / uncaught VideoError) and wakelock toggles can't throw
+  # from the background. Patch sites are marked "Crinza patch".
+  pod_player:
+    path: packages/pod_player

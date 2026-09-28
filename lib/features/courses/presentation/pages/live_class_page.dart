@@ -8,8 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
-import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'package:nexora/core/utils/platform_guards.dart';
 import 'package:nexora/features/courses/data/services/live_class_audio_playback_service.dart';
 
 import 'package:nexora/core/config/di/dependency_injection.dart';
@@ -403,7 +403,7 @@ class _LiveClassViewState extends State<_LiveClassView>
     _recoveryTimer?.cancel();
     _duckReleaseTimer?.cancel();
     // Let the screen sleep normally again once we leave the class.
-    WakelockPlus.disable();
+    setWakelock(false);
     // Restore the app-wide portrait lock from main(). Entering the player's
     // fullscreen sets DeviceOrientation.values and never puts it back, so
     // without this every screen stays rotatable after one live class.
@@ -422,7 +422,7 @@ class _LiveClassViewState extends State<_LiveClassView>
   void _setWakelock(bool enable) {
     if (_wakelockOn == enable) return;
     _wakelockOn = enable;
-    enable ? WakelockPlus.enable() : WakelockPlus.disable();
+    setWakelock(enable);
   }
 
   bool _wakelockOn = false;
@@ -898,7 +898,7 @@ class _LiveClassViewState extends State<_LiveClassView>
         // Leaving fullscreen, the package calls WakelockPlus.disable()
         // unconditionally — but the class is still live, so re-assert our
         // own wakelock or the screen starts sleeping mid-session.
-        if (_wakelockOn) WakelockPlus.enable();
+        if (_wakelockOn) setWakelock(true);
       default:
         break;
     }
