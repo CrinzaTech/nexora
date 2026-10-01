@@ -346,16 +346,19 @@ class _WebinarTile extends StatelessWidget {
                               ),
                             ),
                           ),
-                          SizedBox(width: Screen.getHorizontalSize(8)),
-                          Text(
-                            WebinarFormatting.price(webinar),
-                            style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                              color: webinar.isFree
-                                  ? AppColors.success
-                                  : AppColors.textPrimary,
-                              fontSize: Screen.getFontSizeCapped(13),
+                          if (WebinarFormatting.showsPrice(webinar)) ...[
+                            SizedBox(width: Screen.getHorizontalSize(8)),
+                            Text(
+                              WebinarFormatting.price(webinar),
+                              style: AppTypography.bodyTextLargeSemiBold
+                                  .copyWith(
+                                    color: webinar.isFree
+                                        ? AppColors.success
+                                        : AppColors.textPrimary,
+                                    fontSize: Screen.getFontSizeCapped(13),
+                                  ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ],

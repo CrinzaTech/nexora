@@ -31,6 +31,7 @@ import 'package:nexora/features/webinar/presentation/widgets/webinar_section_wid
 import 'package:nexora/features/profile/data/models/user_profile_model.dart';
 import 'package:nexora/features/profile/presentation/bloc/profile_cubit.dart';
 import 'package:nexora/core/theme/app_decorations.dart';
+import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -130,13 +131,19 @@ class _HomePageState extends State<HomePage>
   Widget build(BuildContext context) {
     super.build(context);
     Screen().adaptDeviceScreenSize(context);
+    // Read here, in build proper, so changing the background from the
+    // Profile tab rebuilds Home even though it stays mounted.
+    final withWallpaper = hasWallpaper(context);
 
     return BlocBuilder<HomeCubit, HomeState>(
       builder: (context, state) {
         return state.maybeWhen(
           initial: () => const Scaffold(body: HomeLoadingSkeleton()),
           loading: () => const Scaffold(body: HomeLoadingSkeleton()),
-          loaded: (dashboard) => _buildLoadedScaffold(dashboard),
+          loaded: (dashboard) => _buildLoadedScaffold(
+            dashboard,
+            withWallpaper: withWallpaper,
+          ),
           error: (message) => Scaffold(body: _buildErrorView(message)),
           orElse: () => const Scaffold(body: SizedBox.shrink()),
         );
@@ -150,7 +157,10 @@ class _HomePageState extends State<HomePage>
   /// height — the Continue Learning rail moved into the body so the
   /// AppBar stays a stable strip and the rail scrolls with the rest
   /// of the page content.
-  Widget _buildLoadedScaffold(DashboardData dashboard) {
+  Widget _buildLoadedScaffold(
+    DashboardData dashboard, {
+    required bool withWallpaper,
+  }) {
     final rh = ResponsiveHelper.of(context);
     // Single-row header matching the reference design: 72px tall.
     // Clamped to avoid overflow on iPads where topInset can be very tall.
@@ -168,6 +178,18 @@ class _HomePageState extends State<HomePage>
         ),
         body: Stack(
           children: [
+            // ── 0. Custom background ──
+            // Fixed to the screen, not to the content: it sits under the
+            // scroll view, so the photo stays exactly where it is while
+            // the sections scroll over it. The veil keeps headings
+            // readable; the tiles are opaque on their own.
+            Positioned.fill(
+              child: WallpaperLayer(
+                scrimColor: AppColors.white,
+                scrimOpacity: AppColors.isDark ? 0.55 : 0.50,
+              ),
+            ),
+
             // ── 1. Scrollable Content ──
             RefreshIndicator(
               color: AppColors.secondary,
@@ -328,7 +350,14 @@ class _HomePageState extends State<HomePage>
                             return Container(
                               width: Screen.width,
                               decoration: BoxDecoration(
-                                color: AppColors.white,
+                                // A solid card would hide the fixed photo
+                                // the moment it scrolls over it. Over a
+                                // custom background it is a light wash
+                                // instead, so the photo shows all the way
+                                // down the page.
+                                color: withWallpaper
+                                    ? AppColors.white.withValues(alpha: 0.30)
+                                    : AppColors.white,
                                 borderRadius: BorderRadius.only(
                                   topLeft: Radius.circular(currentRadius),
                                   topRight: Radius.circular(currentRadius),
@@ -356,7 +385,7 @@ class _HomePageState extends State<HomePage>
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                SizedBox(height: Screen.getVerticalSize(25)),
+                                const SizedBox(height: 16),
                                 BannerSection(banners: dashboard.banner),
                                 // Top of the page for the same reason the
                                 // webinar rail is near it, only more so: a
@@ -1030,7 +1059,9 @@ class _ContinuePurchaseSectionState extends State<_ContinuePurchaseSection> {
                             decoration: BoxDecoration(
                               color: isActive
                                   ? AppColors.primary
-                                  : AppColors.primary.withValues(alpha: 0.25),
+                                  : AppColors.primary.withValues(
+                                      alpha: AppColors.isDark ? 0.55 : 0.25,
+                                    ),
                               borderRadius: BorderRadius.circular(3),
                             ),
                           );
@@ -1113,6 +1144,9 @@ class _ContinuePurchaseCard extends StatelessWidget {
                         url: course.courseImageUrl,
                         borderRadius: BorderRadius.circular(9),
                         fallbackIconSize: 26,
+                        // White, not the blurred copy: at this size the
+                        // blur reads as a smudge around the artwork.
+                        backgroundColor: AppColors.alwaysWhite,
                       ),
                     ),
                   ),

@@ -50,6 +50,12 @@ class WholeImage extends StatelessWidget {
   /// on top of it (badges, an expand button). Pass `0` for none.
   final double scrimOpacity;
 
+  /// A flat fill for the leftover space instead of the blurred copy —
+  /// for a small thumbnail where the blur reads as smudge rather than
+  /// texture, and most artwork (logos especially) is drawn on white.
+  /// Null keeps the blur.
+  final Color? backgroundColor;
+
   const WholeImage({
     super.key,
     required this.url,
@@ -59,6 +65,7 @@ class WholeImage extends StatelessWidget {
     this.borderRadius,
     this.blurSigma = 18,
     this.scrimOpacity = 0.18,
+    this.backgroundColor,
   });
 
   @override
@@ -70,27 +77,31 @@ class WholeImage extends StatelessWidget {
         : Stack(
             fit: StackFit.expand,
             children: [
-              ClipRect(
-                child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(
-                    sigmaX: blurSigma,
-                    sigmaY: blurSigma,
-                  ),
-                  child: CustomNetworkImage(
-                    url: src,
-                    fit: BoxFit.cover,
-                    // A blurred backdrop has nothing to say on its own:
-                    // when the image fails, the foreground's fallback is
-                    // the whole answer.
-                    errorWidget: const SizedBox.shrink(),
-                    placeholder: const SizedBox.shrink(),
+              if (backgroundColor != null)
+                ColoredBox(color: backgroundColor!)
+              else ...[
+                ClipRect(
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(
+                      sigmaX: blurSigma,
+                      sigmaY: blurSigma,
+                    ),
+                    child: CustomNetworkImage(
+                      url: src,
+                      fit: BoxFit.cover,
+                      // A blurred backdrop has nothing to say on its own:
+                      // when the image fails, the foreground's fallback is
+                      // the whole answer.
+                      errorWidget: const SizedBox.shrink(),
+                      placeholder: const SizedBox.shrink(),
+                    ),
                   ),
                 ),
-              ),
-              if (scrimOpacity > 0)
-                ColoredBox(
-                  color: AppColors.black.withValues(alpha: scrimOpacity),
-                ),
+                if (scrimOpacity > 0)
+                  ColoredBox(
+                    color: AppColors.black.withValues(alpha: scrimOpacity),
+                  ),
+              ],
               CustomNetworkImage(
                 url: src,
                 fit: BoxFit.contain,

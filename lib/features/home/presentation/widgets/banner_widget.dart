@@ -160,54 +160,63 @@ class _BannerSectionState extends State<BannerSection> {
       children: [
         // AspectRatio(16:9) instead of a fixed pixel height so the
         // container adapts to any banner image without ever cropping it.
-        AspectRatio(
-          aspectRatio: 16 / 9,
-          child: PageView.builder(
-            padEnds: false,
-            controller: _controller,
-            // `null` → unbounded PageView. Combined with the modulo in
-            // itemBuilder this gives a seamless infinite carousel that
-            // can be swiped either direction.
-            itemCount: null,
-            onPageChanged: (virtualIndex) {
-              _currentIndex.value = virtualIndex % widget.banners.length;
-            },
-            itemBuilder: (context, virtualIndex) {
-              final banner =
-                  widget.banners[virtualIndex % widget.banners.length];
-              return Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: MediaQuery.of(context).size.width * 0.02,
-                ),
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _handleBannerTap(context, banner),
-                  child: CustomNetworkImage(
-                    url: banner.imageUrl,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    borderRadius: BorderRadius.circular(AppSizes.radiusXL),
-                    // Lightweight fallback — a soft grey tile with an
-                    // image-not-supported glyph. The previous bundled PNG
-                    // was a 4.3 MB 4K asset, way too heavy for an error
-                    // placeholder that may never render.
-                    errorWidget: Container(
-                      color: AppColors.grey100,
-                      alignment: Alignment.center,
-                      child: Icon(
-                        Icons.image_not_supported_outlined,
-                        color: AppColors.grey300,
-                        size: 48,
+        //
+        // The side margin is outside the PageView, which clips to its own
+        // bounds: slides leave the frame under the white margin instead of
+        // running to the card's edge and cutting its rounded corners.
+        Padding(
+          // 12 here + 4 around each slide = a 16 dp gap at the left and
+          // right, the same as the top and bottom.
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: PageView.builder(
+              padEnds: false,
+              controller: _controller,
+              // `null` → unbounded PageView. Combined with the modulo in
+              // itemBuilder this gives a seamless infinite carousel that
+              // can be swiped either direction.
+              itemCount: null,
+              onPageChanged: (virtualIndex) {
+                _currentIndex.value = virtualIndex % widget.banners.length;
+              },
+              itemBuilder: (context, virtualIndex) {
+                final banner =
+                    widget.banners[virtualIndex % widget.banners.length];
+                return Padding(
+                  // Gap between neighbouring slides only; the page's own side
+                  // margin is the Padding around the PageView.
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _handleBannerTap(context, banner),
+                    child: CustomNetworkImage(
+                      url: banner.imageUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      borderRadius: BorderRadius.circular(AppSizes.radiusXL),
+                      // Lightweight fallback — a soft grey tile with an
+                      // image-not-supported glyph. The previous bundled PNG
+                      // was a 4.3 MB 4K asset, way too heavy for an error
+                      // placeholder that may never render.
+                      errorWidget: Container(
+                        color: AppColors.grey100,
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Icons.image_not_supported_outlined,
+                          color: AppColors.grey300,
+                          size: 48,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
 
-        const SizedBox(height: 10),
+        const SizedBox(height: 16),
 
         _DotsIndicator(
           currentIndex: _currentIndex,
@@ -239,7 +248,13 @@ class _DotsIndicator extends StatelessWidget {
               height: 5,
               width: isActive ? 30 : 5,
               decoration: BoxDecoration(
-                color: isActive ? AppColors.primary : AppColors.grey200,
+                color: isActive
+                    ? AppColors.primary
+                    // The light grey is the dark divider colour in dark mode
+                    // — nearly invisible on the dark card. A mid grey there.
+                    : (AppColors.isDark
+                          ? AppColors.textSecondary.withValues(alpha: 0.55)
+                          : AppColors.grey200),
                 borderRadius: BorderRadius.circular(20),
               ),
             );

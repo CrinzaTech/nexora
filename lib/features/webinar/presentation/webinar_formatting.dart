@@ -1,5 +1,6 @@
 import 'package:intl/intl.dart';
 
+import 'package:nexora/core/config/payment_policy.dart';
 import 'package:nexora/core/utils/utils.dart';
 import 'package:nexora/features/webinar/data/models/webinar_model.dart';
 
@@ -60,6 +61,12 @@ class WebinarFormatting {
   /// zero is free and must read "Free" rather than "₹ 0" — and a webinar
   /// that claims a price but ships none is treated as free too, since
   /// there is nothing to charge.
+  /// Whether a price may be shown for [webinar] at all. Free always
+  /// can; a paid one only where the platform sells (not iOS — see
+  /// PaymentPolicy).
+  static bool showsPrice(WebinarItem webinar) =>
+      PaymentPolicy.allowsPurchases || price(webinar) == 'Free';
+
   static String price(WebinarItem webinar) {
     final amount = webinar.price;
     if (webinar.isFree || amount == null || amount <= 0) return 'Free';

@@ -45,6 +45,20 @@ class CustomTextFormField extends StatefulWidget {
   /// so they don't have to refocus the field for every message.
   final bool unfocusOnTapOutside;
 
+  /// Overrides the default fill — e.g. a translucent glass fill for a
+  /// composer floating over a photo. Null keeps the themed fill.
+  final Color? fillColor;
+
+  /// Ink for the typed text and cursor, and the hint, when the fill is
+  /// custom and the themed text colour would clash with it (light text
+  /// on a white fill). Null keeps the themed colours.
+  final Color? textColor;
+  final Color? hintColor;
+
+  /// Outline in every non-error state, replacing the themed border.
+  final Color? borderColor;
+  final double borderWidth;
+
   const CustomTextFormField({
     super.key,
     required this.controller,
@@ -70,6 +84,11 @@ class CustomTextFormField extends StatefulWidget {
     this.onTapOutside,
     this.enabled = true,
     this.unfocusOnTapOutside = true,
+    this.fillColor,
+    this.textColor,
+    this.hintColor,
+    this.borderColor,
+    this.borderWidth = 1,
   });
 
   @override
@@ -108,13 +127,15 @@ class _CustomTextFormFieldState extends State<CustomTextFormField> {
           focusNode: widget.focusNode,
           controller: widget.controller,
           enabled: widget.enabled,
-          cursorColor: AppColors.primary,
+          cursorColor: widget.textColor ?? AppColors.primary,
           maxLines: widget.maxLine,
           minLines: widget.minLine,
           style: AppTypography.bodyTextLargeMedium.copyWith(
-            color: widget.enabled
-                ? AppColors.textPrimary
-                : AppColors.mutedTextPrimary,
+            color:
+                widget.textColor ??
+                (widget.enabled
+                    ? AppColors.textPrimary
+                    : AppColors.mutedTextPrimary),
             fontSize: Screen.getFontSizeCapped(14),
           ),
           obscureText: widget.isPasswordField ? isObscure : false,
@@ -135,17 +156,20 @@ class _CustomTextFormFieldState extends State<CustomTextFormField> {
           },
 
           decoration: InputDecoration(
-            contentPadding: widget.contentPadding ??
+            contentPadding:
+                widget.contentPadding ??
                 const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             prefix: const SizedBox(width: 4),
             filled: true,
-            fillColor: widget.enabled ? AppColors.white : AppColors.grey100,
+            fillColor:
+                widget.fillColor ??
+                (widget.enabled ? AppColors.white : AppColors.grey100),
             // fillColor: isFilled ? AppColors.grey700 : AppColors.inputBorderLight,
             hint: widget.hintText != null
                 ? Text(
                     widget.hintText!,
                     style: AppTypography.bodyTextLargeMedium.copyWith(
-                      color: AppColors.grey500,
+                      color: widget.hintColor ?? AppColors.grey500,
                       fontSize: Screen.getFontSizeCapped(14),
                     ),
                   )
@@ -188,12 +212,18 @@ class _CustomTextFormFieldState extends State<CustomTextFormField> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(24),
-              borderSide: BorderSide(color: AppColors.primary),
+              borderSide: BorderSide(
+                color: widget.borderColor ?? AppColors.primary,
+                width: widget.borderColor != null ? widget.borderWidth : 1,
+              ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(24),
               borderSide: BorderSide(
-                color: isFilled ? AppColors.primary : AppColors.grey300,
+                color:
+                    widget.borderColor ??
+                    (isFilled ? AppColors.primary : AppColors.grey300),
+                width: widget.borderColor != null ? widget.borderWidth : 1,
               ),
             ),
             errorBorder: OutlineInputBorder(

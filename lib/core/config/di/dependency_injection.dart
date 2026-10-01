@@ -3,6 +3,7 @@ import 'package:get_it/get_it.dart';
 import 'package:nexora/core/storage/secure_storage.dart';
 import 'package:nexora/core/network/api_client.dart';
 import 'package:nexora/core/theme/bloc/theme_cubit.dart';
+import 'package:nexora/core/wallpaper/wallpaper_cubit.dart';
 import 'package:nexora/core/session/session_service.dart';
 import 'package:nexora/features/payment/data/repositories/payment_repository_impl.dart';
 import 'package:nexora/features/payment/domain/repositories/payment_repository.dart';
@@ -171,6 +172,13 @@ Future<void> setupLocator() async {
   // and write the same instance. `main.dart` awaits `load()` before
   // runApp so the first frame paints in the persisted theme.
   sl.registerLazySingleton<ThemeCubit>(() => ThemeCubit(secureStorage));
+
+  // Custom app background — singleton for the same reason: the profile
+  // picker writes it, Home / Profile / chat rooms read it. Loaded before
+  // runApp alongside the theme.
+  sl.registerLazySingleton<WallpaperCubit>(
+    () => WallpaperCubit(secureStorage),
+  );
 
   // ============================================
   // FEATURES - HOME

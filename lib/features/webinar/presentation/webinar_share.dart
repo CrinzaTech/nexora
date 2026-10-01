@@ -59,7 +59,8 @@ class WebinarShare {
       // when every webinar was a free stream.
       if (!webinar.isStream)
         '${webinar.isInPerson ? '📍' : '💻'} ${webinar.platformName}',
-      '🎟 ${WebinarFormatting.price(webinar)}',
+      if (WebinarFormatting.showsPrice(webinar))
+        '🎟 ${WebinarFormatting.price(webinar)}',
       '',
       shareLink,
     ];

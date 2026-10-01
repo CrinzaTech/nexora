@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 import 'package:nexora/core/error/failures.dart';
 import 'package:nexora/features/profile/domain/usecases/delete_account_usecase.dart';
+import 'package:nexora/features/profile/presentation/widgets/wallpaper_tile.dart';
 import 'package:nexora/features/profile/presentation/widgets/delete_account_dialog.dart';
 
 import 'package:nexora/core/config/di/dependency_injection.dart';
@@ -19,6 +20,8 @@ import 'package:nexora/features/profile/domain/support_channel.dart';
 import 'package:nexora/features/profile/domain/usecases/get_app_rating_url_usecase.dart';
 import 'package:nexora/features/profile/domain/usecases/get_org_info_usecase.dart';
 import 'package:nexora/features/profile/presentation/bloc/profile_cubit.dart';
+import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
+import 'package:nexora/core/wallpaper/wallpaper_cubit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:nexora/core/theme/app_colors.dart';
@@ -402,6 +405,9 @@ class _ProfilePageState extends State<ProfilePage>
       await sl<TokenRefreshService>().revokeSession();
     }
     await sl<SessionService>().clearToken();
+    // The background is a personal photo on a possibly shared device —
+    // it leaves with the account, unlike the light/dark preference.
+    await sl<WallpaperCubit>().remove();
     OrgCodeService.instance.clear();
     if (!mounted) return;
     // Show the Org Code gate only on iOS when ORG_ID is CRINZA — same
@@ -478,277 +484,346 @@ class _ProfilePageState extends State<ProfilePage>
     Screen().adaptDeviceScreenSize(context);
     final rh = ResponsiveHelper.of(context);
 
+    // With a custom background the top of the page becomes a cover photo
+    // that fades into the page, in place of the brand wash. The glass
+    // section cards below pick the photo up through their blur.
+    final withWallpaper = hasWallpaper(context);
+    final pageColor = AppColors.isDark
+        ? AppColors.scaffoldLight
+        : AppColors.white;
+
     return Scaffold(
-      body: SafeArea(
-        top: false,
-        bottom: false,
-        child: Container(
-          width: double.infinity,
-          // Don't set a fixed height — let the scroll view size itself.
-          padding: EdgeInsets.symmetric(horizontal: rh.horizontalPadding),
-          // Soft pink wash replacing the legacy DecorationImage —
-          // built from `secondary` at low alpha so it carries the
-          // brand-pink the design mock uses, without the overhead
-          // of an image asset. Fades through to white around the
-          // 55 % mark so the section cards underneath sit cleanly
-          // on a neutral surface.
-          decoration: BoxDecoration(
-            // The pink wash reads as a soft blush on white, but over a
-            // near-black page the same alphas turn to muddy plum. Dark
-            // mode gets a much fainter indigo bloom that fades into the
-            // scaffold instead, so the page stays calm and the cards
-            // remain the brightest thing on it.
-            gradient: AppColors.isDark
-                ? LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.primary.withValues(alpha: 0.16),
-                      AppColors.primary.withValues(alpha: 0.05),
-                      AppColors.scaffoldLight,
-                    ],
-                    stops: const [0.0, 0.28, 0.62],
-                  )
-                : LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.secondary.withValues(alpha: 0.28),
-                      AppColors.secondary.withValues(alpha: 0.10),
-                      AppColors.white,
-                    ],
-                    stops: const [0.0, 0.30, 0.55],
-                  ),
+      backgroundColor: withWallpaper ? pageColor : null,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // The photo covers the whole page and stays fixed while the
+          // sections scroll over it — nothing fades to white.
+          Positioned.fill(
+            child: WallpaperLayer(
+              scrimColor: pageColor,
+              scrimOpacity: AppColors.isDark ? 0.45 : 0.35,
+            ),
           ),
-          child: RefreshIndicator(
-            onRefresh: _onRefresh,
-            color: AppColors.primary,
-            backgroundColor: AppColors.white,
-            displacement: 60,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: rh.isLargeScreen
-                        ? Screen.width * 0.95
-                        : rh.maxContentWidth,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      SizedBox(height: Screen.getVerticalSize(65)),
-
-                      // Profile Card Section
-                      BlocBuilder<ProfileCubit, ProfileState>(
-                        builder: (context, state) {
-                          return state.maybeWhen(
-                            // Every state that has a profile to show also
-                            // has one to edit, so the pencil is wired in
-                            // all three rather than only the settled one.
-                            loaded: (profile) => PersonCardWidget(
-                              profile: profile,
-                              onEdit: _openEditProfile,
+          SafeArea(
+            top: false,
+            bottom: false,
+            child: Container(
+              width: double.infinity,
+              // Don't set a fixed height — let the scroll view size itself.
+              padding: EdgeInsets.symmetric(horizontal: rh.horizontalPadding),
+              // Soft pink wash replacing the legacy DecorationImage —
+              // built from `secondary` at low alpha so it carries the
+              // brand-pink the design mock uses, without the overhead
+              // of an image asset. Fades through to white around the
+              // 55 % mark so the section cards underneath sit cleanly
+              // on a neutral surface.
+              decoration: withWallpaper
+                  ? null
+                  : BoxDecoration(
+                      // The pink wash reads as a soft blush on white, but over a
+                      // near-black page the same alphas turn to muddy plum. Dark
+                      // mode gets a much fainter indigo bloom that fades into the
+                      // scaffold instead, so the page stays calm and the cards
+                      // remain the brightest thing on it.
+                      gradient: AppColors.isDark
+                          ? LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                AppColors.primary.withValues(alpha: 0.16),
+                                AppColors.primary.withValues(alpha: 0.05),
+                                AppColors.scaffoldLight,
+                              ],
+                              stops: const [0.0, 0.28, 0.62],
+                            )
+                          : LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                AppColors.secondary.withValues(alpha: 0.28),
+                                AppColors.secondary.withValues(alpha: 0.10),
+                                AppColors.white,
+                              ],
+                              stops: const [0.0, 0.30, 0.55],
                             ),
-                            updated: (profile) => PersonCardWidget(
-                              profile: profile,
-                              onEdit: _openEditProfile,
-                            ),
-                            updating: (current) => PersonCardWidget(
-                              profile: current,
-                              onEdit: _openEditProfile,
-                            ),
-                            error: (message) => ProfileCardError(
-                              message: message,
-                              onRetry: _onRefresh,
-                            ),
-                            orElse: () => const ProfileCardShimmer(),
-                          );
-                        },
+                    ),
+              child: RefreshIndicator(
+                onRefresh: _onRefresh,
+                color: AppColors.primary,
+                backgroundColor: AppColors.white,
+                displacement: 60,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: rh.isLargeScreen
+                            ? Screen.width * 0.95
+                            : rh.maxContentWidth,
                       ),
-                      SizedBox(height: Screen.getVerticalSize(25)),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          SizedBox(height: Screen.getVerticalSize(65)),
 
-                      // MARK: Payments & Billing Section
-                      PremiumSurface(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: Screen.getPadding(
-                                vertical: 12,
-                                horizontal: 15,
-                              ),
-                              child: Text(
-                                "Payments & Billing",
-                                style: AppTypography.bodyTextMedium.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: Screen.getFontSizeCapped(14),
-                                  color: AppColors.mutedTextPrimary,
+                          // Profile Card Section
+                          BlocBuilder<ProfileCubit, ProfileState>(
+                            builder: (context, state) {
+                              return state.maybeWhen(
+                                // Every state that has a profile to show also
+                                // has one to edit, so the pencil is wired in
+                                // all three rather than only the settled one.
+                                loaded: (profile) => PersonCardWidget(
+                                  profile: profile,
+                                  onEdit: _openEditProfile,
                                 ),
-                              ),
-                            ),
-                            CustomProfileListTileWidget(
-                              title: "Transaction History",
-                              leadingIcon: AppImages.historyIcon,
-                              onTap: () =>
-                                  context.push(AppRoutes.transactionHistory),
-                            ),
-                            // Everything they signed up for, and the
-                            // way back to a workshop pass. Sits above
-                            // Certificates because it is the record a
-                            // learner comes looking for soonest: on the
-                            // morning of an event, not months later.
-                            CustomProfileListTileWidget(
-                              title: "My Bookings",
-                              // A ticket: these are passes for webinars and
-                              // workshops. No monochrome asset exists for it.
-                              leadingIconData:
-                                  Icons.confirmation_number_outlined,
-                              onTap: () => context.push(AppRoutes.myBookings),
-                            ),
-                            // Completed courses + their certificates.
-                            // Sits under Transaction History because it's
-                            // the other "what have I got out of this
-                            // account" record the learner comes looking for.
-                            CustomProfileListTileWidget(
-                              title: "Course Certificates",
-                              leadingIcon: AppImages.verifiedIcon,
-                              onTap: () => context.push(AppRoutes.certificates),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      SizedBox(height: Screen.getVerticalSize(20)),
-
-                      // The Account Settings section used to sit here.
-                      // Both of its rows moved onto the profile card —
-                      // Edit Profile became the pencil on the avatar, and
-                      // Dark Mode the sun/moon badge beside the entity
-                      // code — which left an empty titled panel behind.
-
-                      // MARK: Help & Support Section
-                      PremiumSurface(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: Screen.getPadding(
-                                vertical: 12,
-                                horizontal: 15,
-                              ),
-                              child: Text(
-                                "Help & Support",
-                                style: AppTypography.bodyTextMedium.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: Screen.getFontSizeCapped(14),
-                                  color: AppColors.mutedTextPrimary,
+                                updated: (profile) => PersonCardWidget(
+                                  profile: profile,
+                                  onEdit: _openEditProfile,
                                 ),
-                              ),
-                            ),
-                            // Contact for Support — calls the org-info API,
-                            // then routes to WhatsApp or to in-app personal
-                            // chat depending on the org's
-                            // `allowWhatsappSupport` flag. One tile on
-                            // purpose: an org runs one channel or the
-                            // other, so a second entry would always be dead.
-                            CustomProfileListTileWidget(
-                              title: "Contact for Support",
-                              leadingIcon: AppImages.callIcon,
-                              onTap: _contactSupport,
-                            ),
-                            // TODO: Report an Issue — no flow defined yet, revisit later.
-                            // const CustomProfileListTileWidget(
-                            //   title: "Report an Issue",
-                            //   leadingIcon: AppImages.issueIcon,
-                            // ),
-                            CustomProfileListTileWidget(
-                              title: "Rate our App",
-                              leadingIcon: AppImages.starIcon,
-                              onTap: _rateApp,
-                            ),
-                            // Share App — reuses the app-rating-url store
-                            // link and hands it to the native share sheet.
-                            CustomProfileListTileWidget(
-                              title: "Share App",
-                              leadingIcon: AppImages.personIcon,
-                              onTap: _shareApp,
-                            ),
-                            // Permanent account deletion. Last in the
-                            // section on purpose: everything above it is
-                            // reversible, and this is the one row a
-                            // mis-tap can't be walked back from. Present
-                            // on every platform — App Store guideline
-                            // 5.1.1(v) mandates it and Play's data
-                            // deletion policy expects it.
-                            _DeleteAccountTile(onTap: _handleDeleteAccount),
-                          ],
-                        ),
-                      ),
-                      SizedBox(height: Screen.getVerticalSize(20)),
-
-                      /// MARK: Legal
-                      PremiumSurface(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: Screen.getPadding(
-                                vertical: 12,
-                                horizontal: 15,
-                              ),
-                              child: Text(
-                                "Legal",
-                                style: AppTypography.bodyTextMedium.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: Screen.getFontSizeCapped(14),
-                                  color: AppColors.mutedTextPrimary,
+                                updating: (current) => PersonCardWidget(
+                                  profile: current,
+                                  onEdit: _openEditProfile,
                                 ),
-                              ),
+                                error: (message) => ProfileCardError(
+                                  message: message,
+                                  onRetry: _onRefresh,
+                                ),
+                                orElse: () => const ProfileCardShimmer(),
+                              );
+                            },
+                          ),
+                          SizedBox(height: Screen.getVerticalSize(25)),
+
+                          // MARK: Payments & Billing Section
+                          PremiumSurface(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: Screen.getPadding(
+                                    vertical: 12,
+                                    horizontal: 15,
+                                  ),
+                                  child: Text(
+                                    "Payments & Billing",
+                                    style: AppTypography.bodyTextMedium
+                                        .copyWith(
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: Screen.getFontSizeCapped(
+                                            14,
+                                          ),
+                                          color: AppColors.mutedTextPrimary,
+                                        ),
+                                  ),
+                                ),
+                                CustomProfileListTileWidget(
+                                  title: "Transaction History",
+                                  leadingIcon: AppImages.historyIcon,
+                                  onTap: () => context.push(
+                                    AppRoutes.transactionHistory,
+                                  ),
+                                ),
+                                // Everything they signed up for, and the
+                                // way back to a workshop pass. Sits above
+                                // Certificates because it is the record a
+                                // learner comes looking for soonest: on the
+                                // morning of an event, not months later.
+                                CustomProfileListTileWidget(
+                                  title: "My Bookings",
+                                  // A ticket: these are passes for webinars and
+                                  // workshops. No monochrome asset exists for it.
+                                  leadingIconData:
+                                      Icons.confirmation_number_outlined,
+                                  onTap: () =>
+                                      context.push(AppRoutes.myBookings),
+                                ),
+                                // Completed courses + their certificates.
+                                // Sits under Transaction History because it's
+                                // the other "what have I got out of this
+                                // account" record the learner comes looking for.
+                                CustomProfileListTileWidget(
+                                  title: "Course Certificates",
+                                  leadingIcon: AppImages.verifiedIcon,
+                                  onTap: () =>
+                                      context.push(AppRoutes.certificates),
+                                ),
+                              ],
                             ),
-                            // Terms & Conditions — calls API with termsAndCondition=true
-                            CustomProfileListTileWidget(
-                              title: "Terms & Conditions",
-                              leadingIcon: AppImages.documentIcon,
-                              onTap: _openTermsAndConditions,
+                          ),
+
+                          SizedBox(height: Screen.getVerticalSize(20)),
+
+                          // The Account Settings section used to sit here.
+                          // Both of its rows moved onto the profile card —
+                          // Edit Profile became the pencil on the avatar, and
+                          // Dark Mode the sun/moon badge beside the entity
+                          // code. Appearance takes the slot: the custom
+                          // background is the one setting with no natural
+                          // home on the card.
+
+                          // MARK: Appearance Section
+                          PremiumSurface(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: Screen.getPadding(
+                                    vertical: 12,
+                                    horizontal: 15,
+                                  ),
+                                  child: Text(
+                                    "Appearance",
+                                    style: AppTypography.bodyTextMedium
+                                        .copyWith(
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: Screen.getFontSizeCapped(
+                                            14,
+                                          ),
+                                          color: AppColors.mutedTextPrimary,
+                                        ),
+                                  ),
+                                ),
+                                const WallpaperTile(),
+                              ],
                             ),
-                            // Refund Policy — calls API with refundPolicy=true
-                            CustomProfileListTileWidget(
-                              title: "Refund Policy",
-                              leadingIcon: AppImages.documentIcon,
-                              onTap: _openRefundPolicy,
+                          ),
+
+                          SizedBox(height: Screen.getVerticalSize(20)),
+
+                          // MARK: Help & Support Section
+                          PremiumSurface(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: Screen.getPadding(
+                                    vertical: 12,
+                                    horizontal: 15,
+                                  ),
+                                  child: Text(
+                                    "Help & Support",
+                                    style: AppTypography.bodyTextMedium
+                                        .copyWith(
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: Screen.getFontSizeCapped(
+                                            14,
+                                          ),
+                                          color: AppColors.mutedTextPrimary,
+                                        ),
+                                  ),
+                                ),
+                                // Contact for Support — calls the org-info API,
+                                // then routes to WhatsApp or to in-app personal
+                                // chat depending on the org's
+                                // `allowWhatsappSupport` flag. One tile on
+                                // purpose: an org runs one channel or the
+                                // other, so a second entry would always be dead.
+                                CustomProfileListTileWidget(
+                                  title: "Contact for Support",
+                                  leadingIcon: AppImages.callIcon,
+                                  onTap: _contactSupport,
+                                ),
+                                // TODO: Report an Issue — no flow defined yet, revisit later.
+                                // const CustomProfileListTileWidget(
+                                //   title: "Report an Issue",
+                                //   leadingIcon: AppImages.issueIcon,
+                                // ),
+                                CustomProfileListTileWidget(
+                                  title: "Rate our App",
+                                  leadingIcon: AppImages.starIcon,
+                                  onTap: _rateApp,
+                                ),
+                                // Share App — reuses the app-rating-url store
+                                // link and hands it to the native share sheet.
+                                CustomProfileListTileWidget(
+                                  title: "Share App",
+                                  leadingIcon: AppImages.personIcon,
+                                  onTap: _shareApp,
+                                ),
+                                // Permanent account deletion. Last in the
+                                // section on purpose: everything above it is
+                                // reversible, and this is the one row a
+                                // mis-tap can't be walked back from. Present
+                                // on every platform — App Store guideline
+                                // 5.1.1(v) mandates it and Play's data
+                                // deletion policy expects it.
+                                _DeleteAccountTile(onTap: _handleDeleteAccount),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                          SizedBox(height: Screen.getVerticalSize(20)),
+
+                          /// MARK: Legal
+                          PremiumSurface(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: Screen.getPadding(
+                                    vertical: 12,
+                                    horizontal: 15,
+                                  ),
+                                  child: Text(
+                                    "Legal",
+                                    style: AppTypography.bodyTextMedium
+                                        .copyWith(
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: Screen.getFontSizeCapped(
+                                            14,
+                                          ),
+                                          color: AppColors.mutedTextPrimary,
+                                        ),
+                                  ),
+                                ),
+                                // Terms & Conditions — calls API with termsAndCondition=true
+                                CustomProfileListTileWidget(
+                                  title: "Terms & Conditions",
+                                  leadingIcon: AppImages.documentIcon,
+                                  onTap: _openTermsAndConditions,
+                                ),
+                                // Refund Policy — calls API with refundPolicy=true
+                                CustomProfileListTileWidget(
+                                  title: "Refund Policy",
+                                  leadingIcon: AppImages.documentIcon,
+                                  onTap: _openRefundPolicy,
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: Screen.getVerticalSize(20)),
+
+                          // MARK: Logout Button
+                          LogoutButton(
+                            onTap: () async {
+                              final confirmed = await LogoutDialog.show(
+                                context,
+                              );
+                              if (confirmed != true) return;
+                              await _endSession();
+                            },
+                          ),
+                          SizedBox(height: Screen.getVerticalSize(10)),
+
+                          const AppVersionText(),
+
+                          SizedBox(height: Screen.getVerticalSize(25)),
+
+                          Utils.defaultBottomSpace(),
+                        ],
                       ),
-                      SizedBox(height: Screen.getVerticalSize(20)),
-
-                      // MARK: Logout Button
-                      LogoutButton(
-                        onTap: () async {
-                          final confirmed = await LogoutDialog.show(context);
-                          if (confirmed != true) return;
-                          await _endSession();
-                        },
-                      ),
-                      SizedBox(height: Screen.getVerticalSize(10)),
-
-                      const AppVersionText(),
-
-                      SizedBox(height: Screen.getVerticalSize(25)),
-
-                      Utils.defaultBottomSpace(),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

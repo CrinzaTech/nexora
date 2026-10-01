@@ -1,4 +1,5 @@
 import 'package:nexora/core/theme/app_colors.dart';
+import 'package:nexora/core/config/payment_policy.dart';
 import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:flutter/material.dart';
@@ -30,7 +31,9 @@ class EmptyState extends StatelessWidget {
             ),
             SizedBox(height: Screen.getVerticalSize(8)),
             Text(
-              "Enroll in a course to join its chat group.",
+              PaymentPolicy.allowsPurchases
+                  ? "Enroll in a course to join its chat group."
+                  : "Your course chat groups will appear here.",
               textAlign: TextAlign.center,
               style: AppTypography.bodyTextLargeMedium.copyWith(
                 color: AppColors.mutedTextPrimary,

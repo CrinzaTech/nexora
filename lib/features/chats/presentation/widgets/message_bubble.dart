@@ -18,6 +18,14 @@ import 'package:intl/intl.dart';
 Color get _incomingBubble =>
     AppColors.isDark ? AppColors.grey100 : AppColors.white;
 
+/// Fill and ink of the student's *own* bubbles. Light mode keeps the brand
+/// colour with white text; dark mode goes white with black text, so the
+/// message is fully legible whatever the client's brand colour or the
+/// photo behind the chat.
+Color get _mineFill =>
+    AppColors.isDark ? AppColors.alwaysWhite : AppColors.primaryFill;
+Color get _mineInk => AppColors.isDark ? AppColors.black : AppColors.onPrimary;
+
 /// Hairline that gives an incoming bubble an edge on a dark canvas,
 /// where the 1px black shadow it relies on in light mode is invisible.
 BoxBorder? get _incomingBubbleBorder => AppColors.isDark
@@ -169,9 +177,9 @@ class _TextBubble extends StatelessWidget {
     // onPrimary, not white: the bubble fill is AppColors.primary (brand
     // in light, white in dark), so its content must not follow the
     // surface token — that's what rendered the message text dark-on-indigo.
-    final textColor = isMe ? AppColors.onPrimary : AppColors.textPrimary;
+    final textColor = isMe ? _mineInk : AppColors.textPrimary;
     final timeColor = isMe
-        ? AppColors.onPrimary.withValues(alpha: 0.85)
+        ? _mineInk.withValues(alpha: 0.85)
         : AppColors.mutedTextPrimary;
     final radius = Screen.getSize(10);
     final tailRadius = Screen.getSize(3);
@@ -189,7 +197,7 @@ class _TextBubble extends StatelessWidget {
         vertical: Screen.getVerticalSize(6),
       ),
       decoration: BoxDecoration(
-        color: isMe ? AppColors.primary : _incomingBubble,
+        color: isMe ? _mineFill : _incomingBubble,
         border: isMe ? null : _incomingBubbleBorder,
         borderRadius: borderRadius,
         // WhatsApp's bubbles sit on a tiny 1 px shadow — just enough to
@@ -275,7 +283,7 @@ class _ImageBubble extends StatelessWidget {
         // Outgoing image bubbles get a heavy primary border so they
         // read as "yours" even without a fill — the photo itself is
         // the visual centre, so we keep the chrome thin.
-        border: isMe ? Border.all(color: AppColors.primary, width: 3) : null,
+        border: isMe ? Border.all(color: _mineFill, width: 3) : null,
         boxShadow: isMe
             ? null
             : [
@@ -383,7 +391,7 @@ class _FileTile extends StatelessWidget {
       width: math.min(Screen.width * 0.72, 420),
       padding: Screen.getPadding(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: isMe ? AppColors.primaryFill : _incomingBubble,
+        color: isMe ? _mineFill : _incomingBubble,
         border: isMe ? null : _incomingBubbleBorder,
         borderRadius: BorderRadius.circular(radius),
         boxShadow: isMe
@@ -406,7 +414,9 @@ class _FileTile extends StatelessWidget {
                 height: Screen.getSize(44),
                 decoration: BoxDecoration(
                   color: isMe
-                      ? AppColors.onPrimary.withValues(alpha: 0.15)
+                      ? _mineInk.withValues(
+                          alpha: AppColors.isDark ? 0.08 : 0.15,
+                        )
                       : _accent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(AppSizes.radiusS),
                 ),
@@ -414,7 +424,7 @@ class _FileTile extends StatelessWidget {
                 child: Text(
                   _extensionLabel,
                   style: AppTypography.bodyTextMedium.copyWith(
-                    color: isMe ? AppColors.onPrimary : _accent,
+                    color: isMe ? _mineInk : _accent,
                     fontWeight: FontWeight.w800,
                     fontSize: Screen.getFontSize(10),
                     letterSpacing: 0.5,
@@ -432,7 +442,7 @@ class _FileTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                        color: isMe ? AppColors.onPrimary : AppColors.textPrimary,
+                        color: isMe ? _mineInk : AppColors.textPrimary,
                         fontSize: Screen.getFontSize(14),
                       ),
                     ),
@@ -441,7 +451,7 @@ class _FileTile extends StatelessWidget {
                       _extensionLabel,
                       style: AppTypography.bodyTextMedium.copyWith(
                         color: isMe
-                            ? AppColors.onPrimary.withValues(alpha: 0.85)
+                            ? _mineInk.withValues(alpha: 0.85)
                             : AppColors.mutedTextPrimary,
                         fontWeight: FontWeight.w600,
                         fontSize: Screen.getFontSize(12),
@@ -459,7 +469,7 @@ class _FileTile extends StatelessWidget {
             child: _BubbleTimestamp(
               time: message.createdAt,
               color: isMe
-                  ? AppColors.onPrimary.withValues(alpha: 0.7)
+                  ? _mineInk.withValues(alpha: 0.7)
                   : AppColors.mutedTextPrimary,
             ),
           ),
@@ -478,10 +488,10 @@ class _ReplyPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tint = tintLight
-        ? AppColors.onPrimary.withValues(alpha: 0.25)
+        ? _mineInk.withValues(alpha: AppColors.isDark ? 0.08 : 0.25)
         : AppColors.primary.withValues(alpha: 0.12);
     final fg = tintLight
-        ? AppColors.onPrimary.withValues(alpha: 0.9)
+        ? _mineInk.withValues(alpha: 0.9)
         : AppColors.textPrimary;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),

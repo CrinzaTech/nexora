@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_text_form_field.dart';
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -124,6 +126,8 @@ class _ChatInputState extends State<ChatInput> {
 
   @override
   Widget build(BuildContext context) {
+    // Floats over the chat background: no bar behind it, a white ringed
+    // pill for the field and a ringed circle for send.
     return SafeArea(
       top: false,
       child: Padding(
@@ -139,35 +143,50 @@ class _ChatInputState extends State<ChatInput> {
             //   onTap: widget.enabled ? () {} : null,
             // ),
             Expanded(
-              child: CustomTextFormField(
-                controller: _controller,
-                enabled: widget.enabled,
-                // Starts at one line, grows up to five rows, then
-                // scrolls internally — exactly WhatsApp's composer
-                // behaviour.
-                minLine: 1,
-                maxLine: 5,
-                // Multi-line keyboard pairs with `TextInputAction.newline`
-                // so Enter inserts a newline instead of submitting —
-                // sending is via the trailing button. Required by
-                // Flutter's TextField assertion (text type + newline
-                // action + maxLines > 1 isn't allowed).
-                keyboardType: TextInputType.multiline,
-                textInputAction: TextInputAction.newline,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 20,
+              child: _Frosted(
+                enabled: false,
+                child: CustomTextFormField(
+                  controller: _controller,
+                  enabled: widget.enabled,
+                  // Starts at one line, grows up to five rows, then
+                  // scrolls internally — exactly WhatsApp's composer
+                  // behaviour.
+                  minLine: 1,
+                  maxLine: 5,
+                  // Multi-line keyboard pairs with `TextInputAction.newline`
+                  // so Enter inserts a newline instead of submitting —
+                  // sending is via the trailing button. Required by
+                  // Flutter's TextField assertion (text type + newline
+                  // action + maxLines > 1 isn't allowed).
+                  keyboardType: TextInputType.multiline,
+                  textInputAction: TextInputAction.newline,
+                  // Single-line height lands at the send button's 52 dp, so
+                  // the two sit level.
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 15,
+                  ),
+                  // White field with the same ring as the send button, and
+                  // dark ink to match — the themed text is near-white in
+                  // dark mode and would vanish on the white fill.
+                  fillColor: AppColors.alwaysWhite,
+                  textColor: const Color(0xFF0D1B2A),
+                  hintColor: const Color(0xFF64748B),
+                  borderColor: AppColors.primary.withValues(
+                    alpha: widget.enabled ? 0.9 : 0.35,
+                  ),
+                  borderWidth: 1.5,
+                  // Keep the keyboard open across sends — tapping the
+                  // send button counts as "tap outside" by default, which
+                  // would otherwise dismiss the IME between every message.
+                  // WhatsApp-style behaviour: stay focused until the user
+                  // explicitly hits back / dismisses.
+                  unfocusOnTapOutside: false,
+                  hintText:
+                      widget.hint ??
+                      (widget.enabled ? 'Type a message…' : 'Read-only group'),
+                  onChanged: _onChanged,
                 ),
-                // Keep the keyboard open across sends — tapping the
-                // send button counts as "tap outside" by default, which
-                // would otherwise dismiss the IME between every message.
-                // WhatsApp-style behaviour: stay focused until the user
-                // explicitly hits back / dismisses.
-                unfocusOnTapOutside: false,
-                hintText:
-                    widget.hint ??
-                    (widget.enabled ? 'Type a message…' : 'Read-only group'),
-                onChanged: _onChanged,
               ),
             ),
             SizedBox(width: Screen.getHorizontalSize(8)),
@@ -338,7 +357,9 @@ class _SendButtonState extends State<_SendButton>
 
   @override
   Widget build(BuildContext context) {
-    final size = Screen.getSize(48);
+    final size = Screen.getSize(52);
+    // Ring (border + gap) around the filled disc.
+    const ring = 4.0;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapDown: _onTapDown,
@@ -384,63 +405,91 @@ class _SendButtonState extends State<_SendButton>
               child: Container(
                 width: size,
                 height: size,
+                padding: const EdgeInsets.all(ring),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: widget.enabled
-                      ? LinearGradient(
-                          colors: [
-                            AppColors.primaryFill,
-                            AppColors.primaryFill.withValues(alpha: 0.85),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        )
-                      : null,
-                  color: widget.enabled
-                      ? null
-                      : AppColors.primary.withValues(alpha: 0.15),
-                  boxShadow: widget.enabled
-                      ? [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.30),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : null,
+                  border: Border.all(
+                    color: AppColors.primary.withValues(
+                      alpha: widget.enabled ? 0.9 : 0.35,
+                    ),
+                    width: 1.5,
+                  ),
                 ),
-                child: AnimatedBuilder(
-                  animation: _launch,
-                  builder: (_, __) {
-                    return Transform.translate(
-                      offset: Offset(
-                        _iconOffset.value.dx * Screen.getSize(14),
-                        _iconOffset.value.dy * Screen.getSize(14),
-                      ),
-                      child: Transform.rotate(
-                        angle: _iconRotation.value,
-                        // Clamp because the respawn tween uses
-                        // `easeOutBack` which can briefly overshoot
-                        // above 1.0 — fine for scale but `Opacity`
-                        // asserts the value stays in [0, 1].
-                        child: Opacity(
-                          opacity: _iconOpacity.value.clamp(0.0, 1.0),
-                          child: Icon(
-                            Icons.send_rounded,
-                            color: widget.enabled
-                                ? AppColors.onPrimary
-                                : AppColors.primary.withValues(alpha: 0.6),
-                            size: Screen.getSize(20),
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    // White like the message field. Dimmed (not grey) while
+                    // there is nothing to send.
+                    color: AppColors.alwaysWhite.withValues(
+                      alpha: widget.enabled ? 1.0 : 0.7,
+                    ),
+                    boxShadow: widget.enabled
+                        ? [
+                            BoxShadow(
+                              color: AppColors.black.withValues(alpha: 0.18),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: AnimatedBuilder(
+                    animation: _launch,
+                    builder: (_, __) {
+                      return Transform.translate(
+                        offset: Offset(
+                          _iconOffset.value.dx * Screen.getSize(14),
+                          _iconOffset.value.dy * Screen.getSize(14),
+                        ),
+                        child: Transform.rotate(
+                          angle: _iconRotation.value,
+                          // Clamp because the respawn tween uses
+                          // `easeOutBack` which can briefly overshoot
+                          // above 1.0 — fine for scale but `Opacity`
+                          // asserts the value stays in [0, 1].
+                          child: Opacity(
+                            opacity: _iconOpacity.value.clamp(0.0, 1.0),
+                            child: Icon(
+                              Icons.send_rounded,
+                              // Dark ink on the white disc — same as the
+                              // message field's text.
+                              color: widget.enabled
+                                  ? const Color(0xFF0D1B2A)
+                                  : const Color(0xFF64748B),
+                              size: Screen.getSize(20),
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Frosted-glass backing for the composer field: a light blur behind the
+/// translucent fill so typed text stays readable over a busy photo. A
+/// pass-through when [enabled] is false.
+class _Frosted extends StatelessWidget {
+  final bool enabled;
+  final Widget child;
+
+  const _Frosted({required this.enabled, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled) return child;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: child,
       ),
     );
   }

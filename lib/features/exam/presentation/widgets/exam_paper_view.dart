@@ -184,12 +184,21 @@ class _ExamPaperViewState extends State<ExamPaperView> {
   }
 
   Future<void> _openPalette() async {
+    var submit = false;
     final index = await showExamQuestionPalette(
       context,
       entries: _paletteEntries(),
       reviewMode: false,
+      footerBuilder: (sheetContext) => ExamSheetSubmitButton(
+        sheetContext: sheetContext,
+        onPressed: () => submit = true,
+      ),
     );
-    if (index == null || !mounted) return;
+    if (!mounted) return;
+    // Same path as the Submit button under the paper: pinned-question
+    // check, then the answered/unanswered confirmation.
+    if (submit) return _confirmSubmit();
+    if (index == null) return;
     await _jumpToQuestion(index);
   }
 
@@ -568,12 +577,12 @@ class _ExamPaperViewState extends State<ExamPaperView> {
         extra: _submitSummary(answered: answered, unanswered: unanswered),
         actions: [
           ExamDialogAction(
-            label: 'Submit exam',
+            label: 'Submit',
             icon: Icons.check_circle_outline_rounded,
             onPressed: () => Navigator.of(ctx).pop(true),
           ),
           ExamDialogGhostAction(
-            label: 'Keep working',
+            label: 'Continue',
             onPressed: () => Navigator.of(ctx).pop(false),
           ),
         ],

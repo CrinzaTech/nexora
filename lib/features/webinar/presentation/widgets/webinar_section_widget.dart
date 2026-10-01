@@ -1,3 +1,4 @@
+import 'package:nexora/core/widgets/view_all_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -84,9 +85,10 @@ class _WebinarRail extends StatelessWidget {
                         'Webinars',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTypography.h5SemiBold.copyWith(
-                          color: AppColors.textPrimary,
-                          fontSize: Screen.getFontSizeCapped(20),
+                        // Same heading style as the other Home sections.
+                        style: AppTypography.bodyTextLargeMedium.copyWith(
+                          color: AppColors.primary,
+                          fontSize: Screen.getFontSizeCapped(16),
                         ),
                       ),
                     ),
@@ -100,16 +102,7 @@ class _WebinarRail extends StatelessWidget {
                 ),
               ),
               if (showViewAll)
-                InkWell(
-                  onTap: () => context.push(AppRoutes.webinars),
-                  child: Text(
-                    'View All',
-                    style: AppTypography.bodyTextLargeMedium.copyWith(
-                      color: AppColors.primary,
-                      fontSize: Screen.getFontSizeCapped(16),
-                    ),
-                  ),
-                ),
+                ViewAllButton(onTap: () => context.push(AppRoutes.webinars)),
             ],
           ),
         ),

@@ -29,9 +29,9 @@ class SocialMediaSectionWidget extends StatelessWidget {
             'Follow Us',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: AppTypography.h5SemiBold.copyWith(
-              color: AppColors.textPrimary,
-              fontSize: Screen.getFontSizeCapped(20),
+            style: AppTypography.bodyTextLargeMedium.copyWith(
+              color: AppColors.primary,
+              fontSize: Screen.getFontSizeCapped(16),
             ),
           ),
         ),
@@ -45,10 +45,8 @@ class SocialMediaSectionWidget extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             padding: Screen.getPadding(horizontal: 20),
             itemCount: links.length,
-            separatorBuilder: (_, __) =>
-                SizedBox(width: Screen.getSize(16)),
-            itemBuilder: (context, index) =>
-                _SocialIcon(link: links[index]),
+            separatorBuilder: (_, __) => SizedBox(width: Screen.getSize(16)),
+            itemBuilder: (context, index) => _SocialIcon(link: links[index]),
           ),
         ),
       ],

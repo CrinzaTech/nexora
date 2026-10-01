@@ -78,6 +78,10 @@ class ExamQuizView extends StatefulWidget {
   /// look at the quiz, so the rules open by themselves. Null never does.
   final Future<bool> Function()? shouldShowRulesOnOpen;
 
+  /// Ends the attempt early from the progress grid's Submit button, after
+  /// a confirmation. Null hides the button.
+  final VoidCallback? onSubmit;
+
   const ExamQuizView({
     super.key,
     required this.data,
@@ -98,6 +102,7 @@ class ExamQuizView extends StatefulWidget {
     required this.onReveal,
     required this.onRevealQuestion,
     this.shouldShowRulesOnOpen,
+    this.onSubmit,
   });
 
   @override
@@ -419,7 +424,7 @@ class _ExamQuizViewState extends State<ExamQuizView> {
         ),
         actions: [
           ExamDialogAction(
-            label: 'Got it',
+            label: 'OK',
             color: AppColors.primary,
             onPressed: () => Navigator.of(ctx).pop(),
           ),
@@ -602,10 +607,18 @@ class _ExamQuizViewState extends State<ExamQuizView> {
   /// Only those cells respond. The current question closes the sheet (they
   /// are already on it) and the ones still to come do nothing.
   Future<void> _openProgress(BuildContext context) async {
+    var submit = false;
+    final onSubmit = widget.onSubmit;
     final index = await showExamQuestionPalette(
       context,
       reviewMode: false,
       jumpable: false,
+      footerBuilder: onSubmit == null
+          ? null
+          : (sheetContext) => ExamSheetSubmitButton(
+              sheetContext: sheetContext,
+              onPressed: () => submit = true,
+            ),
       entries: [
         for (var i = 1; i <= data.totalQuestions; i++)
           ExamPaletteEntry(
@@ -622,7 +635,12 @@ class _ExamQuizViewState extends State<ExamQuizView> {
           ),
       ],
     );
-    if (index == null || !mounted) return;
+    if (!mounted) return;
+    if (submit) {
+      if (await _confirmQuizSubmit() && mounted) onSubmit?.call();
+      return;
+    }
+    if (index == null) return;
     final number = index + 1;
     if (number == data.questionNumber) {
       // Back to the live question.
@@ -645,6 +663,45 @@ class _ExamQuizViewState extends State<ExamQuizView> {
       widget.onReviewQuestion(number)?.wasUnattempted == true
       ? ExamPaletteStatus.skipped
       : ExamPaletteStatus.answered;
+
+  /// Submitting a graded quiz can't be undone, so it is always asked —
+  /// and says how many questions are still to come, since those score
+  /// nothing once the attempt is graded.
+  Future<bool> _confirmQuizSubmit() async {
+    // The current question counts as done once its verdict has settled.
+    final settled = widget.feedback?.advanced ?? false;
+    final left = data.totalQuestions - data.questionNumber + (settled ? 0 : 1);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: AppColors.overlayMedium,
+      builder: (ctx) => ExamDialogShell(
+        icon: left > 0
+            ? Icons.error_outline_rounded
+            : Icons.check_circle_outline_rounded,
+        accent: left > 0 ? AppColors.warning : AppColors.primary,
+        title: 'Submit quiz?',
+        message: left > 0
+            ? (left == 1
+                  ? "1 question isn't answered yet. Once submitted you can't "
+                        'change your answers.'
+                  : "$left questions aren't answered yet. Once submitted you "
+                        "can't change your answers.")
+            : "Once submitted you can't change your answers.",
+        actions: [
+          ExamDialogAction(
+            label: 'Submit',
+            icon: Icons.check_circle_outline_rounded,
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+          ExamDialogGhostAction(
+            label: 'Continue',
+            onPressed: () => Navigator.of(ctx).pop(false),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
 
   void _closeReview() {
     if (!_isReviewing) return;

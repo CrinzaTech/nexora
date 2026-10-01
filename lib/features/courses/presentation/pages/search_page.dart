@@ -4,6 +4,7 @@ import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/features/courses/presentation/bloc/search_courses_cubit.dart';
 import 'package:nexora/features/courses/presentation/widgets/search_results_panel.dart';
+import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -73,54 +74,67 @@ class _SearchPageState extends State<SearchPage> {
     _cubit.search(_controller.text, isPaid: _isPaid);
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     Screen().adaptDeviceScreenSize(context);
     return BlocProvider<SearchCoursesCubit>.value(
       value: _cubit,
-      child: Scaffold(
-        backgroundColor: AppColors.grey50,
-        appBar: AppBar(
-          backgroundColor: AppColors.white,
-          surfaceTintColor: AppColors.white,
-          elevation: 0,
-          titleSpacing: 0,
-          // Slightly taller toolbar so the pill field has vertical
-          // breathing room above and below — the default toolbarHeight
-          // (56) crops the field against the AppBar's bottom edge.
-          toolbarHeight: Screen.getVerticalSize(64),
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back, color: AppColors.textPrimary, size: Screen.getSize(24)),
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
-          // Pad the right edge so the field doesn't run flush against
-          // the AppBar's trailing edge.
-          title: Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: _SearchBar(
-              controller: _controller,
-              focusNode: _focusNode,
-              hintText: 'Search courses',
-              onChanged: (_) {}, // handled by listener
-              onClear: _controller.clear,
+      // The app background photo behind the results, fixed while they scroll.
+      child: WallpaperDecorated(
+        scrimColor: AppColors.white,
+        scrimOpacity: AppColors.isDark ? 0.55 : 0.50,
+        child: Scaffold(
+          backgroundColor: hasWallpaper(context)
+              ? Colors.transparent
+              : AppColors.grey50,
+          appBar: AppBar(
+            backgroundColor: AppColors.white,
+            surfaceTintColor: AppColors.white,
+            elevation: 0,
+            titleSpacing: 0,
+            // Slightly taller toolbar so the pill field has vertical
+            // breathing room above and below — the default toolbarHeight
+            // (56) crops the field against the AppBar's bottom edge.
+            toolbarHeight: Screen.getVerticalSize(64),
+            automaticallyImplyLeading: false,
+            // Back chevron "<", the same one the app's other top bars use.
+            leading: IconButton(
+              icon: Icon(
+                Icons.chevron_left_rounded,
+                color: AppColors.textPrimary,
+                size: Screen.getSize(28),
+              ),
+              onPressed: () => Navigator.of(context).maybePop(),
             ),
-          ),
-        ),
-        body: Column(
-          children: [
-            Expanded(
-              child: BlocBuilder<SearchCoursesCubit, SearchCoursesState>(
-                builder: (context, state) {
-                  return state.maybeWhen(
-                    idle: () => _IdleHint(),
-                    orElse: () => SearchResultsPanel(scrollController: _scrollController),
-                  );
-                },
+            // Pad the right edge so the field doesn't run flush against
+            // the AppBar's trailing edge.
+            title: Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: _SearchBar(
+                controller: _controller,
+                focusNode: _focusNode,
+                hintText: 'Search courses',
+                onChanged: (_) {}, // handled by listener
+                onClear: _controller.clear,
               ),
             ),
-          ],
+          ),
+          body: Column(
+            children: [
+              Expanded(
+                child: BlocBuilder<SearchCoursesCubit, SearchCoursesState>(
+                  builder: (context, state) {
+                    return state.maybeWhen(
+                      idle: () => _IdleHint(),
+                      orElse: () => SearchResultsPanel(
+                        scrollController: _scrollController,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -136,7 +150,11 @@ class _IdleHint extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_rounded, size: Screen.getSize(64), color: AppColors.grey300),
+            Icon(
+              Icons.search_rounded,
+              size: Screen.getSize(64),
+              color: AppColors.grey300,
+            ),
             SizedBox(height: Screen.getVerticalSize(12)),
             Text(
               'Find your next course',

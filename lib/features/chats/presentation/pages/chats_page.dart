@@ -14,6 +14,7 @@ import 'package:nexora/features/chats/presentation/widgets/chats_search_field.da
 import 'package:nexora/features/chats/presentation/widgets/empty_state.dart';
 import 'package:nexora/features/chats/presentation/widgets/error_state.dart';
 import 'package:nexora/features/chats/presentation/widgets/no_search_results.dart';
+import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -98,118 +99,167 @@ class _ChatsPageState extends State<ChatsPage>
 
     return BlocProvider(
       create: (_) => sl<ChatGroupsCubit>()..load(),
-      child: Scaffold(
-        backgroundColor: AppColors.white,
-        extendBody: true,
-        body: SafeArea(
-          child: NestedScrollView(
-            headerSliverBuilder: (context, innerBoxIsScrolled) {
-              return [
-                SliverAppBar(
-                  backgroundColor: AppColors.white,
-                  surfaceTintColor: AppColors.white,
-                  elevation: 0,
-                  pinned: true,
-                  floating: true,
-                  centerTitle: false,
-                  automaticallyImplyLeading: false,
-                  titleSpacing: Screen.getHorizontalSize(20),
-                  title: ScrollingTitle(
-                    text: 'All Chats',
-                    style: AppTypography.h5SemiBold.copyWith(
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  actions: [
-                    IconButton(
-                      tooltip: _isSearching ? 'Close search' : 'Search chats',
-                      icon: _isSearching
-                          ? Icon(Icons.close, color: AppColors.textPrimary)
-                          : Image.asset(
-                              AppImages.searchIcon,
-                              width: Screen.getSize(18),
-                              color: AppColors.textPrimary,
-                            ),
-                      onPressed: _toggleSearch,
-                    ),
-                    SizedBox(width: Screen.getHorizontalSize(8)),
-                  ],
-                  bottom: PreferredSize(
-                    preferredSize: Size.fromHeight(_isSearching ? Screen.getVerticalSize(66) : 0),
-                    child: Container(
-                      color: AppColors.white,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_isSearching)
-                            Padding(
-                              padding: Screen.getPadding(horizontal: 20, top: 12, bottom: 8),
-                              child: ChatsSearchField(
-                                controller: _searchController,
-                                focusNode: _searchFocusNode,
-                                hintText: 'Search chats',
-                                onChanged: (_) => _onQueryChanged(),
-                                onClear: () {
-                                  _searchController.clear();
-                                  _onQueryChanged();
-                                },
+      // The app background photo sits behind the card tiles, fixed while
+      // they scroll. A decoration, not a Stack sibling of the scroll view.
+      child: WallpaperDecorated(
+        scrimColor: AppColors.white,
+        scrimOpacity: AppColors.isDark ? 0.55 : 0.50,
+        child: Scaffold(
+          backgroundColor: hasWallpaper(context)
+              ? Colors.transparent
+              : AppColors.scaffoldLight,
+          extendBody: true,
+          // Status-bar band, then the list under a SafeArea with no top or
+          // bottom inset — the title bar must not add its own status-bar
+          // padding again, and the list scrolls to the bottom edge under the
+          // glass navbar.
+          body: Builder(
+            builder: (context) => Column(
+              children: [
+                Container(
+                  height: MediaQuery.paddingOf(context).top,
+                  width: double.infinity,
+                  color: AppColors.scaffoldLight,
+                ),
+                Expanded(
+                  child: MediaQuery.removePadding(
+                    context: context,
+                    removeTop: true,
+                    child: SafeArea(
+                      top: false,
+                      bottom: false,
+                      child: NestedScrollView(
+                        headerSliverBuilder: (context, innerBoxIsScrolled) {
+                          return [
+                            SliverAppBar(
+                              backgroundColor: AppColors.scaffoldLight,
+                              surfaceTintColor: Colors.transparent,
+                              elevation: 0,
+                              pinned: true,
+                              floating: true,
+                              centerTitle: false,
+                              automaticallyImplyLeading: false,
+                              titleSpacing: Screen.getHorizontalSize(20),
+                              title: ScrollingTitle(
+                                text: 'All Chats',
+                                style: AppTypography.h5SemiBold.copyWith(
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              actions: [
+                                IconButton(
+                                  tooltip: _isSearching
+                                      ? 'Close search'
+                                      : 'Search chats',
+                                  icon: _isSearching
+                                      ? Icon(
+                                          Icons.close,
+                                          color: AppColors.textPrimary,
+                                        )
+                                      : Image.asset(
+                                          AppImages.searchIcon,
+                                          width: Screen.getSize(18),
+                                          color: AppColors.textPrimary,
+                                        ),
+                                  onPressed: _toggleSearch,
+                                ),
+                                SizedBox(width: Screen.getHorizontalSize(8)),
+                              ],
+                              bottom: PreferredSize(
+                                preferredSize: Size.fromHeight(
+                                  _isSearching ? Screen.getVerticalSize(66) : 0,
+                                ),
+                                child: Container(
+                                  color: AppColors.scaffoldLight,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (_isSearching)
+                                        Padding(
+                                          padding: Screen.getPadding(
+                                            horizontal: 20,
+                                            top: 12,
+                                            bottom: 8,
+                                          ),
+                                          child: ChatsSearchField(
+                                            controller: _searchController,
+                                            focusNode: _searchFocusNode,
+                                            hintText: 'Search chats',
+                                            onChanged: (_) => _onQueryChanged(),
+                                            onClear: () {
+                                              _searchController.clear();
+                                              _onQueryChanged();
+                                            },
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
-                        ],
+                          ];
+                        },
+                        body: BlocBuilder<ChatGroupsCubit, ChatGroupsState>(
+                          builder: (context, state) {
+                            return state.maybeWhen(
+                              loading: () => const ChatsListShimmer(),
+                              loaded: (groups) {
+                                final filtered = _filter(groups);
+                                if (groups.isEmpty) return const EmptyState();
+                                if (filtered.isEmpty) {
+                                  return NoSearchResults(query: _query);
+                                }
+                                final rh = ResponsiveHelper.of(context);
+                                return RefreshIndicator(
+                                  color: AppColors.primary,
+                                  onRefresh: context
+                                      .read<ChatGroupsCubit>()
+                                      .refresh,
+                                  child: Center(
+                                    child: ListView.separated(
+                                      physics:
+                                          const AlwaysScrollableScrollPhysics(
+                                            parent: BouncingScrollPhysics(),
+                                          ),
+                                      padding: Screen.getPadding(vertical: 8),
+                                      itemCount: filtered.length + 1,
+                                      // Cards, not rows: a gap between them replaces
+                                      // the old hairline dividers.
+                                      separatorBuilder: (_, index) =>
+                                          index == filtered.length - 1
+                                          ? const SizedBox.shrink()
+                                          : SizedBox(
+                                              height: Screen.getVerticalSize(
+                                                10,
+                                              ),
+                                            ),
+                                      itemBuilder: (_, index) {
+                                        if (index == filtered.length) {
+                                          return Utils.defaultBottomSpace();
+                                        }
+                                        return ChatGroupTile(
+                                          group: filtered[index],
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
+                              error: (message) => ErrorState(
+                                message: message,
+                                onRetry: () =>
+                                    context.read<ChatGroupsCubit>().load(),
+                              ),
+                              orElse: () => const ChatsListShimmer(),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ];
-            },
-            body: BlocBuilder<ChatGroupsCubit, ChatGroupsState>(
-          builder: (context, state) {
-            return state.maybeWhen(
-              loading: () => const ChatsListShimmer(),
-              loaded: (groups) {
-                final filtered = _filter(groups);
-                if (groups.isEmpty) return const EmptyState();
-                if (filtered.isEmpty) {
-                  return NoSearchResults(query: _query);
-                }
-                final rh = ResponsiveHelper.of(context);
-                return RefreshIndicator(
-                  color: AppColors.primary,
-                  onRefresh: context.read<ChatGroupsCubit>().refresh,
-                  child: Center(
-                    child: ListView.separated(
-                      physics: const AlwaysScrollableScrollPhysics(
-                        parent: BouncingScrollPhysics(),
-                      ),
-                      padding: Screen.getPadding(vertical: 8),
-                      itemCount: filtered.length + 1,
-                      separatorBuilder: (_, index) => index == filtered.length - 1
-                          ? const SizedBox.shrink()
-                          : Divider(
-                              height: 1,
-                              thickness: 0.5,
-                              color: AppColors.grey200,
-                              indent: Screen.getHorizontalSize(25),
-                              endIndent: Screen.getHorizontalSize(25),
-                            ),
-                      itemBuilder: (_, index) {
-                        if (index == filtered.length) {
-                          return Utils.defaultBottomSpace();
-                        }
-                        return ChatGroupTile(group: filtered[index]);
-                      },
-                    ),
-                  ),
-            );
-          },
-          error: (message) => ErrorState(
-            message: message,
-            onRetry: () => context.read<ChatGroupsCubit>().load(),
-          ),
-          orElse: () => const ChatsListShimmer(),
-        );
-      },
-    ),
+              ],
+            ),
           ),
         ),
       ),

@@ -107,9 +107,7 @@ class _BannerBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.symmetric(
-        horizontal: Screen.getHorizontalSize(14),
-      ),
+      margin: EdgeInsets.symmetric(horizontal: Screen.getHorizontalSize(14)),
       padding: EdgeInsets.symmetric(
         horizontal: Screen.getHorizontalSize(10),
         vertical: Screen.getVerticalSize(8),

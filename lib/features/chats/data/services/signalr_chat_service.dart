@@ -140,7 +140,8 @@ class SignalRChatService {
   String? _activeConversationKey;
 
   final _messageController = StreamController<ChatMessage>.broadcast();
-  final _deletedController = StreamController<ChatMessageDeletedEvent>.broadcast();
+  final _deletedController =
+      StreamController<ChatMessageDeletedEvent>.broadcast();
   final _typingController = StreamController<ChatTypingEvent>.broadcast();
   final _readController = StreamController<ChatMessagesReadEvent>.broadcast();
   final _errorController = StreamController<String>.broadcast();
@@ -220,8 +221,7 @@ class SignalRChatService {
   Stream<DirectBlockChangedEvent> get onConversationBlockChanged =>
       _directBlockController.stream;
 
-  bool get isConnected =>
-      _connection?.state == HubConnectionState.Connected;
+  bool get isConnected => _connection?.state == HubConnectionState.Connected;
 
   /// `{BASE_URL}/hubs/ChatHub` — the SignalR endpoint. Sourced from the
   /// same `.env` that drives the REST [ApiClient] so deployments stay
@@ -231,7 +231,9 @@ class SignalRChatService {
   /// `POST /hubs/ChatHub/negotiate` contract.
   String get _hubUrl {
     final base = dotenv.env['BASE_URL'] ?? '';
-    final trimmed = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
+    final trimmed = base.endsWith('/')
+        ? base.substring(0, base.length - 1)
+        : base;
     return '$trimmed/hubs/ChatHub';
   }
 
@@ -255,9 +257,7 @@ class SignalRChatService {
         'Call ChatGroupRepository.generateChatToken() first.',
       );
     }
-    debugPrint(
-      '$_kChatLogTag connect() url=$_hubUrl tokenLen=${token.length}',
-    );
+    debugPrint('$_kChatLogTag connect() url=$_hubUrl tokenLen=${token.length}');
 
     final connection = HubConnectionBuilder()
         .withUrl(
@@ -289,10 +289,7 @@ class SignalRChatService {
     connection.on('DirectUserTyping', _handleDirectUserTyping);
     connection.on('DirectUserStoppedTyping', _handleDirectUserStoppedTyping);
     connection.on('DirectMessagesRead', _handleDirectMessagesRead);
-    connection.on(
-      'DirectConversationBlockChanged',
-      _handleDirectBlockChanged,
-    );
+    connection.on('DirectConversationBlockChanged', _handleDirectBlockChanged);
 
     // On automatic reconnect, rejoin the room the user was viewing so
     // they don't have to back-and-re-enter to resume receiving events.
@@ -336,9 +333,7 @@ class SignalRChatService {
     _connection = connection;
     try {
       await connection.start();
-      debugPrint(
-        '$_kChatLogTag connect() OK state=${connection.state}',
-      );
+      debugPrint('$_kChatLogTag connect() OK state=${connection.state}');
     } catch (e, st) {
       debugPrint('$_kChatLogTag connect() FAILED: $e');
       debugPrintStack(stackTrace: st);
@@ -486,7 +481,9 @@ class SignalRChatService {
       await c.invoke('LeaveConversation', args: [conversationKey]);
       debugPrint('$_kChatLogTag leaveConversation($conversationKey) OK');
     } catch (e) {
-      debugPrint('$_kChatLogTag leaveConversation($conversationKey) FAILED: $e');
+      debugPrint(
+        '$_kChatLogTag leaveConversation($conversationKey) FAILED: $e',
+      );
     }
   }
 
@@ -664,8 +661,7 @@ class SignalRChatService {
         groupId: map['groupId']?.toString() ?? '',
         readByUserId: (map['readByUserId'] as num?)?.toInt() ?? 0,
         readByRole: map['readByRole']?.toString() ?? '',
-        lastReadMessageId:
-            (map['lastReadMessageId'] as num?)?.toInt() ?? 0,
+        lastReadMessageId: (map['lastReadMessageId'] as num?)?.toInt() ?? 0,
         readAt: readAt,
       ),
     );

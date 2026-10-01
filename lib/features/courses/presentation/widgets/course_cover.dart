@@ -29,6 +29,10 @@ class CourseCoverImage extends StatelessWidget {
   /// Size of the placeholder glyph. Scale it down on small thumbnails.
   final double? fallbackIconSize;
 
+  /// Solid fill around a banner that doesn't match the box, in place of
+  /// the blurred copy — see [WholeImage.backgroundColor].
+  final Color? backgroundColor;
+
   const CourseCoverImage({
     super.key,
     required this.url,
@@ -36,6 +40,7 @@ class CourseCoverImage extends StatelessWidget {
     this.height,
     this.borderRadius,
     this.fallbackIconSize,
+    this.backgroundColor,
   });
 
   @override
@@ -45,6 +50,7 @@ class CourseCoverImage extends StatelessWidget {
       width: width,
       height: height,
       borderRadius: borderRadius,
+      backgroundColor: backgroundColor,
       fallback: Container(
         color: AppColors.grey100,
         alignment: Alignment.center,

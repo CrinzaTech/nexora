@@ -44,14 +44,26 @@ class _AppVersionTextState extends State<AppVersionText> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onLongPress: () => _CrashlyticsDiagnostics.show(context),
-      child: Text(
-        _label ?? "App Version",
-        style: AppTypography.bodyTextSmallMedium.copyWith(
-          color: AppColors.mutedTextPrimary,
-          fontSize: Screen.getFontSize(12),
+    // Full width, aligned left. Dark ink in light mode and light ink in
+    // dark mode (textPrimary does both), so it stays readable over a
+    // background photo instead of fading into it like the muted grey.
+    return SizedBox(
+      width: double.infinity,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: Screen.getPadding(horizontal: 6),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPress: () => _CrashlyticsDiagnostics.show(context),
+            child: Text(
+              _label ?? "App Version",
+              style: AppTypography.bodyTextSmallMedium.copyWith(
+                color: AppColors.textPrimary,
+                fontSize: Screen.getFontSize(12),
+              ),
+            ),
+          ),
         ),
       ),
     );

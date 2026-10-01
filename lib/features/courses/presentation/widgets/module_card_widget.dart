@@ -1,4 +1,5 @@
 import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/core/config/payment_policy.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/services/content_completion_service.dart';
 import 'package:nexora/core/theme/app_colors.dart';
@@ -136,6 +137,16 @@ class ModuleCard extends StatelessWidget {
         titleAlignment: ListTileTitleAlignment.center,
         onTap: () {
           if (module.isLocked) {
+            // iOS can't point at a purchase (see PaymentPolicy), so the
+            // lock reads as plainly unavailable instead.
+            if (!PaymentPolicy.allowsPurchases) {
+              CustomSnackbar.info(
+                context,
+                title: "Not available",
+                message: PaymentPolicy.unavailableMessage,
+              );
+              return;
+            }
             CustomSnackbar.error(
               context,
               title: "Locked",

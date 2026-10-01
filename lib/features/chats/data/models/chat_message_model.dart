@@ -219,9 +219,9 @@ class PagedChatMessages {
     final rawList = json['messages'];
     final messages = rawList is List
         ? rawList
-            .whereType<Map<String, dynamic>>()
-            .map(ChatMessage.fromJson)
-            .toList()
+              .whereType<Map<String, dynamic>>()
+              .map(ChatMessage.fromJson)
+              .toList()
         : <ChatMessage>[];
     return PagedChatMessages(
       messages: messages,

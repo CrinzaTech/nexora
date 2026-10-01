@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:nexora/core/widgets/draggable_fab.dart';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
@@ -28,17 +27,12 @@ class ExamPracticeView extends StatefulWidget {
   final ValueChanged<ExamAnswerDraft> onAnswerChanged;
   final VoidCallback onCheck;
 
-  /// Next question — or skip, when nothing has been checked yet.
+  /// Swipe left: next question — or skip, when nothing has been checked
+  /// yet. Past the last question it finishes the run.
   final VoidCallback onNext;
 
-  /// Back one question. Hidden on the first.
+  /// Swipe right: back one question. Ignored on the first.
   final VoidCallback onPrevious;
-
-  /// Straight to a question (0-based) from the review grid.
-  final ValueChanged<int> onJumpTo;
-
-  /// 0-based index → checked correct; only checked questions appear.
-  final Map<int, bool> outcomes;
 
   /// 0-based indexes the student has been on.
   final Set<int> visited;
@@ -56,8 +50,6 @@ class ExamPracticeView extends StatefulWidget {
     required this.onCheck,
     required this.onNext,
     required this.onPrevious,
-    required this.onJumpTo,
-    this.outcomes = const {},
     this.visited = const {},
   });
 
@@ -65,12 +57,38 @@ class ExamPracticeView extends StatefulWidget {
   State<ExamPracticeView> createState() => _ExamPracticeViewState();
 }
 
-class _ExamPracticeViewState extends State<ExamPracticeView> {
-  final _scroll = ScrollController();
+class _ExamPracticeViewState extends State<ExamPracticeView>
+    with SingleTickerProviderStateMixin {
+  // ── Swipe navigation ───────────────────────────────────────────────────
+  //
+  // No Previous / Skip / Next buttons: the student swipes. Swiping left
+  // goes forward (an unanswered question counts as skipped, exactly as
+  // the Skip button did), swiping right goes back. The question follows
+  // the finger, and a short or slow swipe springs back.
+
+  /// How far the current question has been dragged sideways.
+  double _dragDx = 0;
+
+  /// Direction of the last move, so the next question slides in from the
+  /// side the student swiped towards.
+  bool _forward = true;
+
+  late final AnimationController _snap = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 180),
+  )..addListener(_onSnapTick);
+  double _snapFrom = 0;
+
+  /// A swipe this fast moves on, however short it was.
+  static const double _flingVelocity = 400;
+
+  /// Or one this long (as a fraction of the width), however slow.
+  static const double _swipeFraction = 0.22;
 
   ExamQuestion get _question => widget.item.question;
   PracticeAnswerResultResponse? get _verdict => widget.verdict;
   bool get _isLast => widget.number >= widget.total;
+  bool get _isFirst => widget.number <= 1;
 
   /// One-tap types are answered by the tap itself; the rest need Check.
   bool get _checksOnSelect =>
@@ -83,9 +101,9 @@ class _ExamPracticeViewState extends State<ExamPracticeView> {
   @override
   void didUpdateWidget(ExamPracticeView old) {
     super.didUpdateWidget(old);
-    // A new question starts at the top, not where the last one was left.
-    if (old.number != widget.number && _scroll.hasClients) {
-      _scroll.jumpTo(0);
+    if (old.number != widget.number) {
+      // Covers swipes and grid jumps alike.
+      _forward = widget.number > old.number;
     }
     final error = widget.error;
     if (error != null && error != old.error) {
@@ -99,7 +117,7 @@ class _ExamPracticeViewState extends State<ExamPracticeView> {
 
   @override
   void dispose() {
-    _scroll.dispose();
+    _snap.dispose();
     super.dispose();
   }
 
@@ -109,51 +127,135 @@ class _ExamPracticeViewState extends State<ExamPracticeView> {
     if (_checksOnSelect) widget.onCheck();
   }
 
+  void _onDragUpdate(DragUpdateDetails d, double width) {
+    if (_snap.isAnimating) _snap.stop();
+    var dx = _dragDx + d.delta.dx;
+    // Nothing before the first question: let it give a little, no more.
+    if (_isFirst && dx > 0) dx = _dragDx + d.delta.dx * 0.3;
+    setState(() => _dragDx = dx.clamp(-width, width));
+  }
+
+  void _onDragEnd(DragEndDetails d, double width) {
+    final velocity = d.primaryVelocity ?? 0;
+    final double direction = velocity.abs() > _flingVelocity
+        ? velocity.sign
+        : (_dragDx.abs() > width * _swipeFraction ? _dragDx.sign : 0);
+    if (widget.checking || direction == 0) return _snapBack();
+    if (direction < 0) {
+      // Left: forward. Past the last question this finishes the run.
+      setState(() => _dragDx = 0);
+      widget.onNext();
+    } else if (!_isFirst) {
+      setState(() => _dragDx = 0);
+      widget.onPrevious();
+    } else {
+      _snapBack();
+    }
+  }
+
+  void _snapBack() {
+    if (_dragDx == 0) return;
+    _snapFrom = _dragDx;
+    _snap.forward(from: 0);
+  }
+
+  void _onSnapTick() {
+    setState(() {
+      _dragDx = _snapFrom * (1 - Curves.easeOut.transform(_snap.value));
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final passage = widget.item.passage;
-    final instructions = (widget.item.sectionInstructions ?? '').trim();
+    final showCheckBar = !_checksOnSelect && _verdict == null;
     return Column(
       children: [
-        _header(),
+        _header(context),
         Expanded(
-          child: Stack(
-            children: [
-              Positioned.fill(child: _questionList(passage, instructions)),
-              Positioned.fill(
-                child: DraggableFab(
-                  margin: const EdgeInsets.all(AppSizes.paddingM),
-                  builder: (ctx, _) =>
-                      ExamStatsFab(pinnedCount: 0, onTap: () => _openGrid(ctx)),
+          child: LayoutBuilder(
+            builder: (context, box) => GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragUpdate: (d) => _onDragUpdate(d, box.maxWidth),
+              onHorizontalDragEnd: (d) => _onDragEnd(d, box.maxWidth),
+              onHorizontalDragCancel: _snapBack,
+              child: ClipRect(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: _slide,
+                  layoutBuilder: (current, previous) =>
+                      Stack(children: [...previous, ?current]),
+                  child: KeyedSubtree(
+                    key: ValueKey(widget.number),
+                    child: Transform.translate(
+                      offset: Offset(_dragDx, 0),
+                      // Opaque, so the question sliding out can never show
+                      // through the one sliding in.
+                      child: ColoredBox(
+                        color: AppColors.scaffoldLight,
+                        child: _questionList(),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
-        _actionBar(context),
+        if (showCheckBar) _checkBar(context),
       ],
     );
   }
 
-  Widget _questionList(ExamQuestion? passage, String instructions) {
+  /// The incoming question slides in from the side the student swiped
+  /// towards; the outgoing one leaves by the opposite side.
+  ///
+  /// Worked out on every frame, not once. [AnimatedSwitcher] builds a
+  /// child's transition a single time — when it arrives — and plays that
+  /// same transition backwards when the child leaves. A fixed "in from the
+  /// right" therefore also left to the right, straight across the next
+  /// question coming in from the right: the overlap. Reading the
+  /// animation's status each frame tells arriving (forward) from leaving
+  /// (reverse), and reading [_forward] each frame follows the direction of
+  /// the swipe that is actually happening.
+  Widget _slide(Widget child, Animation<double> animation) {
+    return AnimatedBuilder(
+      animation: animation,
+      child: child,
+      builder: (context, child) {
+        final leaving =
+            animation.status == AnimationStatus.reverse ||
+            animation.status == AnimationStatus.dismissed;
+        final towards = _forward ? 1.0 : -1.0;
+        // Arriving: from the far side to centre. Leaving: from centre to
+        // the near side. `value` runs 0→1 arriving and 1→0 leaving.
+        final side = leaving ? -towards : towards;
+        return FractionalTranslation(
+          translation: Offset(side * (1 - animation.value), 0),
+          child: child,
+        );
+      },
+    );
+  }
+
+  /// Edge to edge, no card: the whole question and its options should fit
+  /// on one screen, so the student can tap without scrolling.
+  Widget _questionList() {
+    final passage = widget.item.passage;
+    final instructions = (widget.item.sectionInstructions ?? '').trim();
     return ListView(
-      controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         AppSizes.paddingM,
         AppSizes.paddingS,
         AppSizes.paddingM,
-        AppSizes.paddingM,
+        AppSizes.paddingM + MediaQuery.of(context).padding.bottom,
       ),
       children: [
-        ExamSectionHeader(name: widget.item.sectionName),
-        if (instructions.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSizes.paddingS),
-            child: ExamInstructionCallout(
-              instructions,
-              label: 'Section instructions',
-            ),
-          ),
+        if (instructions.isNotEmpty) ...[
+          ExamInstructionCallout(instructions, label: 'Section instructions'),
+          const SizedBox(height: AppSizes.paddingS),
+        ],
         if (passage != null && passage.questionText.trim().isNotEmpty) ...[
           _passageCard(passage),
           const SizedBox(height: AppSizes.paddingS),
@@ -166,6 +268,7 @@ class _ExamPracticeViewState extends State<ExamPracticeView> {
               question: _question,
               number: widget.number,
               draft: widget.draft,
+              compact: true,
               onChanged: (_, d) => _handleDraft(d),
               quizFeedback: _verdict == null
                   ? null
@@ -180,83 +283,106 @@ class _ExamPracticeViewState extends State<ExamPracticeView> {
           ),
         ),
         if (_verdict != null) ...[
-          const SizedBox(height: AppSizes.paddingM),
+          const SizedBox(height: 10),
           _verdictCard(_verdict!),
         ],
+        _swipeHint(),
       ],
     );
   }
 
-  /// The review grid: right, wrong, skipped, this one, and not yet seen.
-  /// Every cell is tappable — practice is held locally, so any question
-  /// can be opened, answered or looked back at.
-  Future<void> _openGrid(BuildContext context) async {
-    final current = widget.number - 1;
-    final index = await showExamQuestionPalette(
-      context,
-      reviewMode: true,
-      entries: [
-        for (var i = 0; i < widget.total; i++)
-          ExamPaletteEntry(number: i + 1, status: _statusOf(i, current)),
-      ],
+  /// Says how to move on, but only when it's useful: on the very first
+  /// question (before the student has found the gesture), and once a
+  /// question is answered (when moving on is the next thing to do).
+  Widget _swipeHint() {
+    final firstLook = widget.visited.length <= 1 && _verdict == null;
+    if (!firstLook && _verdict == null) return const SizedBox.shrink();
+    final text = _verdict == null
+        ? 'Swipe left or right to move between questions'
+        : (_isLast
+              ? 'Swipe left to finish'
+              : 'Swipe left for the next question');
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.swipe_left_rounded, size: 16, color: AppColors.grey400),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyTextSmallMedium.copyWith(
+                color: AppColors.mutedTextPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
-    if (index == null || !mounted || index == current) return;
-    widget.onJumpTo(index);
-  }
-
-  ExamPaletteStatus _statusOf(int index, int current) {
-    if (index == current) return ExamPaletteStatus.current;
-    final outcome = widget.outcomes[index];
-    if (outcome != null) {
-      return outcome ? ExamPaletteStatus.correct : ExamPaletteStatus.wrong;
-    }
-    return widget.visited.contains(index)
-        ? ExamPaletteStatus.skipped
-        : ExamPaletteStatus.upcoming;
   }
 
   // ── Header ─────────────────────────────────────────────────────────────
 
-  Widget _header() {
+  /// One slim row — position and section — over a thin progress bar. The
+  /// grid button lives in the app bar ([showPracticeQuestionGrid]). The bar turns
+  /// indeterminate while an answer is being checked.
+  Widget _header(BuildContext context) {
     final progress = widget.total == 0
         ? 0.0
         : (widget.number / widget.total).clamp(0.0, 1.0);
+    final section = widget.item.sectionName.trim();
     return Container(
       color: AppColors.white,
-      padding: const EdgeInsets.fromLTRB(
-        AppSizes.paddingM,
-        AppSizes.paddingS,
-        AppSizes.paddingM,
-        AppSizes.paddingM,
-      ),
+      padding: const EdgeInsets.fromLTRB(AppSizes.paddingM, 6, 0, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  'Question ${widget.number} of ${widget.total}',
-                  style: AppTypography.bodyTextMedium.copyWith(
-                    color: AppColors.primary,
-                  ),
+              Text(
+                '${widget.number} / ${widget.total}',
+                style: AppTypography.bodyTextSemiBold.copyWith(
+                  color: AppColors.primary,
                 ),
               ),
-              ExamChip(
-                'Practice',
-                color: AppColors.success,
-                icon: Icons.school_outlined,
-              ),
+              if (section.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Container(
+                  width: 4,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.grey400,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    section.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodyTextSmallSemiBold.copyWith(
+                      color: AppColors.mutedTextPrimary,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: AppSizes.paddingS),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 6,
-              backgroundColor: AppColors.grey100,
-              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(right: AppSizes.paddingM),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
+              child: LinearProgressIndicator(
+                value: widget.checking ? null : progress,
+                minHeight: 4,
+                backgroundColor: AppColors.grey100,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+              ),
             ),
           ),
         ],
@@ -267,6 +393,7 @@ class _ExamPracticeViewState extends State<ExamPracticeView> {
   /// The comprehension passage this question is about.
   Widget _passageCard(ExamQuestion passage) {
     return ExamCard(
+      padding: const EdgeInsets.all(12),
       background: AppColors.grey50,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -296,12 +423,12 @@ class _ExamPracticeViewState extends State<ExamPracticeView> {
     final answerLine = correct ? null : _correctAnswerLine(verdict);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(AppSizes.paddingM),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: correct
             ? AppColors.successBackground
             : AppColors.errorBackground,
-        borderRadius: BorderRadius.circular(AppSizes.radiusL),
+        borderRadius: BorderRadius.circular(AppSizes.radiusM),
         border: Border.all(color: accent.withValues(alpha: 0.35)),
       ),
       child: Column(
@@ -311,36 +438,36 @@ class _ExamPracticeViewState extends State<ExamPracticeView> {
             children: [
               Icon(
                 correct ? Icons.check_circle_rounded : Icons.cancel_rounded,
-                size: 22,
+                size: 20,
                 color: accent,
               ),
               const SizedBox(width: 8),
               Text(
                 correct ? 'Correct' : 'Wrong',
-                style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                  color: accent,
-                ),
+                style: AppTypography.bodyTextSemiBold.copyWith(color: accent),
               ),
+              if (answerLine != null) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    answerLine,
+                    style: AppTypography.bodyTextSmallMedium.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
-          if (answerLine != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              answerLine,
-              style: AppTypography.bodyTextMedium.copyWith(
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ],
           if (verdict.hasSolution) ...[
-            const SizedBox(height: AppSizes.paddingS),
+            const SizedBox(height: 6),
             Text(
               'Explanation',
               style: AppTypography.bodyTextSmallSemiBold.copyWith(
                 color: AppColors.mutedTextPrimary,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             ExamHtmlText(
               verdict.solutionText!,
               baseStyle: AppTypography.bodyTextSmallMedium,
@@ -358,21 +485,21 @@ class _ExamPracticeViewState extends State<ExamPracticeView> {
   String? _correctAnswerLine(PracticeAnswerResultResponse verdict) {
     switch (_question.questionType) {
       case ExamQuestionType.multipleChoice:
-        return verdict.correctOptionId == null
-            ? null
-            : 'The correct answer is highlighted in green.';
+        return null;
       case ExamQuestionType.trueFalse:
         final picked = widget.draft.boolean;
         if (picked == null) return null;
-        return 'Correct answer: ${picked ? 'False' : 'True'}';
+        return 'Answer: ${picked ? 'False' : 'True'}';
       default:
         return verdict.hasSolution ? null : 'Not the right answer.';
     }
   }
 
-  // ── Action bar ─────────────────────────────────────────────────────────
+  // ── Check bar (typed answers only) ─────────────────────────────────────
 
-  Widget _actionBar(BuildContext context) {
+  /// Only typed and multi-part answers need a button — a one-tap answer is
+  /// checked by the tap itself, and moving on is a swipe.
+  Widget _checkBar(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
         AppSizes.paddingM,
@@ -390,182 +517,124 @@ class _ExamPracticeViewState extends State<ExamPracticeView> {
           ),
         ],
       ),
-      child: _actions(),
-    );
-  }
-
-  Widget _actions() {
-    if (_verdict != null) {
-      return _withPrevious(
-        _primaryButton(
-          label: _isLast ? 'Finish' : 'Next',
-          icon: _isLast ? Icons.check : Icons.arrow_forward,
-          onPressed: widget.onNext,
-        ),
-      );
-    }
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_checksOnSelect)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _hint(
-              widget.checking
-                  ? 'Checking…'
-                  : 'Pick an option to check it instantly.',
+      child: SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: widget.checking || !_hasAnswer ? null : widget.onCheck,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryFill,
+            foregroundColor: AppColors.white,
+            disabledBackgroundColor: AppColors.primaryFill.withValues(
+              alpha: 0.5,
             ),
-          )
-        else ...[
-          _primaryButton(
-            label: 'Check answer',
-            icon: Icons.fact_check_outlined,
-            onPressed: _hasAnswer ? widget.onCheck : null,
-          ),
-          const SizedBox(height: 8),
-        ],
-        _withPrevious(
-          _outlinedButton(
-            label: _isLast ? 'Skip & finish' : 'Skip',
-            icon: Icons.skip_next_rounded,
-            onPressed: widget.onNext,
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Puts a Previous button beside [forward] — except on the first
-  /// question, where there is nowhere to go back to.
-  Widget _withPrevious(Widget forward) {
-    if (widget.number <= 1) return forward;
-    return Row(
-      children: [
-        Expanded(
-          child: _outlinedButton(
-            label: 'Previous',
-            icon: Icons.arrow_back_rounded,
-            onPressed: widget.onPrevious,
-            iconFirst: true,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(child: forward),
-      ],
-    );
-  }
-
-  Widget _outlinedButton({
-    required String label,
-    required IconData icon,
-    required VoidCallback onPressed,
-    bool iconFirst = false,
-  }) {
-    final color = AppColors.mutedTextPrimary;
-    final text = Text(
-      label,
-      maxLines: 1,
-      style: AppTypography.bodyTextSmallSemiBold.copyWith(color: color),
-    );
-    final glyph = Icon(icon, size: 18, color: color);
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton(
-        onPressed: widget.checking ? null : onPressed,
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 13),
-          side: BorderSide(color: AppColors.dividerLight),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
-          ),
-        ),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: iconFirst
-                ? [glyph, const SizedBox(width: 6), text]
-                : [text, const SizedBox(width: 6), glyph],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _hint(String text) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        if (widget.checking) ...[
-          SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
             ),
           ),
-          const SizedBox(width: 8),
-        ],
-        Flexible(
-          child: Text(
-            text,
-            textAlign: TextAlign.center,
-            style: AppTypography.bodyTextSmallMedium.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _primaryButton({
-    required String label,
-    required IconData icon,
-    required VoidCallback? onPressed,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: widget.checking ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primaryFill,
-          foregroundColor: AppColors.white,
-          disabledBackgroundColor: AppColors.primaryFill.withValues(alpha: 0.5),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
-          ),
-        ),
-        child: widget.checking
-            ? SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    AppColors.onPrimary,
-                  ),
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    label,
-                    style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                      color: AppColors.onPrimary,
+          child: widget.checking
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppColors.onPrimary,
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  Icon(icon, size: 20, color: AppColors.onPrimary),
-                ],
-              ),
+                )
+              : Text(
+                  'Check answer',
+                  style: AppTypography.bodyTextLargeSemiBold.copyWith(
+                    color: AppColors.onPrimary,
+                  ),
+                ),
+        ),
       ),
     );
   }
+}
+
+/// The practice review grid: right, wrong, skipped, this one, and not yet
+/// seen. Every cell is tappable — practice is held locally, so any question
+/// can be opened, answered or looked back at.
+///
+/// Opened from the exam page's app bar, so it takes the practice state's
+/// fields rather than living inside [ExamPracticeView].
+Future<void> showPracticeQuestionGrid(
+  BuildContext context, {
+  required int number,
+  required int total,
+  required Map<int, bool> outcomes,
+  required Set<int> visited,
+  required ValueChanged<int> onJumpTo,
+  required VoidCallback onSubmit,
+}) async {
+  final current = number - 1;
+  ExamPaletteStatus statusOf(int index) {
+    if (index == current) return ExamPaletteStatus.current;
+    final outcome = outcomes[index];
+    if (outcome != null) {
+      return outcome ? ExamPaletteStatus.correct : ExamPaletteStatus.wrong;
+    }
+    return visited.contains(index)
+        ? ExamPaletteStatus.skipped
+        : ExamPaletteStatus.upcoming;
+  }
+
+  var submit = false;
+  final index = await showExamQuestionPalette(
+    context,
+    reviewMode: true,
+    entries: [
+      for (var i = 0; i < total; i++)
+        ExamPaletteEntry(number: i + 1, status: statusOf(i)),
+    ],
+    footerBuilder: (sheetContext) => ExamSheetSubmitButton(
+      sheetContext: sheetContext,
+      onPressed: () => submit = true,
+    ),
+  );
+  if (submit) {
+    // Unanswered questions count as skipped — fine when meant, but a stray
+    // tap would end the run, and practice keeps nothing to come back to.
+    final left = total - outcomes.length;
+    if (left > 0) {
+      if (!context.mounted) return;
+      final ok = await _confirmPracticeSubmit(context, left);
+      if (ok != true) return;
+    }
+    onSubmit();
+    return;
+  }
+  if (index == null || index == current) return;
+  onJumpTo(index);
+}
+
+Future<bool?> _confirmPracticeSubmit(BuildContext context, int left) {
+  return showDialog<bool>(
+    context: context,
+    barrierColor: AppColors.overlayMedium,
+    builder: (ctx) => ExamDialogShell(
+      icon: Icons.task_alt_rounded,
+      accent: AppColors.primary,
+      title: 'Submit practice?',
+      message: left == 1
+          ? "1 question isn't answered yet. It will count as skipped."
+          : "$left questions aren't answered yet. They will count as skipped.",
+      actions: [
+        ExamDialogAction(
+          label: 'Submit',
+          color: AppColors.primary,
+          onPressed: () => Navigator.of(ctx).pop(true),
+        ),
+        ExamDialogGhostAction(
+          label: 'Continue',
+          onPressed: () => Navigator.of(ctx).pop(false),
+        ),
+      ],
+    ),
+  );
 }
 
 /// End of a practice run: the client's own tally. Nothing was recorded.

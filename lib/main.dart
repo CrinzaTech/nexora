@@ -23,6 +23,7 @@ import 'core/session/session_service.dart';
 import 'core/storage/secure_storage.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/bloc/theme_cubit.dart';
+import 'core/wallpaper/wallpaper_cubit.dart';
 import 'core/theme/branding_config.dart';
 import 'features/profile/presentation/bloc/profile_cubit.dart';
 import 'firebase_options.dart';
@@ -190,6 +191,9 @@ void main() {
       // would flash light and then correct itself. Failure leaves the
       // cubit on ThemeMode.system, which is a fine default.
       await _safeInit('theme', () => sl<ThemeCubit>().load());
+      // Same reasoning for the custom background: Home's first frame
+      // should already have it rather than popping it in afterwards.
+      await _safeInit('wallpaper', () => sl<WallpaperCubit>().load());
 
       // Redeliver any content completions stranded by a previous run
       // (student cleared 75% / opened a doc while offline) and start
@@ -437,6 +441,7 @@ class _CrinzaAppState extends State<CrinzaApp> with WidgetsBindingObserver {
           // Sits above MaterialApp so the profile toggle can reach it
           // and a mode change rebuilds the whole app, not one subtree.
           BlocProvider<ThemeCubit>.value(value: sl<ThemeCubit>()),
+          BlocProvider<WallpaperCubit>.value(value: sl<WallpaperCubit>()),
         ],
         child: BlocBuilder<ThemeCubit, ThemeMode>(
           builder: (context, themeMode) {

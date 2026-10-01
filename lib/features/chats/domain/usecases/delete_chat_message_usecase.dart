@@ -14,9 +14,6 @@ class DeleteChatMessageUseCase {
     required int messageId,
     required String groupId,
   }) {
-    return repository.deleteMessage(
-      messageId: messageId,
-      groupId: groupId,
-    );
+    return repository.deleteMessage(messageId: messageId, groupId: groupId);
   }
 }

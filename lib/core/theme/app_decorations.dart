@@ -62,18 +62,27 @@ class AppDecorations {
   }
 
   /// Standard raised panel — section cards, sheets, list containers.
-  static BoxDecoration card({double? radius}) => BoxDecoration(
+  ///
+  /// [borderColor] replaces the default hairline, for a card that wants a
+  /// visible rim of its own (e.g. the gilt edge on a chat tile).
+  static BoxDecoration card({
+    double? radius,
+    Color? borderColor,
+    List<BoxShadow>? shadows,
+  }) => BoxDecoration(
     color: AppColors.white,
     borderRadius: BorderRadius.circular(radius ?? AppSizes.radiusL),
     // A hairline border does the heavy lifting in the dark, where the
     // shadow can't. Kept almost invisible in light mode.
     border: Border.all(
-      color: AppColors.isDark
-          ? AppColors.alwaysWhite.withValues(alpha: 0.06)
-          : AppColors.black.withValues(alpha: 0.03),
+      color:
+          borderColor ??
+          (AppColors.isDark
+              ? AppColors.alwaysWhite.withValues(alpha: 0.06)
+              : AppColors.black.withValues(alpha: 0.03)),
       width: 1,
     ),
-    boxShadow: cardShadow(),
+    boxShadow: shadows ?? cardShadow(),
   );
 
   /// Hairline for a raised card.
@@ -179,6 +188,12 @@ class PremiumSurface extends StatelessWidget {
   /// nested panels, or a card already sitting on a coloured backdrop.
   final bool showTopEdge;
 
+  /// Overrides the card's hairline border colour. Null keeps the default.
+  final Color? borderColor;
+
+  /// Overrides the card's drop shadow. Null keeps the standard one.
+  final List<BoxShadow>? shadows;
+
   const PremiumSurface({
     super.key,
     required this.child,
@@ -187,6 +202,8 @@ class PremiumSurface extends StatelessWidget {
     this.margin,
     this.width = double.infinity,
     this.showTopEdge = true,
+    this.borderColor,
+    this.shadows,
   });
 
   @override
@@ -195,7 +212,11 @@ class PremiumSurface extends StatelessWidget {
     return Container(
       width: width,
       margin: margin,
-      decoration: AppDecorations.card(radius: r),
+      decoration: AppDecorations.card(
+        radius: r,
+        borderColor: borderColor,
+        shadows: shadows,
+      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(r),
         child: Stack(

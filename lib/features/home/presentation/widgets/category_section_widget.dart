@@ -8,6 +8,7 @@ import 'package:nexora/core/widgets/custom_network_image.dart';
 import 'package:nexora/core/widgets/gradient_border.dart';
 import 'package:nexora/core/widgets/inner_shadow_painter.dart';
 import 'package:nexora/features/home/data/models/home_model.dart';
+import 'package:nexora/core/widgets/view_all_button.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -635,21 +636,13 @@ class CategorySection extends StatelessWidget {
             children: [
               Text(
                 "Featured Categories",
-                style: AppTypography.h5SemiBold.copyWith(
-                  color: AppColors.textPrimary,
-                  fontSize: Screen.getFontSizeCapped(20),
+                // One heading style across every Home section.
+                style: AppTypography.bodyTextLargeMedium.copyWith(
+                  color: AppColors.primary,
+                  fontSize: Screen.getFontSizeCapped(16),
                 ),
               ),
-              GestureDetector(
-                onTap: () => context.push(AppRoutes.catalog),
-                child: Text(
-                  "View All",
-                  style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                    color: AppColors.primary,
-                    fontSize: Screen.getFontSizeCapped(14),
-                  ),
-                ),
-              ),
+              ViewAllButton(onTap: () => context.push(AppRoutes.catalog)),
             ],
           ),
 

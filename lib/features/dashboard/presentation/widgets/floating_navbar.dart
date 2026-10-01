@@ -7,6 +7,7 @@ import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/theme/app_decorations.dart';
 import 'package:nexora/core/widgets/gradient_border.dart';
 import 'package:nexora/core/widgets/inner_shadow_painter.dart';
+import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
 import 'package:flutter/material.dart';
 
 /// Nav Item Model
@@ -79,18 +80,30 @@ class FloatingNavbar extends StatelessWidget {
     // The active icon and label are foregrounds sitting on the glass:
     // the brand colour on light, white on dark.
     final activeTint = AppColors.primary;
+    // Over a custom background the bar takes the same glass recipe as the
+    // Home "One Step Away" panel — lighter blur so the photo still reads
+    // through, a fuller frost, and no drop shadow, whose brand-tinted
+    // body otherwise shows through the glass as coloured smudges.
+    final withWallpaper = hasWallpaper(context);
+    // Inactive icons and labels: lighter than the usual muted grey in dark
+    // mode and darker in light mode, so they stay readable on the glass.
+    final inactiveTint = AppColors.isDark
+        ? AppColors.textSecondary
+        : AppColors.grey400;
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: rh.maxNavBarWidth),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: radius,
-            boxShadow: AppDecorations.floatingShadow(),
+            boxShadow: withWallpaper ? null : AppDecorations.floatingShadow(),
           ),
           child: ClipRRect(
             borderRadius: radius,
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              filter: withWallpaper
+                  ? ImageFilter.blur(sigmaX: 12, sigmaY: 12)
+                  : ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Stack(
                 children: [
                   // Glass surface — translucent fill + gradient border.
@@ -104,7 +117,13 @@ class FloatingNavbar extends StatelessWidget {
                       // at 23 % the blurred backdrop shows straight through
                       // and the bar stops reading as a surface at all.
                       color: AppColors.white.withValues(
-                        alpha: AppColors.isDark ? 0.55 : 0.23,
+                        // Over a photo the fill needs real body: at 35 % a
+                        // bright patch behind the bar washed out the grey
+                        // labels and icons. Dark gets a near-solid dark
+                        // glass; light a mostly-white one.
+                        alpha: withWallpaper
+                            ? (AppColors.isDark ? 0.82 : 0.65)
+                            : (AppColors.isDark ? 0.55 : 0.23),
                       ),
                       borderRadius: radius,
                       border: GradientBorder(
@@ -164,7 +183,7 @@ class FloatingNavbar extends StatelessWidget {
                                       // this tint.
                                       color: isActive
                                           ? activeTint
-                                          : AppColors.mutedTextPrimary,
+                                          : inactiveTint,
                                     ),
                                   ),
                                 ),
@@ -183,7 +202,7 @@ class FloatingNavbar extends StatelessWidget {
                                     // for 11px text.
                                     color: isActive
                                         ? activeTint
-                                        : AppColors.mutedTextPrimary,
+                                        : inactiveTint,
                                   ),
                                 ),
                               ],

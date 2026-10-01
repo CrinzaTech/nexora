@@ -1,3 +1,5 @@
+import 'package:nexora/core/config/payment_policy.dart';
+
 /// What a tap on a Home "Live classes" card does. Branch on this, never
 /// on `isPurchased` — the server may add rules later.
 enum HomeLiveAction {
@@ -162,7 +164,9 @@ class HomeLiveSessionItem {
   /// The card's call to action, per the spec's three cases.
   String get ctaLabel {
     if (!isPurchased || action != HomeLiveAction.openContent) {
-      return 'Buy course';
+      // iOS can't sell (see PaymentPolicy) — the tap still just opens
+      // the course page, so name it for what it does there.
+      return PaymentPolicy.allowsPurchases ? 'Buy course' : 'View course';
     }
     return isOnAir ? 'Join in course' : 'View in course';
   }

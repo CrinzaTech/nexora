@@ -71,6 +71,7 @@ Future<int?> showExamQuestionPalette(
   required List<ExamPaletteEntry> entries,
   required bool reviewMode,
   bool jumpable = true,
+  Widget Function(BuildContext sheetContext)? footerBuilder,
 }) {
   return showModalBottomSheet<int>(
     context: context,
@@ -81,8 +82,54 @@ Future<int?> showExamQuestionPalette(
       entries: entries,
       reviewMode: reviewMode,
       jumpable: jumpable,
+      footer: footerBuilder?.call(ctx),
     ),
   );
+}
+
+/// The Submit button pinned under the question grid (practice, normal and
+/// quiz modes — competitive has no grid). Closes the sheet and reports the
+/// tap through [onPressed]; each mode then asks its own confirmation.
+class ExamSheetSubmitButton extends StatelessWidget {
+  final BuildContext sheetContext;
+  final VoidCallback onPressed;
+
+  const ExamSheetSubmitButton({
+    super.key,
+    required this.sheetContext,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () {
+          Navigator.of(sheetContext).pop();
+          onPressed();
+        },
+        icon: Icon(
+          Icons.task_alt_rounded,
+          size: 20,
+          color: AppColors.onPrimary,
+        ),
+        label: Text(
+          'Submit',
+          style: AppTypography.bodyTextLargeSemiBold.copyWith(
+            color: AppColors.onPrimary,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primaryFill,
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _PaletteSheet extends StatelessWidget {
@@ -90,10 +137,15 @@ class _PaletteSheet extends StatelessWidget {
   final bool reviewMode;
   final bool jumpable;
 
+  /// Optional action pinned under the grid — practice's Submit. Every
+  /// other flow leaves it null and the sheet is unchanged.
+  final Widget? footer;
+
   const _PaletteSheet({
     required this.entries,
     required this.reviewMode,
     this.jumpable = true,
+    this.footer,
   });
 
   @override
@@ -195,6 +247,16 @@ class _PaletteSheet extends StatelessWidget {
                 ],
               ),
             ),
+            if (footer != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSizes.paddingM,
+                  AppSizes.paddingXS,
+                  AppSizes.paddingM,
+                  AppSizes.paddingM,
+                ),
+                child: footer,
+              ),
           ],
         ),
       ),
@@ -708,13 +770,13 @@ Future<ExamPinnedGateOutcome?> showExamPinnedGate(
       ),
       actions: [
         ExamDialogAction(
-          label: 'Proceed to submit',
+          label: 'Submit',
           icon: Icons.arrow_forward_rounded,
           onPressed: () =>
               Navigator.of(ctx).pop(const ExamPinnedGateOutcome(proceed: true)),
         ),
         ExamDialogGhostAction(
-          label: 'Keep working',
+          label: 'Continue',
           onPressed: () => Navigator.of(ctx).pop(),
         ),
       ],

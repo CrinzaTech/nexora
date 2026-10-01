@@ -8,7 +8,9 @@ import 'package:nexora/core/widgets/custom_snackbar.dart';
 import 'package:nexora/features/chats/data/models/chat_message_model.dart';
 import 'package:nexora/features/chats/data/services/signalr_chat_service.dart';
 import 'package:nexora/features/chats/domain/repositories/chat_group_repository.dart';
-import 'package:nexora/features/chats/presentation/pages/chat_room_page.dart' show kChatSurface;
+import 'package:nexora/features/chats/presentation/pages/chat_room_page.dart'
+    show kChatSurface, chatWallpaperScrim, chatDateChipFill, chatDateChipLabel;
+import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
 import 'package:nexora/features/chats/presentation/widgets/chat_input.dart';
 import 'package:nexora/features/chats/presentation/widgets/message_bubble.dart';
 import 'package:nexora/features/chats/presentation/widgets/reply_banner.dart';
@@ -20,6 +22,7 @@ import 'package:nexora/features/direct_chat/presentation/bloc/direct_inbox_cubit
 import 'package:nexora/features/direct_chat/presentation/widgets/chat_confirm_dialog.dart';
 import 'package:nexora/features/direct_chat/presentation/widgets/dm_avatar.dart';
 import 'package:nexora/features/direct_chat/presentation/widgets/message_actions_sheet.dart';
+import 'package:nexora/core/widgets/scrolling_title.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
@@ -110,10 +113,10 @@ class _DirectChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      otherUserName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    // Scrolls when the name outgrows the bar, like the Home
+                    // brand name, instead of ending in an ellipsis.
+                    ScrollingTitle(
+                      text: otherUserName,
                       style: AppTypography.h5SemiBold.copyWith(
                         color: AppColors.textPrimary,
                         fontSize: rh.cappedFontSize(18),
@@ -277,7 +280,12 @@ class _DirectChatRoomBodyState extends State<_DirectChatRoomBody> {
                 typing,
               ) {
                 final cubit = context.read<DirectChatRoomCubit>();
-                return Column(
+                // Same custom background as group chats, behind the composer
+                // too — see ChatRoomPage.
+                return WallpaperBackdrop(
+                  scrimColor: kChatSurface,
+                  scrimOpacity: chatWallpaperScrim,
+                  child: Column(
                   children: [
                     Expanded(
                       child: messages.isEmpty
@@ -342,6 +350,7 @@ class _DirectChatRoomBodyState extends State<_DirectChatRoomBody> {
                       },
                     ),
                   ],
+                  ),
                 );
               },
           orElse: () => const SizedBox.shrink(),
@@ -525,17 +534,13 @@ class _DateHeader extends StatelessWidget {
           vertical: Screen.getVerticalSize(4),
         ),
         decoration: BoxDecoration(
-          color: AppColors.primary.withValues(
-            alpha: AppColors.isDark ? 0.20 : 0.08,
-          ),
+          color: chatDateChipFill(context),
           borderRadius: BorderRadius.circular(Screen.getSize(12)),
         ),
         child: Text(
           _label().toUpperCase(),
           style: AppTypography.bodyTextMedium.copyWith(
-            color: AppColors.isDark
-                ? AppColors.textSecondary
-                : AppColors.primary,
+            color: chatDateChipLabel(context),
             fontWeight: FontWeight.w700,
             fontSize: Screen.getFontSize(10.5),
             letterSpacing: 0.6,

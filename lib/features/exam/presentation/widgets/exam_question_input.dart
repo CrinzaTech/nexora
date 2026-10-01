@@ -70,6 +70,11 @@ class ExamQuestionInput extends StatelessWidget {
   /// is invisible and reads as "the button did nothing".
   final bool isHighlighted;
 
+  /// Practice mode only: no card or border, tighter spacing and shorter
+  /// option tiles, so a question and its options fit on one screen
+  /// without scrolling. Every other flow leaves this off.
+  final bool compact;
+
   const ExamQuestionInput({
     super.key,
     required this.question,
@@ -81,10 +86,26 @@ class ExamQuestionInput extends StatelessWidget {
     this.quizFeedback,
     this.onNumberTap,
     this.isHighlighted = false,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      // Edge to edge: the screen is the card.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _QuestionHeader(question: question, number: '$number'),
+          if (question.questionText.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            ExamHtmlText(question.questionText),
+          ],
+          const SizedBox(height: 10),
+          _body(context),
+        ],
+      );
+    }
     return ExamCard(
       // The jump flash outranks the pin tint for the moment it is on —
       // it is answering "where did I just land", which the student asked
@@ -148,6 +169,7 @@ class ExamQuestionInput extends StatelessWidget {
           draft: draft,
           onChanged: (d) => onChanged(question.id, d),
           quizFeedback: quizFeedback,
+          compact: compact,
         );
     }
   }
@@ -344,12 +366,14 @@ class _AnswerControls extends StatelessWidget {
   final ExamAnswerDraft draft;
   final ValueChanged<ExamAnswerDraft> onChanged;
   final ExamQuizFeedback? quizFeedback;
+  final bool compact;
 
   const _AnswerControls({
     required this.question,
     required this.draft,
     required this.onChanged,
     this.quizFeedback,
+    this.compact = false,
   });
 
   @override
@@ -361,6 +385,7 @@ class _AnswerControls extends StatelessWidget {
           selectedIds: draft.optionId == null ? const {} : {draft.optionId!},
           multi: false,
           quizFeedback: quizFeedback,
+          compact: compact,
           onToggle: (id) =>
               onChanged(draft.copyWith(optionId: id, clearOptionId: false)),
         );
@@ -370,6 +395,7 @@ class _AnswerControls extends StatelessWidget {
           selectedIds: draft.optionIds.toSet(),
           multi: true,
           quizFeedback: quizFeedback,
+          compact: compact,
           onToggle: (id) {
             final next = draft.optionIds.toList();
             if (next.contains(id)) {
@@ -382,6 +408,7 @@ class _AnswerControls extends StatelessWidget {
         );
       case ExamQuestionType.trueFalse:
         return _TrueFalseInput(
+          compact: compact,
           value: draft.boolean,
           onChanged: (v) => onChanged(draft.copyWith(boolean: v)),
         );
@@ -421,6 +448,7 @@ class _ChoiceOptions extends StatelessWidget {
   final bool multi;
   final ValueChanged<int> onToggle;
   final ExamQuizFeedback? quizFeedback;
+  final bool compact;
 
   const _ChoiceOptions({
     required this.question,
@@ -428,6 +456,7 @@ class _ChoiceOptions extends StatelessWidget {
     required this.multi,
     required this.onToggle,
     this.quizFeedback,
+    this.compact = false,
   });
 
   @override
@@ -449,8 +478,9 @@ class _ChoiceOptions extends StatelessWidget {
             ),
           ),
         for (var i = 0; i < ids.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
+          if (i > 0) SizedBox(height: compact ? 6 : 8),
           _OptionTile(
+            compact: compact,
             letter: String.fromCharCode(65 + i),
             text: i < texts.length ? texts[i] : '',
             selected: selectedIds.contains(ids[i]),
@@ -494,7 +524,11 @@ class _OptionTile extends StatelessWidget {
     required this.multi,
     required this.onTap,
     this.verdict = _OptionVerdict.none,
+    this.compact = false,
   });
+
+  /// Practice mode: a shorter tile so every option fits on screen.
+  final bool compact;
 
   /// The tile's accent. A quiz verdict outranks selection: once the
   /// server has said an option is right or wrong, that is the more
@@ -517,7 +551,10 @@ class _OptionTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppSizes.radiusM),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          padding: EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: compact ? 9 : 12,
+          ),
           decoration: BoxDecoration(
             color: outlined
                 ? accent.withValues(alpha: verdictColor != null ? 0.08 : 0.06)
@@ -542,7 +579,9 @@ class _OptionTile extends StatelessWidget {
               Expanded(
                 child: ExamHtmlText(
                   text,
-                  baseStyle: AppTypography.bodyTextLargeMedium,
+                  baseStyle: compact
+                      ? AppTypography.bodyTextMedium
+                      : AppTypography.bodyTextLargeMedium,
                   color: AppColors.textPrimary,
                 ),
               ),
@@ -606,7 +645,14 @@ class _TrueFalseInput extends StatelessWidget {
   final bool? value;
   final ValueChanged<bool> onChanged;
 
-  const _TrueFalseInput({required this.value, required this.onChanged});
+  /// Practice mode: shorter pills.
+  final bool compact;
+
+  const _TrueFalseInput({
+    required this.value,
+    required this.onChanged,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -626,7 +672,7 @@ class _TrueFalseInput extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppSizes.radiusM),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14),
+          padding: EdgeInsets.symmetric(vertical: compact ? 10 : 14),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: selected

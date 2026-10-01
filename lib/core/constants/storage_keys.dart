@@ -38,6 +38,17 @@ class StorageKeys {
   /// device preference, not session state.
   static const String themeMode = 'theme_mode';
 
+  /// File name (not path) of the student's custom app background, inside
+  /// `<app documents>/wallpaper/`. Only the name is stored because iOS
+  /// moves the app container on update, which would strand an absolute
+  /// path. Absent means no background. Unlike [themeMode] this IS cleared
+  /// on logout — it is a personal photo, and the device may be shared.
+  static const String wallpaperFile = 'wallpaper_file';
+
+  /// Which background is active: `none`, `theme` or `custom`. Absent means
+  /// `theme` (the bundled default). Cleared on logout with [wallpaperFile].
+  static const String wallpaperMode = 'wallpaper_mode';
+
   // ============================================================
   // Push notifications
   // ============================================================

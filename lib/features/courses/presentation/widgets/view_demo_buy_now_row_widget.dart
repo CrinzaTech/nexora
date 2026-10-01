@@ -1,4 +1,5 @@
 import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/core/config/payment_policy.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/services/whatsapp_payment_request_service.dart';
 import 'package:nexora/core/widgets/celebration_overlay.dart';
@@ -191,6 +192,17 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
   void _onExternalWallet(ExternalWalletResponse response) {}
 
   void _openRazorpay(CreateOrderResponse order) {
+    // Only free enrolment is reachable on iOS; if the server nonetheless
+    // wants money, never open a checkout there (see PaymentPolicy).
+    if (!PaymentPolicy.allowsPurchases) {
+      context.read<PaymentCubit>().reset();
+      CustomSnackbar.info(
+        context,
+        title: 'Not available',
+        message: PaymentPolicy.unavailableMessage,
+      );
+      return;
+    }
     // Pull the live profile out of the global ProfileCubit so the Razorpay
     // sheet pre-fills contact/email — saves the user re-typing what they
     // already entered at signup. Same pattern used by the edit-profile route.
@@ -483,6 +495,16 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
                       (tiers != null &&
                           tiers.isNotEmpty &&
                           tiers.every((t) => t.calculatedFinalPrice <= 0));
+                  // Where the platform can't sell (iOS — see
+                  // PaymentPolicy), a paid course gets no buy CTA at
+                  // all. If that leaves the row empty, a plain "View"
+                  // that opens the course page takes its slot.
+                  final showBuy = widget.showBuyNow &&
+                      (PaymentPolicy.allowsPurchases || isFree);
+                  final showView = widget.showBuyNow &&
+                      !showBuy &&
+                      !widget.showViewDetails;
+                  final hasTrailing = showBuy || showView;
                   // Label depends on the pre-loaded tier count when
                   // the host shipped one. Otherwise it stays "Buy
                   // Now" and the multi-tier branch reveals itself on
@@ -508,7 +530,7 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
                             },
                           ),
                         ),
-                        if (widget.showViewDetails || widget.showBuyNow)
+                        if (widget.showViewDetails || hasTrailing)
                           SizedBox(width: Screen.getHorizontalSize(12)),
                       ],
 
@@ -526,11 +548,25 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
                             },
                           ),
                         ),
-                        if (widget.showBuyNow)
+                        if (hasTrailing)
                           SizedBox(width: Screen.getHorizontalSize(12)),
                       ],
 
-                      if (widget.showBuyNow)
+                      if (showView)
+                        Expanded(
+                          child: CustomActionButton(
+                            isFormFilled: true,
+                            name: 'View',
+                            buttonHeight: widget.buttonHeight,
+                            onTap: (_, __, ___) {
+                              context.push(
+                                '${AppRoutes.courseDetail}?courseId=${widget.courseId}',
+                              );
+                            },
+                          ),
+                        ),
+
+                      if (showBuy)
                         Expanded(
                           child: CustomActionButton(
                             isFormFilled: !isLoading,

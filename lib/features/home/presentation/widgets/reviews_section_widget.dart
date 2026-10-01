@@ -36,9 +36,9 @@ class ReviewsSectionWidget extends StatelessWidget {
             "What Other Learners Say",
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: AppTypography.h5SemiBold.copyWith(
-              color: AppColors.textPrimary,
-              fontSize: Screen.getFontSizeCapped(20),
+            style: AppTypography.bodyTextLargeMedium.copyWith(
+              color: AppColors.primary,
+              fontSize: Screen.getFontSizeCapped(16),
             ),
           ),
         ),

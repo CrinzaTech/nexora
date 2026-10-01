@@ -210,11 +210,19 @@ class _ExamViewState extends State<_ExamView> {
         final showCalculator =
             _calculatorAllowed && (isTaking || practising == true);
 
+        // Mid-practice, a stray back (an edge swipe while swiping between
+        // questions, or the Android back gesture) would throw the run away.
+        // Practice has no exit limit — nothing is recorded — so it just asks.
+        final guardPractice = practising == true;
         return PopScope(
-          canPop: !isTaking,
+          canPop: !isTaking && !guardPractice,
           onPopInvokedWithResult: (didPop, _) async {
-            if (didPop || !isTaking) return;
-            await _handleBack(context, cubit);
+            if (didPop) return;
+            if (isTaking) {
+              await _handleBack(context, cubit);
+            } else if (guardPractice) {
+              await _leavePractice(context);
+            }
           },
           child: Scaffold(
             backgroundColor: AppColors.scaffoldLight,
@@ -250,11 +258,33 @@ class _ExamViewState extends State<_ExamView> {
               onBackPressed: () async {
                 if (isTaking) {
                   await _handleBack(context, cubit);
+                } else if (guardPractice) {
+                  await _leavePractice(context);
                 } else {
                   context.pop();
                 }
               },
               actions: [
+                // Practice: the question grid, up here rather than floating
+                // over the options, so the question gets the whole screen.
+                ?state.mapOrNull(
+                  practiceQuestion: (s) => IconButton(
+                    tooltip: 'All questions',
+                    icon: Icon(
+                      Icons.grid_view_rounded,
+                      color: AppColors.primary,
+                    ),
+                    onPressed: () => showPracticeQuestionGrid(
+                      context,
+                      number: s.number,
+                      total: s.total,
+                      outcomes: s.outcomes,
+                      visited: s.visited,
+                      onJumpTo: cubit.goToPracticeQuestion,
+                      onSubmit: cubit.finishPractice,
+                    ),
+                  ),
+                ),
                 // Rankings for this exam placement. Only on the result
                 // screen — before that the student has no score to compare,
                 // and mid-exam it would be a way out of the paper.
@@ -443,6 +473,7 @@ class _ExamViewState extends State<_ExamView> {
             onRevealQuestion: (number) =>
                 cubit.revealQuizAnswerFor(questionNumber: number),
             shouldShowRulesOnOpen: cubit.takeFirstQuizRulesView,
+            onSubmit: () => cubit.submit(autoSubmitted: false),
           ),
       practiceQuestion:
           (
@@ -456,7 +487,7 @@ class _ExamViewState extends State<_ExamView> {
             error,
             _,
             __,
-            outcomes,
+            ___,
             visited,
           ) => ExamPracticeView(
             item: item,
@@ -466,13 +497,11 @@ class _ExamViewState extends State<_ExamView> {
             verdict: verdict,
             checking: checking,
             error: error,
-            outcomes: outcomes,
             visited: visited,
             onAnswerChanged: cubit.updatePracticeAnswer,
             onCheck: cubit.checkPracticeAnswer,
             onNext: cubit.nextPracticeQuestion,
             onPrevious: cubit.previousPracticeQuestion,
-            onJumpTo: cubit.goToPracticeQuestion,
           ),
       practiceSummary: (_, correct, answered, total) => ExamPracticeSummaryView(
         correct: correct,
@@ -543,13 +572,40 @@ class _ExamViewState extends State<_ExamView> {
             'limit. Your answers have been submitted for grading.',
         actions: [
           ExamDialogAction(
-            label: 'View result',
+            label: 'OK',
             color: AppColors.error,
             onPressed: () => Navigator.of(ctx).pop(),
           ),
         ],
       ),
     );
+  }
+
+  /// Asked before leaving a practice run. Nothing is saved, so leaving
+  /// loses the run — that is all the dialog needs to say.
+  Future<void> _leavePractice(BuildContext context) async {
+    final leave = await showDialog<bool>(
+      context: context,
+      barrierColor: AppColors.overlayMedium,
+      builder: (ctx) => ExamDialogShell(
+        icon: Icons.logout_rounded,
+        accent: AppColors.error,
+        title: 'Leave practice?',
+        message: "Your progress in this practice won't be saved.",
+        actions: [
+          ExamDialogAction(
+            label: 'Leave',
+            color: AppColors.error,
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+          ExamDialogGhostAction(
+            label: 'Stay',
+            onPressed: () => Navigator.of(ctx).pop(false),
+          ),
+        ],
+      ),
+    );
+    if (leave == true && context.mounted) context.pop();
   }
 
   Future<bool?> _confirmLeave(BuildContext context, {required int remaining}) {
@@ -572,7 +628,7 @@ class _ExamViewState extends State<_ExamView> {
             '$allowance',
         actions: [
           ExamDialogAction(
-            label: 'Leave exam',
+            label: 'Leave',
             color: AppColors.error,
             onPressed: () => Navigator.of(ctx).pop(true),
           ),

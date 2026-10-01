@@ -68,12 +68,13 @@ class _SwipeToReplyState extends State<SwipeToReply>
   @override
   void initState() {
     super.initState();
-    _spring = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 320),
-    )..addListener(() {
-        setState(() => _offset = _springAnimation.value);
-      });
+    _spring =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 320),
+        )..addListener(() {
+          setState(() => _offset = _springAnimation.value);
+        });
   }
 
   @override
@@ -105,9 +106,10 @@ class _SwipeToReplyState extends State<SwipeToReply>
     final committed = _offset.abs() >= _threshold;
     if (committed) widget.onReply();
 
-    _springAnimation = Tween<double>(begin: _offset, end: 0).animate(
-      CurvedAnimation(parent: _spring, curve: Curves.easeOutCubic),
-    );
+    _springAnimation = Tween<double>(
+      begin: _offset,
+      end: 0,
+    ).animate(CurvedAnimation(parent: _spring, curve: Curves.easeOutCubic));
     _spring.forward(from: 0);
     _armed = false;
   }
@@ -156,10 +158,7 @@ class _SwipeToReplyState extends State<SwipeToReply>
               ),
             ),
           ),
-          Transform.translate(
-            offset: Offset(_offset, 0),
-            child: widget.child,
-          ),
+          Transform.translate(offset: Offset(_offset, 0), child: widget.child),
         ],
       ),
     );

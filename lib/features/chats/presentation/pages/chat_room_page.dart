@@ -5,6 +5,8 @@ import 'package:nexora/core/theme/responsive_helper.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_appbar_widget.dart';
 import 'package:nexora/core/widgets/custom_network_image.dart';
+import 'package:nexora/core/widgets/profile_image_viewer.dart';
+import 'package:nexora/core/widgets/whole_image.dart';
 import 'package:nexora/features/chats/data/models/chat_message_model.dart';
 import 'package:nexora/features/chats/data/services/signalr_chat_service.dart';
 import 'package:nexora/features/chats/domain/repositories/chat_group_repository.dart';
@@ -13,6 +15,8 @@ import 'package:nexora/features/chats/presentation/widgets/chat_input.dart';
 import 'package:nexora/features/chats/presentation/widgets/message_bubble.dart';
 import 'package:nexora/features/chats/presentation/widgets/reply_banner.dart';
 import 'package:nexora/features/chats/presentation/widgets/swipe_to_reply.dart';
+import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
+import 'package:nexora/core/widgets/scrolling_title.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
@@ -27,6 +31,23 @@ Color get kChatSurface => AppColors.isDark
     // made them disappear into it.
     ? AppColors.scaffoldLight
     : const Color(0xFFFAF1F1);
+
+/// How much of [kChatSurface] washes over a custom chat background.
+/// Heavier on dark: a bright photo under near-black text bubbles needs
+/// more pulling down than a dark one under a light page needs lifting.
+double get chatWallpaperScrim => AppColors.isDark ? 0.60 : 0.50;
+
+/// Date-chip fill and label. The default is a faint brand tint, which
+/// all but vanishes over a photo — so with a custom background the chip
+/// goes solid, like the incoming bubbles.
+Color chatDateChipFill(BuildContext context) => hasWallpaper(context)
+    ? AppColors.white.withValues(alpha: 0.92)
+    : AppColors.primary.withValues(alpha: AppColors.isDark ? 0.20 : 0.08);
+
+Color chatDateChipLabel(BuildContext context) =>
+    AppColors.isDark || hasWallpaper(context)
+    ? AppColors.textSecondary
+    : AppColors.primary;
 
 /// Chat room screen — one cubit per [groupId]. Owns its own
 /// [ChatRoomCubit] (factory) so the join/leave + history lifecycle
@@ -73,50 +94,90 @@ class ChatRoomPage extends StatelessWidget {
 /// Tappable AppBar with avatar + group name. Title spacing is tightened
 /// so the name sits close to the avatar after the back button.
 class _ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
+  /// Taller than the standard 56 dp toolbar, so the group picture has
+  /// room above and below it instead of filling the bar edge to edge.
+  static const double _barHeight = 72;
+
   final String groupName;
   final String? groupImageUrl;
 
   const _ChatAppBar({required this.groupName, required this.groupImageUrl});
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => const Size.fromHeight(_barHeight);
 
   @override
   Widget build(BuildContext context) {
     final rh = ResponsiveHelper.of(context);
     return CustomAppBar(
       centerTitle: false,
-      titleSpacing: 0,
+      // No back chevron: the picture takes its place at the leading edge.
+      showBackButton: false,
+      toolbarHeight: _barHeight,
+      titleSpacing: Screen.getHorizontalSize(16),
       // Same wash as the body so the AppBar reads as part of the chat
       // surface rather than a separate chrome strip.
       backgroundColor: kChatSurface,
       titleWidget: Row(
         children: [
-          ClipOval(
-            child: SizedBox(
-              width: rh.isLargeScreen ? 56 : Screen.getSize(46),
-              height: rh.isLargeScreen ? 56 : Screen.getSize(46),
-              child: CustomNetworkImage(
-                url: groupImageUrl,
-                fit: BoxFit.cover,
-                errorWidget: Container(
-                  color: AppColors.primary.withValues(alpha: 0.12),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    Icons.groups_rounded,
-                    color: AppColors.primary,
-                    size: Screen.getSize(18),
+          // Tap to see the group picture full-screen, like the profile
+          // photo. Only when there is a picture to show.
+          Builder(
+            builder: (context) {
+              final url = groupImageUrl;
+              final hasImage = url != null && url.isNotEmpty;
+              final size = rh.isLargeScreen ? 56.0 : Screen.getSize(46);
+              final avatar = Container(
+                width: size,
+                height: size,
+                // Ring around the picture, same as the profile avatar: a
+                // pale or white group image would otherwise bleed into the
+                // chat bar with no edge.
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.45),
+                    width: 2,
                   ),
                 ),
-              ),
-            ),
+                // A little breathing room between the ring and the picture.
+                padding: const EdgeInsets.all(3),
+                child: ClipOval(
+                  child: CustomNetworkImage(
+                    url: groupImageUrl,
+                    fit: BoxFit.cover,
+                    errorWidget: Container(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        Icons.groups_rounded,
+                        color: AppColors.primary,
+                        size: Screen.getSize(18),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+              if (!hasImage) return avatar;
+              return GestureDetector(
+                onTap: () => showFullScreenImage(
+                  context,
+                  url,
+                  heroTag: 'chat-group-avatar',
+                ),
+                child: ProfileImageHero(
+                  tag: 'chat-group-avatar',
+                  child: avatar,
+                ),
+              );
+            },
           ),
           SizedBox(width: Screen.getHorizontalSize(10)),
           Expanded(
-            child: Text(
-              groupName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            // Scrolls (like the Home brand name) when the title is longer
+            // than the bar, instead of cutting it off with an ellipsis.
+            child: ScrollingTitle(
+              text: groupName,
               style: AppTypography.h5SemiBold.copyWith(
                 color: AppColors.textPrimary,
                 fontSize: rh.cappedFontSize(18),
@@ -161,35 +222,43 @@ class _ChatRoomBody extends StatelessWidget {
           ),
           loaded: (messages, hasMore, currentPage, isLoadingMore, typing) {
             final cubit = context.read<ChatRoomCubit>();
-            return Column(
-              children: [
-                Expanded(
-                  child: messages.isEmpty
-                      ? _EmptyConversation(canReply: canReply)
-                      : _MessageList(
-                          messages: messages,
-                          hasMore: hasMore,
-                          isLoadingMore: isLoadingMore,
-                        ),
-                ),
-                if (typing.isNotEmpty) _TypingHint(names: typing),
-                // Reply banner — only renders when the cubit's
-                // `replyingTo` is non-null, animating in/out via
-                // AnimatedSwitcher inside the banner.
-                if (canReply)
-                  ReplyBanner(
-                    replyingTo: cubit.replyingTo,
-                    onCancel: cubit.cancelReply,
+            // The student's custom background, WhatsApp-style: behind the
+            // conversation AND the composer (which floats on it), but not
+            // the app bar. Washed towards the chat surface so bubbles stay
+            // the brightest thing on screen.
+            return WallpaperBackdrop(
+              scrimColor: kChatSurface,
+              scrimOpacity: chatWallpaperScrim,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: messages.isEmpty
+                        ? _EmptyConversation(canReply: canReply)
+                        : _MessageList(
+                            messages: messages,
+                            hasMore: hasMore,
+                            isLoadingMore: isLoadingMore,
+                          ),
                   ),
-                ChatInput(
-                  enabled: canReply,
-                  hint: canReply
-                      ? 'Type a message…'
-                      : 'You can\'t reply in this group',
-                  onSend: cubit.sendText,
-                  onTypingChanged: cubit.notifyTyping,
-                ),
-              ],
+                  if (typing.isNotEmpty) _TypingHint(names: typing),
+                  // Reply banner — only renders when the cubit's
+                  // `replyingTo` is non-null, animating in/out via
+                  // AnimatedSwitcher inside the banner.
+                  if (canReply)
+                    ReplyBanner(
+                      replyingTo: cubit.replyingTo,
+                      onCancel: cubit.cancelReply,
+                    ),
+                  ChatInput(
+                    enabled: canReply,
+                    hint: canReply
+                        ? 'Type a message…'
+                        : 'You can\'t reply in this group',
+                    onSend: cubit.sendText,
+                    onTypingChanged: cubit.notifyTyping,
+                  ),
+                ],
+              ),
             );
           },
           orElse: () => const SizedBox.shrink(),
@@ -375,17 +444,13 @@ class _DateHeader extends StatelessWidget {
           // page is barely there against near-black, so the chip needs
           // more body — and indigo-on-indigo is hard to read at 10.5px,
           // so the label goes neutral in the dark.
-          color: AppColors.primary.withValues(
-            alpha: AppColors.isDark ? 0.20 : 0.08,
-          ),
+          color: chatDateChipFill(context),
           borderRadius: BorderRadius.circular(Screen.getSize(12)),
         ),
         child: Text(
           _label().toUpperCase(),
           style: AppTypography.bodyTextMedium.copyWith(
-            color: AppColors.isDark
-                ? AppColors.textSecondary
-                : AppColors.primary,
+            color: chatDateChipLabel(context),
             fontWeight: FontWeight.w700,
             fontSize: Screen.getFontSize(10.5),
             letterSpacing: 0.6,

@@ -43,16 +43,17 @@ class ChatRoomCubit extends SafeCubit<ChatRoomState> {
   /// rather than baked into [ChatRoomState] so the reply banner can
   /// listen without forcing the whole message list to rebuild on
   /// reply-start / reply-cancel.
-  final ValueNotifier<ChatMessage?> replyingTo =
-      ValueNotifier<ChatMessage?>(null);
+  final ValueNotifier<ChatMessage?> replyingTo = ValueNotifier<ChatMessage?>(
+    null,
+  );
 
   ChatRoomCubit({
     required ChatGroupRepository repository,
     required SignalRChatService signalr,
     required this.groupId,
-  })  : _repository = repository,
-        _signalr = signalr,
-        super(const ChatRoomState.initial());
+  }) : _repository = repository,
+       _signalr = signalr,
+       super(const ChatRoomState.initial());
 
   /// Boot the screen: ensure the chat bearer is minted, hub is
   /// connected, history is loaded, and we've joined the room. Safe to
@@ -68,9 +69,7 @@ class ChatRoomCubit extends SafeCubit<ChatRoomState> {
       try {
         await _signalr.connect();
       } on StateError {
-        debugPrint(
-          '$_kChatRoomLogTag open() no chat token — minting via repo',
-        );
+        debugPrint('$_kChatRoomLogTag open() no chat token — minting via repo');
         final token = await _repository.generateChatToken();
         final failure = token.swap().toOption().toNullable();
         if (failure != null) {
@@ -139,13 +138,15 @@ class ChatRoomCubit extends SafeCubit<ChatRoomState> {
     // 5. Push initial loaded state. Backend returns newest-first; the
     // UI list is rendered with `reverse: true`, so we keep the same
     // ordering in state (messages[0] == latest).
-    emit(ChatRoomState.loaded(
-      messages: paged.messages,
-      hasMore: paged.hasMore,
-      currentPage: paged.page,
-      isLoadingMore: false,
-      typingUserNames: const [],
-    ));
+    emit(
+      ChatRoomState.loaded(
+        messages: paged.messages,
+        hasMore: paged.hasMore,
+        currentPage: paged.page,
+        isLoadingMore: false,
+        typingUserNames: const [],
+      ),
+    );
 
     // 6. Mark the latest message as read.
     if (paged.messages.isNotEmpty) {
@@ -173,13 +174,15 @@ class ChatRoomCubit extends SafeCubit<ChatRoomState> {
     final (messages, hasMore, currentPage, isLoadingMore, typing) = current;
     if (!hasMore || isLoadingMore) return;
 
-    emit(ChatRoomState.loaded(
-      messages: messages,
-      hasMore: hasMore,
-      currentPage: currentPage,
-      isLoadingMore: true,
-      typingUserNames: typing,
-    ));
+    emit(
+      ChatRoomState.loaded(
+        messages: messages,
+        hasMore: hasMore,
+        currentPage: currentPage,
+        isLoadingMore: true,
+        typingUserNames: typing,
+      ),
+    );
 
     final nextPage = currentPage + 1;
     final result = await _repository.getMessages(
@@ -190,22 +193,26 @@ class ChatRoomCubit extends SafeCubit<ChatRoomState> {
     result.fold(
       (_) {
         // Soft-fail page-load: drop the spinner, keep the list.
-        emit(ChatRoomState.loaded(
-          messages: messages,
-          hasMore: hasMore,
-          currentPage: currentPage,
-          isLoadingMore: false,
-          typingUserNames: typing,
-        ));
+        emit(
+          ChatRoomState.loaded(
+            messages: messages,
+            hasMore: hasMore,
+            currentPage: currentPage,
+            isLoadingMore: false,
+            typingUserNames: typing,
+          ),
+        );
       },
       (paged) {
-        emit(ChatRoomState.loaded(
-          messages: [...messages, ...paged.messages],
-          hasMore: paged.hasMore,
-          currentPage: paged.page,
-          isLoadingMore: false,
-          typingUserNames: typing,
-        ));
+        emit(
+          ChatRoomState.loaded(
+            messages: [...messages, ...paged.messages],
+            hasMore: paged.hasMore,
+            currentPage: paged.page,
+            isLoadingMore: false,
+            typingUserNames: typing,
+          ),
+        );
       },
     );
   }
@@ -302,13 +309,15 @@ class ChatRoomCubit extends SafeCubit<ChatRoomState> {
         if (!msg.isFromCurrentStudent) {
           HapticFeedback.selectionClick();
         }
-        emit(ChatRoomState.loaded(
-          messages: [msg, ...messages],
-          hasMore: hasMore,
-          currentPage: currentPage,
-          isLoadingMore: isLoadingMore,
-          typingUserNames: typing,
-        ));
+        emit(
+          ChatRoomState.loaded(
+            messages: [msg, ...messages],
+            hasMore: hasMore,
+            currentPage: currentPage,
+            isLoadingMore: isLoadingMore,
+            typingUserNames: typing,
+          ),
+        );
         // Best-effort read receipt for the freshly arrived message.
         _signalr
             .markMessagesRead(groupId: groupId, lastMessageId: msg.id)
@@ -322,16 +331,19 @@ class ChatRoomCubit extends SafeCubit<ChatRoomState> {
     if (event.groupId != groupId) return;
     state.maybeWhen(
       loaded: (messages, hasMore, currentPage, isLoadingMore, typing) {
-        final filtered =
-            messages.where((m) => m.id != event.messageId).toList();
+        final filtered = messages
+            .where((m) => m.id != event.messageId)
+            .toList();
         if (filtered.length == messages.length) return;
-        emit(ChatRoomState.loaded(
-          messages: filtered,
-          hasMore: hasMore,
-          currentPage: currentPage,
-          isLoadingMore: isLoadingMore,
-          typingUserNames: typing,
-        ));
+        emit(
+          ChatRoomState.loaded(
+            messages: filtered,
+            hasMore: hasMore,
+            currentPage: currentPage,
+            isLoadingMore: isLoadingMore,
+            typingUserNames: typing,
+          ),
+        );
       },
       orElse: () {},
     );
@@ -346,13 +358,15 @@ class ChatRoomCubit extends SafeCubit<ChatRoomState> {
     }
     state.maybeWhen(
       loaded: (messages, hasMore, currentPage, isLoadingMore, _) {
-        emit(ChatRoomState.loaded(
-          messages: messages,
-          hasMore: hasMore,
-          currentPage: currentPage,
-          isLoadingMore: isLoadingMore,
-          typingUserNames: List<String>.unmodifiable(_typingUsers),
-        ));
+        emit(
+          ChatRoomState.loaded(
+            messages: messages,
+            hasMore: hasMore,
+            currentPage: currentPage,
+            isLoadingMore: isLoadingMore,
+            typingUserNames: List<String>.unmodifiable(_typingUsers),
+          ),
+        );
       },
       orElse: () {},
     );

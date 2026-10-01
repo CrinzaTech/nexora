@@ -374,7 +374,7 @@ class _CourseDetailBody extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                 _CourseBanner(course: course),
-                SizedBox(height: Screen.getVerticalSize(20)),
+                SizedBox(height: Screen.getVerticalSize(14)),
                 ScrollingTitle(
                   text: course.courseTitle,
                   style: AppTypography.h5SemiBold.copyWith(
@@ -383,17 +383,34 @@ class _CourseDetailBody extends StatelessWidget {
                     fontSize: rh.isLargeScreen ? (rh.cappedFontSize(20) / 1.5) : null,
                   ),
                 ),
-                SizedBox(height: Screen.getVerticalSize(5)),
+                SizedBox(height: Screen.getVerticalSize(4)),
                 RatingAndReviewRowWidget(
                   rating: course.totalRating.toString(),
                   reviewCount: Utils.formatReviewCount(
                     course.totalReviewsCounts,
                   ),
                 ),
-                SizedBox(height: Screen.getVerticalSize(20)),
-                _PriceRow(course: course),
-                _ExpiryDetailsLine(course: course),
-                SizedBox(height: Screen.getVerticalSize(20)),
+                SizedBox(height: Screen.getVerticalSize(12)),
+                // Purchased: the pill and the access window share one
+                // line — stacked, they pushed the tabs (and the content
+                // the learner came for) a long way down the screen.
+                // Wrap, not Row, so a narrow phone drops the expiry to a
+                // second line instead of overflowing.
+                if (course.isPurchased)
+                  Wrap(
+                    spacing: Screen.getHorizontalSize(12),
+                    runSpacing: Screen.getVerticalSize(6),
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      const _PurchasedBadge(),
+                      _ExpiryDetailsLine(course: course, inline: true),
+                    ],
+                  )
+                else ...[
+                  _PriceRow(course: course),
+                  _ExpiryDetailsLine(course: course),
+                ],
+                SizedBox(height: Screen.getVerticalSize(12)),
               ],
             ),
           ),
@@ -483,10 +500,8 @@ class _PriceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rh = ResponsiveHelper.of(context);
-    // Once the course is purchased, the price block is replaced by a
-    // "Purchased" pill — the user already paid and the bottom bar handles
-    // resume/continue actions.
-    if (course.isPurchased) return const _PurchasedBadge();
+    // Purchased courses never reach here — the body shows the
+    // "Purchased" pill in place of the price block.
     // No prices at all where the platform can't sell (iOS).
     if (!PaymentPolicy.allowsPurchases) return const SizedBox.shrink();
     // Multi-tier courses defer pricing to the "Choose Plan" sheet —
@@ -540,7 +555,11 @@ class _PriceRow extends StatelessWidget {
 class _ExpiryDetailsLine extends StatelessWidget {
   final Course course;
 
-  const _ExpiryDetailsLine({required this.course});
+  /// Sitting beside the "Purchased" pill rather than under the price, so
+  /// it drops the top gap that separates it from the price block.
+  final bool inline;
+
+  const _ExpiryDetailsLine({required this.course, this.inline = false});
 
   @override
   Widget build(BuildContext context) {
@@ -552,7 +571,7 @@ class _ExpiryDetailsLine extends StatelessWidget {
       return const SizedBox.shrink();
     }
     return Padding(
-      padding: EdgeInsets.only(top: Screen.getVerticalSize(10)),
+      padding: EdgeInsets.only(top: inline ? 0 : Screen.getVerticalSize(8)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -585,11 +604,13 @@ class _PurchasedBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rh = ResponsiveHelper.of(context);
+    // Compact pill: it shares a line with the access window, so it is
+    // sized like a tag rather than a button.
     return Container(
-      padding: Screen.getPadding(horizontal: 14, vertical: 8),
+      padding: Screen.getPadding(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: AppColors.successBackground,
-        borderRadius: BorderRadius.circular(AppSizes.radiusS),
+        borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
         border: Border.all(
           color: AppColors.success.withValues(alpha: 0.35),
           width: 1,
@@ -600,15 +621,15 @@ class _PurchasedBadge extends StatelessWidget {
         children: [
           Icon(
             Icons.check_circle_rounded,
-            size: rh.isLargeScreen ? Screen.getSize(18) * rh.fontScaleFactor : Screen.getSize(18),
+            size: rh.isLargeScreen ? Screen.getSize(15) * rh.fontScaleFactor : Screen.getSize(15),
             color: AppColors.successDark,
           ),
-          SizedBox(width: Screen.getHorizontalSize(8)),
+          SizedBox(width: Screen.getHorizontalSize(5)),
           Text(
             'Purchased',
-            style: AppTypography.bodyTextLargeSemiBold.copyWith(
+            style: AppTypography.bodyTextSemiBold.copyWith(
               color: AppColors.successDark,
-              fontSize: rh.isLargeScreen ? rh.cappedFontSize(16) : null,
+              fontSize: rh.isLargeScreen ? rh.cappedFontSize(14) : null,
             ),
           ),
         ],

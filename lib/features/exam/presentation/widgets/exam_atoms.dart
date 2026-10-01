@@ -353,6 +353,22 @@ class ExamDialogShell extends StatelessWidget {
   /// Rendered full width, in order, primary first.
   final List<Widget> actions;
 
+  /// Two actions side by side instead of stacked: the secondary one on the
+  /// left, the primary on the right (still listed primary first).
+  ///
+  /// Null means "decide from the actions": on for every two-button dialog,
+  /// off for a single button, which has nothing to sit beside.
+  final bool? actionsInRow;
+
+  /// Icon on the left with the title beside it, and the message below,
+  /// left-aligned — instead of the centred stack. Null follows the same
+  /// two-button rule as [actionsInRow], so the two always come together.
+  final bool? headerInRow;
+
+  bool get _twoButtons => actions.length == 2;
+  bool get _actionsInRow => actionsInRow ?? _twoButtons;
+  bool get _headerInRow => headerInRow ?? _twoButtons;
+
   const ExamDialogShell({
     super.key,
     required this.icon,
@@ -361,7 +377,36 @@ class ExamDialogShell extends StatelessWidget {
     required this.message,
     this.extra,
     required this.actions,
+    this.actionsInRow,
+    this.headerInRow,
   });
+
+  /// The tinted double ring around the icon.
+  Widget _medallion({
+    required double outer,
+    required double inner,
+    required double glyph,
+  }) {
+    return Container(
+      width: outer,
+      height: outer,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: accent.withValues(alpha: 0.08),
+      ),
+      child: Container(
+        width: inner,
+        height: inner,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: accent.withValues(alpha: 0.14),
+        ),
+        child: Icon(icon, size: glyph, color: accent),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -384,51 +429,73 @@ class ExamDialogShell extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 72,
-                height: 72,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: accent.withValues(alpha: 0.08),
+              if (_headerInRow) ...[
+                Row(
+                  children: [
+                    _medallion(outer: 52, inner: 38, glyph: 20),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: AppTypography.bodyTextXtraLargeSemiBold.copyWith(
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                child: Container(
-                  width: 52,
-                  height: 52,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: accent.withValues(alpha: 0.14),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: Text(
+                    message,
+                    style: AppTypography.bodyTextMedium.copyWith(
+                      color: AppColors.textSecondary,
+                      height: 1.45,
+                    ),
                   ),
-                  child: Icon(icon, size: 26, color: accent),
                 ),
-              ),
-              const SizedBox(height: AppSizes.paddingM),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: AppTypography.bodyTextXtraLargeSemiBold.copyWith(
-                  color: AppColors.textPrimary,
+              ] else ...[
+                _medallion(outer: 72, inner: 52, glyph: 26),
+                const SizedBox(height: AppSizes.paddingM),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.bodyTextXtraLargeSemiBold.copyWith(
+                    color: AppColors.textPrimary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: AppTypography.bodyTextMedium.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.45,
+                const SizedBox(height: 6),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.bodyTextMedium.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.45,
+                  ),
                 ),
-              ),
+              ],
               if (extra != null) ...[
                 const SizedBox(height: AppSizes.paddingM),
                 extra!,
               ],
               const SizedBox(height: AppSizes.paddingL),
-              for (var i = 0; i < actions.length; i++) ...[
-                if (i > 0) const SizedBox(height: 8),
-                SizedBox(width: double.infinity, child: actions[i]),
-              ],
+              if (_actionsInRow)
+                _DialogRowScope(
+                  child: Row(
+                    children: [
+                      for (final (i, action) in actions.reversed.indexed) ...[
+                        if (i > 0) const SizedBox(width: 10),
+                        Expanded(child: action),
+                      ],
+                    ],
+                  ),
+                )
+              else
+                for (var i = 0; i < actions.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 8),
+                  SizedBox(width: double.infinity, child: actions[i]),
+                ],
             ],
           ),
         ),
@@ -474,10 +541,16 @@ class ExamDialogAction extends StatelessWidget {
             Icon(icon, size: 19, color: AppColors.onFill(background)),
             const SizedBox(width: 8),
           ],
-          Text(
-            label,
-            style: AppTypography.bodyTextLargeSemiBold.copyWith(
-              color: AppColors.onFill(background),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: AppTypography.bodyTextLargeSemiBold.copyWith(
+                  color: AppColors.onFill(background),
+                ),
+              ),
             ),
           ),
         ],
@@ -491,29 +564,55 @@ class ExamDialogGhostAction extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
 
+  /// A light outline — bare text next to a solid button reads as a label,
+  /// not something to tap. Null outlines it exactly when the dialog lays
+  /// its actions out side by side ([ExamDialogShell.actionsInRow]).
+  final bool? outlined;
+
   const ExamDialogGhostAction({
     super.key,
     required this.label,
     required this.onPressed,
+    this.outlined,
   });
 
   @override
   Widget build(BuildContext context) {
+    final outlined = this.outlined ?? _DialogRowScope.inRow(context);
     return TextButton(
       onPressed: onPressed,
       style: TextButton.styleFrom(
         foregroundColor: AppColors.textSecondary,
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        padding: EdgeInsets.symmetric(vertical: outlined ? 15 : 14),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
+          side: outlined
+              ? BorderSide(color: AppColors.dividerLight, width: 1.5)
+              : BorderSide.none,
         ),
       ),
-      child: Text(
-        label,
-        style: AppTypography.bodyTextLargeSemiBold.copyWith(
-          color: AppColors.textSecondary,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          label,
+          maxLines: 1,
+          style: AppTypography.bodyTextLargeSemiBold.copyWith(
+            color: AppColors.textSecondary,
+          ),
         ),
       ),
     );
   }
+}
+
+/// Marks actions laid out side by side by [ExamDialogShell], so a ghost
+/// action can take its outline without every caller having to ask.
+class _DialogRowScope extends InheritedWidget {
+  const _DialogRowScope({required super.child});
+
+  static bool inRow(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_DialogRowScope>() != null;
+
+  @override
+  bool updateShouldNotify(_DialogRowScope oldWidget) => false;
 }

@@ -1,6 +1,5 @@
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/router/app_routes.dart';
-import 'package:nexora/core/theme/app_decorations.dart';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
@@ -12,6 +11,7 @@ import 'package:nexora/core/widgets/custom_text_form_field.dart';
 import 'package:nexora/features/certificate/presentation/certificate_download_action.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/presentation/bloc/my_courses_cubit.dart';
+import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -108,168 +108,228 @@ class _MyCoursesPageState extends State<MyCoursesPage>
     Screen().adaptDeviceScreenSize(context);
     // ignore: unused_local_variable
     final rh = ResponsiveHelper.of(context);
+    final withWallpaper = hasWallpaper(context);
+    // The title row and tabs stay solid white, with or without a
+    // background; only the list below shows the photo.
+    final stripColor = AppColors.white;
     return BlocProvider(
       create: (_) => sl<MyCoursesCubit>()..load(),
-      child: Scaffold(
-        backgroundColor: AppColors.white,
-        body: SafeArea(
-          child: NestedScrollView(
-            // Required for [SliverAppBar.floating]/[snap] to actually drive
-            // the header. Without it NestedScrollView treats a floating bar
-            // as pinned: the title never scrolls away, and the app bar's
-            // `bottom` slides out of sync with the body viewport, which is
-            // what let list cards paint over the tab indicator.
-            floatHeaderSlivers: true,
-            headerSliverBuilder: (context, innerBoxIsScrolled) {
-              return [
-                // Title row — scrolls fully out of view on scroll-down and
-                // snaps back on the first upward flick. It cannot be pinned
-                // here: a pinned SliverAppBar always reserves its toolbar
-                // height, so the title could never hide.
-                SliverAppBar(
-                  backgroundColor: AppColors.white,
-                  surfaceTintColor: AppColors.white,
-                  elevation: 0,
-                  pinned: false,
-                  floating: true,
-                  snap: true,
-                  centerTitle: false,
-                  automaticallyImplyLeading: false,
-                  titleSpacing: Screen.getHorizontalSize(20),
-                  title: Text(
-                    'My Courses',
-                    style: AppTypography.h5SemiBold.copyWith(
-                      color: AppColors.textPrimary,
-                      fontSize: Screen.getFontSizeCapped(18),
-                    ),
-                  ),
-                  actions: [
-                    IconButton(
-                      tooltip: _isSearching ? 'Close search' : 'Search',
-                      onPressed: _toggleSearch,
-                      icon: _isSearching
-                          ? Icon(Icons.close, color: AppColors.textPrimary)
-                          : Image.asset(
-                              AppImages.searchIcon,
-                              width: Screen.getSize(20),
-                              height: Screen.getSize(20),
-                              color: AppColors.textPrimary,
-                            ),
-                    ),
-                    SizedBox(width: Screen.getHorizontalSize(8)),
-                  ],
-                ),
-
-                // Tabs (plus the search field when active) stay pinned to the
-                // top for the whole scroll. Split out of the app bar's
-                // `bottom` so it survives the title collapsing away.
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: _MyCoursesTabHeader(
-                    extent:
-                        (_isSearching ? _searchRowExtent : 0) + _tabRowExtent,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_isSearching)
-                          Padding(
-                            padding: Screen.getPadding(
-                              horizontal: 20,
-                              top: 12,
-                              bottom: 8,
-                            ),
-                            child: _MyCoursesSearchBar(
-                              controller: _searchController,
-                              focusNode: _searchFocusNode,
-                              hintText: 'Search my courses',
-                              onChanged: (_) => _onQueryChanged(),
-                              onClear: () {
-                                _searchController.clear();
-                                _onQueryChanged();
-                              },
-                            ),
-                          ),
-                        Padding(
-                          padding: Screen.getPadding(horizontal: 15),
-                          child: Stack(
-                            children: [
-                              // Divider under the tabs. In dark mode it is
-                              // drawn here, not via [TabBar.dividerColor],
-                              // so it can carry a soft white glow — a flat
-                              // 15%-alpha line disappears on the dark
-                              // scaffold. Painted first so the indicator
-                              // still sits on top of it.
-                              if (AppColors.isDark)
-                                Positioned(
-                                  left: 0,
-                                  right: 0,
-                                  bottom: 0,
-                                  child: Container(
-                                    height: 1,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.alwaysWhite.withValues(
-                                        alpha: 0.35,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: AppColors.alwaysWhite
-                                              .withValues(alpha: 0.25),
-                                          blurRadius: 6,
-                                          spreadRadius: 0.5,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              TabBar(
-                                controller: _tabController,
-                                labelColor: AppColors.primary,
-                                unselectedLabelColor: AppColors.mutedTextPrimary
-                                    .withValues(alpha: 0.5),
-                                labelStyle: AppTypography.bodyTextLargeSemiBold
-                                    .copyWith(
-                                      fontSize: Screen.getFontSizeCapped(15),
-                                    ),
-                                unselectedLabelStyle: AppTypography
-                                    .bodyTextLargeMedium
-                                    .copyWith(
-                                      fontSize: Screen.getFontSizeCapped(15),
-                                    ),
-                                indicatorSize: TabBarIndicatorSize.tab,
-                                indicator: UnderlineTabIndicator(
-                                  borderSide: BorderSide(
-                                    color: AppColors.primary,
-                                    width: 2.5,
-                                  ),
-                                ),
-                                dividerColor: AppColors.isDark
-                                    ? Colors.transparent
-                                    : AppColors.mutedTextPrimary.withValues(
-                                        alpha: 0.15,
-                                      ),
-                                tabs: const [
-                                  Tab(text: 'In Progress'),
-                                  Tab(text: 'Completed'),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ];
-            },
-            // The navbar clearance lives in each tab's list padding rather
-            // than as a sibling spacer — a spacer here would paint a solid
-            // opaque band under the glass navbar instead of letting the
-            // cards scroll beneath it.
-            body: TabBarView(
-              controller: _tabController,
+      // The photo is a background decoration, fixed behind the lists so it
+      // stays put while the course cards scroll over it. Not a Stack
+      // sibling of the NestedScrollView: that wrapping crashed hit-testing.
+      child: WallpaperDecorated(
+        scrimColor: AppColors.white,
+        scrimOpacity: AppColors.isDark ? 0.55 : 0.50,
+        child: Scaffold(
+          backgroundColor: withWallpaper ? Colors.transparent : AppColors.white,
+          // A solid white band the height of the status bar sits above the
+          // list, so the photo doesn't show behind the clock and battery
+          // icons. Read inside the body, where SafeArea itself reads it —
+          // a Column rather than a Stack, which keeps the scroll view
+          // under plain tight constraints.
+          body: Builder(
+            builder: (context) => Column(
               children: [
-                _InProgressTab(query: _query),
-                _CompletedTab(query: _query),
+                Container(
+                  height: MediaQuery.paddingOf(context).top,
+                  width: double.infinity,
+                  color: AppColors.white,
+                ),
+                Expanded(
+                  // The band above already covers the status bar. Drop the
+                  // top inset below it, or the collapsing title bar adds its
+                  // own status-bar padding and doubles the gap.
+                  child: MediaQuery.removePadding(
+                    context: context,
+                    removeTop: true,
+                    child: SafeArea(
+                      top: false,
+                      // The list runs to the screen's bottom edge and scrolls
+                      // under the glass navbar; its own bottom padding keeps
+                      // the last card clear of it.
+                      bottom: false,
+                      child: NestedScrollView(
+                        // Required for [SliverAppBar.floating]/[snap] to actually drive
+                        // the header. Without it NestedScrollView treats a floating bar
+                        // as pinned: the title never scrolls away, and the app bar's
+                        // `bottom` slides out of sync with the body viewport, which is
+                        // what let list cards paint over the tab indicator.
+                        floatHeaderSlivers: true,
+                        headerSliverBuilder: (context, innerBoxIsScrolled) {
+                          return [
+                            // Title row — scrolls fully out of view on scroll-down and
+                            // snaps back on the first upward flick. It cannot be pinned
+                            // here: a pinned SliverAppBar always reserves its toolbar
+                            // height, so the title could never hide.
+                            SliverAppBar(
+                              backgroundColor: stripColor,
+                              surfaceTintColor: Colors.transparent,
+                              elevation: 0,
+                              pinned: false,
+                              floating: true,
+                              snap: true,
+                              centerTitle: false,
+                              automaticallyImplyLeading: false,
+                              titleSpacing: Screen.getHorizontalSize(20),
+                              title: Text(
+                                'My Courses',
+                                style: AppTypography.h5SemiBold.copyWith(
+                                  color: AppColors.textPrimary,
+                                  fontSize: Screen.getFontSizeCapped(18),
+                                ),
+                              ),
+                              actions: [
+                                IconButton(
+                                  tooltip: _isSearching
+                                      ? 'Close search'
+                                      : 'Search',
+                                  onPressed: _toggleSearch,
+                                  icon: _isSearching
+                                      ? Icon(
+                                          Icons.close,
+                                          color: AppColors.textPrimary,
+                                        )
+                                      : Image.asset(
+                                          AppImages.searchIcon,
+                                          width: Screen.getSize(20),
+                                          height: Screen.getSize(20),
+                                          color: AppColors.textPrimary,
+                                        ),
+                                ),
+                                SizedBox(width: Screen.getHorizontalSize(8)),
+                              ],
+                            ),
+
+                            // Tabs (plus the search field when active) stay pinned to the
+                            // top for the whole scroll. Split out of the app bar's
+                            // `bottom` so it survives the title collapsing away.
+                            SliverPersistentHeader(
+                              pinned: true,
+                              delegate: _MyCoursesTabHeader(
+                                color: stripColor,
+                                extent:
+                                    (_isSearching ? _searchRowExtent : 0) +
+                                    _tabRowExtent,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (_isSearching)
+                                      Padding(
+                                        padding: Screen.getPadding(
+                                          horizontal: 20,
+                                          top: 12,
+                                          bottom: 8,
+                                        ),
+                                        child: _MyCoursesSearchBar(
+                                          controller: _searchController,
+                                          focusNode: _searchFocusNode,
+                                          hintText: 'Search my courses',
+                                          onChanged: (_) => _onQueryChanged(),
+                                          onClear: () {
+                                            _searchController.clear();
+                                            _onQueryChanged();
+                                          },
+                                        ),
+                                      ),
+                                    Padding(
+                                      padding: Screen.getPadding(
+                                        horizontal: 15,
+                                      ),
+                                      child: Stack(
+                                        children: [
+                                          // Divider under the tabs. In dark mode it is
+                                          // drawn here, not via [TabBar.dividerColor],
+                                          // so it can carry a soft white glow — a flat
+                                          // 15%-alpha line disappears on the dark
+                                          // scaffold. Painted first so the indicator
+                                          // still sits on top of it.
+                                          if (AppColors.isDark)
+                                            Positioned(
+                                              left: 0,
+                                              right: 0,
+                                              bottom: 0,
+                                              child: Container(
+                                                height: 1,
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.alwaysWhite
+                                                      .withValues(alpha: 0.35),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: AppColors
+                                                          .alwaysWhite
+                                                          .withValues(
+                                                            alpha: 0.25,
+                                                          ),
+                                                      blurRadius: 6,
+                                                      spreadRadius: 0.5,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          TabBar(
+                                            controller: _tabController,
+                                            labelColor: AppColors.primary,
+                                            unselectedLabelColor: AppColors
+                                                .mutedTextPrimary
+                                                .withValues(alpha: 0.5),
+                                            labelStyle: AppTypography
+                                                .bodyTextLargeSemiBold
+                                                .copyWith(
+                                                  fontSize:
+                                                      Screen.getFontSizeCapped(
+                                                        15,
+                                                      ),
+                                                ),
+                                            unselectedLabelStyle: AppTypography
+                                                .bodyTextLargeMedium
+                                                .copyWith(
+                                                  fontSize:
+                                                      Screen.getFontSizeCapped(
+                                                        15,
+                                                      ),
+                                                ),
+                                            indicatorSize:
+                                                TabBarIndicatorSize.tab,
+                                            indicator: UnderlineTabIndicator(
+                                              borderSide: BorderSide(
+                                                color: AppColors.primary,
+                                                width: 2.5,
+                                              ),
+                                            ),
+                                            dividerColor: AppColors.isDark
+                                                ? Colors.transparent
+                                                : AppColors.mutedTextPrimary
+                                                      .withValues(alpha: 0.15),
+                                            tabs: const [
+                                              Tab(text: 'In Progress'),
+                                              Tab(text: 'Completed'),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ];
+                        },
+                        // The navbar clearance lives in each tab's list padding rather
+                        // than as a sibling spacer — a spacer here would paint a solid
+                        // opaque band under the glass navbar instead of letting the
+                        // cards scroll beneath it.
+                        body: TabBarView(
+                          controller: _tabController,
+                          children: [
+                            _InProgressTab(query: _query),
+                            _CompletedTab(query: _query),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -286,7 +346,15 @@ class _MyCoursesTabHeader extends SliverPersistentHeaderDelegate {
   final double extent;
   final Widget child;
 
-  const _MyCoursesTabHeader({required this.extent, required this.child});
+  /// Fill of the strip, decided by the page. Not read here: a delegate's
+  /// build runs during layout, where watching provider state throws.
+  final Color color;
+
+  const _MyCoursesTabHeader({
+    required this.extent,
+    required this.child,
+    required this.color,
+  });
 
   @override
   double get minExtent => extent;
@@ -301,12 +369,14 @@ class _MyCoursesTabHeader extends SliverPersistentHeaderDelegate {
     bool overlapsContent,
   ) {
     // Opaque so list cards scrolling underneath stay hidden.
-    return Container(color: AppColors.white, height: extent, child: child);
+    return Container(color: color, height: extent, child: child);
   }
 
   @override
   bool shouldRebuild(_MyCoursesTabHeader oldDelegate) =>
-      oldDelegate.extent != extent || oldDelegate.child != child;
+      oldDelegate.extent != extent ||
+      oldDelegate.child != child ||
+      oldDelegate.color != color;
 }
 
 class _MyCoursesSearchBar extends StatelessWidget {
@@ -585,69 +655,80 @@ class _CourseCardShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: Screen.getPadding(all: 14),
+      // Clip so the edge lines follow the rounded corners.
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(AppSizes.radiusXL),
-        border: AppDecorations.cardBorder(
-          lightColor: AppColors.mutedTextPrimary.withValues(alpha: 0.15),
-        ),
+        // No outline and no coloured edge: the shadow alone lifts the card,
+        // like the chat tiles. Heavier in dark mode, where a light shadow
+        // can't show.
+        border: Border.all(color: Colors.transparent),
         boxShadow: [
           BoxShadow(
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+            color: AppColors.isDark
+                ? AppColors.black.withValues(alpha: 0.55)
+                : const Color(0xFF64748B).withValues(alpha: 0.20),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CourseCoverImage(
-                url: course.courseImageUrl,
-                width: Screen.getHorizontalSize(100),
-                height: Screen.getVerticalSize(100),
-                borderRadius: BorderRadius.circular(AppSizes.radiusM),
-                fallbackIconSize: Screen.getSize(26),
-              ),
-              SizedBox(width: Screen.getHorizontalSize(14)),
-              Expanded(
-                child: Column(
+          Padding(
+            padding: Screen.getPadding(all: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      course.courseTitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.h5SemiBold.copyWith(
-                        color: AppColors.textPrimary,
-                        fontSize: Screen.getFontSize(14),
-                        height: 1.3,
+                    CourseCoverImage(
+                      url: course.courseImageUrl,
+                      width: Screen.getHorizontalSize(100),
+                      height: Screen.getVerticalSize(100),
+                      borderRadius: BorderRadius.circular(AppSizes.radiusM),
+                      fallbackIconSize: Screen.getSize(26),
+                    ),
+                    SizedBox(width: Screen.getHorizontalSize(14)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            course.courseTitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.h5SemiBold.copyWith(
+                              color: AppColors.textPrimary,
+                              fontSize: Screen.getFontSize(14),
+                              height: 1.3,
+                            ),
+                          ),
+                          if (course.categoryName != null ||
+                              course.contentCount != null) ...[
+                            SizedBox(height: Screen.getVerticalSize(6)),
+                            Text(
+                              _buildSubtitle(course),
+                              style: AppTypography.bodyTextMedium.copyWith(
+                                color: AppColors.mutedTextPrimary,
+                                fontSize: Screen.getFontSize(13),
+                              ),
+                            ),
+                          ],
+                          SizedBox(height: Screen.getVerticalSize(10)),
+                          middle,
+                        ],
                       ),
                     ),
-                    if (course.categoryName != null ||
-                        course.contentCount != null) ...[
-                      SizedBox(height: Screen.getVerticalSize(6)),
-                      Text(
-                        _buildSubtitle(course),
-                        style: AppTypography.bodyTextMedium.copyWith(
-                          color: AppColors.mutedTextPrimary,
-                          fontSize: Screen.getFontSize(13),
-                        ),
-                      ),
-                    ],
-                    SizedBox(height: Screen.getVerticalSize(10)),
-                    middle,
                   ],
                 ),
-              ),
-            ],
+                SizedBox(height: Screen.getVerticalSize(15)),
+                action,
+              ],
+            ),
           ),
-          SizedBox(height: Screen.getVerticalSize(15)),
-          action,
         ],
       ),
     );

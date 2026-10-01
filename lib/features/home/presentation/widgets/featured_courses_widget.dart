@@ -5,6 +5,7 @@ import 'package:nexora/core/utils/utils.dart';
 import 'package:nexora/features/courses/presentation/widgets/course_cover.dart';
 import 'package:nexora/core/widgets/rating_and_review_row_widget.dart';
 import 'package:nexora/core/theme/app_decorations.dart';
+import 'package:nexora/core/widgets/view_all_button.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -68,20 +69,14 @@ class FeaturedCoursesWidget extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: AppTypography.h5SemiBold.copyWith(
-                  color: AppColors.textPrimary,
-                  fontSize: Screen.getFontSizeCapped(20),
+                // Same size and weight as "View All" beside it.
+                style: AppTypography.bodyTextLargeMedium.copyWith(
+                  color: AppColors.primary,
+                  fontSize: Screen.getFontSizeCapped(16),
                 ),
               ),
-              InkWell(
+              ViewAllButton(
                 onTap: () => context.push(viewAllRoute ?? AppRoutes.catalog),
-                child: Text(
-                  "View All",
-                  style: AppTypography.bodyTextLargeMedium.copyWith(
-                    color: AppColors.primary,
-                    fontSize: Screen.getFontSizeCapped(16),
-                  ),
-                ),
               ),
             ],
           ),
@@ -303,7 +298,9 @@ class _AnimatedNewBadgeState extends State<_AnimatedNewBadge>
             ),
             borderRadius: BorderRadius.circular(AppSizes.radiusS),
             border: Border.all(
-              color: AppColors.alwaysWhite.withValues(alpha: 0.6), // Inner shine edge
+              color: AppColors.alwaysWhite.withValues(
+                alpha: 0.6,
+              ), // Inner shine edge
               width: 1,
             ),
             boxShadow: [
@@ -321,7 +318,11 @@ class _AnimatedNewBadgeState extends State<_AnimatedNewBadge>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.star_rounded, color: AppColors.alwaysWhite, size: 12),
+          const Icon(
+            Icons.star_rounded,
+            color: AppColors.alwaysWhite,
+            size: 12,
+          ),
           const SizedBox(width: 4),
           Text(
             'NEW',

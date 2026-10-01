@@ -26,6 +26,9 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final TextStyle? titleStyle;
   final double? titleSpacing;
 
+  /// Height of the bar's main row. Null keeps the standard toolbar height.
+  final double? toolbarHeight;
+
   const CustomAppBar({
     super.key,
     this.title,
@@ -40,6 +43,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.centerTitle = true,
     this.titleStyle,
     this.titleSpacing,
+    this.toolbarHeight,
   });
 
   @override
@@ -55,6 +59,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
       bottom: bottom,
       automaticallyImplyLeading: false,
       titleSpacing: titleSpacing,
+      toolbarHeight: toolbarHeight,
       leading: showBackButton
           ? Center(
               // The PNG asset at AppImages.arrowLeftIcon has decorative
@@ -93,5 +98,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize =>
-      Size.fromHeight(kToolbarHeight + (bottom?.preferredSize.height ?? 0));
+      Size.fromHeight(
+        (toolbarHeight ?? kToolbarHeight) + (bottom?.preferredSize.height ?? 0),
+      );
 }
