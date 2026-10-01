@@ -140,10 +140,8 @@ class _HomePageState extends State<HomePage>
         return state.maybeWhen(
           initial: () => const Scaffold(body: HomeLoadingSkeleton()),
           loading: () => const Scaffold(body: HomeLoadingSkeleton()),
-          loaded: (dashboard) => _buildLoadedScaffold(
-            dashboard,
-            withWallpaper: withWallpaper,
-          ),
+          loaded: (dashboard) =>
+              _buildLoadedScaffold(dashboard, withWallpaper: withWallpaper),
           error: (message) => Scaffold(body: _buildErrorView(message)),
           orElse: () => const Scaffold(body: SizedBox.shrink()),
         );
@@ -1054,14 +1052,14 @@ class _ContinuePurchaseSectionState extends State<_ContinuePurchaseSection> {
                             margin: EdgeInsets.symmetric(
                               horizontal: Screen.getHorizontalSize(3),
                             ),
-                            width: Screen.getHorizontalSize(isActive ? 18 : 5),
-                            height: Screen.getVerticalSize(5),
+                            width: Screen.getHorizontalSize(isActive ? 18 : 6),
+                            height: Screen.getVerticalSize(6),
                             decoration: BoxDecoration(
                               color: isActive
                                   ? AppColors.primary
-                                  : AppColors.primary.withValues(
-                                      alpha: AppColors.isDark ? 0.55 : 0.25,
-                                    ),
+                                  // Dark tint of the theme colour, matching the
+                                  // banner dots, so they show on a white card.
+                                  : AppColors.primary.withValues(alpha: 0.9),
                               borderRadius: BorderRadius.circular(3),
                             ),
                           );

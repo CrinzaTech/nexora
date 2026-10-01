@@ -245,16 +245,16 @@ class _DotsIndicator extends StatelessWidget {
             return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               margin: const EdgeInsets.symmetric(horizontal: 4),
-              height: 5,
-              width: isActive ? 30 : 5,
+              height: 6,
+              width: isActive ? 30 : 6,
               decoration: BoxDecoration(
+                // Both states in the theme colour: the active dash at full
+                // strength, the others a dark tint of it, strong enough to show on a white card.
                 color: isActive
                     ? AppColors.primary
-                    // The light grey is the dark divider colour in dark mode
-                    // — nearly invisible on the dark card. A mid grey there.
-                    : (AppColors.isDark
-                          ? AppColors.textSecondary.withValues(alpha: 0.55)
-                          : AppColors.grey200),
+                    : AppColors.primary.withValues(
+                        alpha: AppColors.isDark ? 0.9 : 0.9,
+                      ),
                 borderRadius: BorderRadius.circular(20),
               ),
             );
