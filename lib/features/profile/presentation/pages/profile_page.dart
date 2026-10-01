@@ -466,7 +466,7 @@ class _ProfilePageState extends State<ProfilePage>
       SnackBar(
         content: Text(message),
         duration: const Duration(seconds: 2),
-        backgroundColor: AppColors.primary,
+        backgroundColor: AppColors.primaryFill,
         behavior: SnackBarBehavior.floating,
       ),
     );

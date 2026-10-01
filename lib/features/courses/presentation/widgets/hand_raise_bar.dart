@@ -74,7 +74,8 @@ class HandRaiseFab extends StatelessWidget {
     if (state.handPhase == HandPhase.queued && position != null) {
       return Badge(
         label: Text('$position'),
-        backgroundColor: AppColors.primary,
+        backgroundColor: AppColors.primaryFill,
+        textColor: AppColors.onPrimary,
         child: fab,
       );
     }

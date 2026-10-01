@@ -166,12 +166,12 @@ class _TextBubble extends StatelessWidget {
     // visually points at the sender. The tail only appears on the
     // first bubble of a sender-run; consecutive bubbles from the same
     // sender get all-rounded corners so the run reads as one unit.
-    // alwaysWhite, not white: the bubble fill is AppColors.primary in
-    // both themes, so its content must not follow the surface token —
-    // that's what rendered the message text dark-on-indigo.
-    final textColor = isMe ? AppColors.alwaysWhite : AppColors.textPrimary;
+    // onPrimary, not white: the bubble fill is AppColors.primary (brand
+    // in light, white in dark), so its content must not follow the
+    // surface token — that's what rendered the message text dark-on-indigo.
+    final textColor = isMe ? AppColors.onPrimary : AppColors.textPrimary;
     final timeColor = isMe
-        ? AppColors.alwaysWhite.withValues(alpha: 0.85)
+        ? AppColors.onPrimary.withValues(alpha: 0.85)
         : AppColors.mutedTextPrimary;
     final radius = Screen.getSize(10);
     final tailRadius = Screen.getSize(3);
@@ -383,7 +383,7 @@ class _FileTile extends StatelessWidget {
       width: math.min(Screen.width * 0.72, 420),
       padding: Screen.getPadding(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: isMe ? AppColors.primary : _incomingBubble,
+        color: isMe ? AppColors.primaryFill : _incomingBubble,
         border: isMe ? null : _incomingBubbleBorder,
         borderRadius: BorderRadius.circular(radius),
         boxShadow: isMe
@@ -406,7 +406,7 @@ class _FileTile extends StatelessWidget {
                 height: Screen.getSize(44),
                 decoration: BoxDecoration(
                   color: isMe
-                      ? AppColors.alwaysWhite.withValues(alpha: 0.15)
+                      ? AppColors.onPrimary.withValues(alpha: 0.15)
                       : _accent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(AppSizes.radiusS),
                 ),
@@ -414,7 +414,7 @@ class _FileTile extends StatelessWidget {
                 child: Text(
                   _extensionLabel,
                   style: AppTypography.bodyTextMedium.copyWith(
-                    color: isMe ? AppColors.alwaysWhite : _accent,
+                    color: isMe ? AppColors.onPrimary : _accent,
                     fontWeight: FontWeight.w800,
                     fontSize: Screen.getFontSize(10),
                     letterSpacing: 0.5,
@@ -432,7 +432,7 @@ class _FileTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                        color: isMe ? AppColors.alwaysWhite : AppColors.textPrimary,
+                        color: isMe ? AppColors.onPrimary : AppColors.textPrimary,
                         fontSize: Screen.getFontSize(14),
                       ),
                     ),
@@ -441,7 +441,7 @@ class _FileTile extends StatelessWidget {
                       _extensionLabel,
                       style: AppTypography.bodyTextMedium.copyWith(
                         color: isMe
-                            ? AppColors.alwaysWhite.withValues(alpha: 0.85)
+                            ? AppColors.onPrimary.withValues(alpha: 0.85)
                             : AppColors.mutedTextPrimary,
                         fontWeight: FontWeight.w600,
                         fontSize: Screen.getFontSize(12),
@@ -459,7 +459,7 @@ class _FileTile extends StatelessWidget {
             child: _BubbleTimestamp(
               time: message.createdAt,
               color: isMe
-                  ? AppColors.alwaysWhite.withValues(alpha: 0.7)
+                  ? AppColors.onPrimary.withValues(alpha: 0.7)
                   : AppColors.mutedTextPrimary,
             ),
           ),
@@ -478,10 +478,10 @@ class _ReplyPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tint = tintLight
-        ? AppColors.alwaysWhite.withValues(alpha: 0.25)
+        ? AppColors.onPrimary.withValues(alpha: 0.25)
         : AppColors.primary.withValues(alpha: 0.12);
     final fg = tintLight
-        ? AppColors.alwaysWhite.withValues(alpha: 0.9)
+        ? AppColors.onPrimary.withValues(alpha: 0.9)
         : AppColors.textPrimary;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),

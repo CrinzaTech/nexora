@@ -1,4 +1,5 @@
 import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/core/config/payment_policy.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_theme.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
@@ -155,7 +156,7 @@ class _ContinueCourseCard extends StatelessWidget {
                         '${AppRoutes.courseDetail}?courseId=${course.courseId}',
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: AppColors.primaryFill,
                         foregroundColor: AppColors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
@@ -166,9 +167,13 @@ class _ContinueCourseCard extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        course.isCourseFree ? 'Get Free Access' : 'Buy Now',
+                        course.isCourseFree
+                            ? 'Get Free Access'
+                            : (PaymentPolicy.allowsPurchases
+                                ? 'Buy Now'
+                                : 'View'),
                         style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                          color: AppColors.alwaysWhite,
+                          color: AppColors.onPrimary,
                           fontSize: Screen.getFontSize(14),
                         ),
                       ),

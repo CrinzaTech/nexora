@@ -30,8 +30,8 @@ class HomeLoadingSkeleton extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  AppColors.primary,
-                  AppColors.primary.withValues(alpha: 0.85),
+                  AppColors.brandPrimary,
+                  AppColors.brandPrimary.withValues(alpha: 0.85),
                 ],
               ),
             ),

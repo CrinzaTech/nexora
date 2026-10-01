@@ -485,12 +485,12 @@ class _ExamResultViewState extends State<ExamResultView> {
         label: Text(
           'Reattempt Exam',
           style: AppTypography.bodyTextLargeSemiBold.copyWith(
-            color: AppColors.alwaysWhite,
+            color: AppColors.onPrimary,
           ),
         ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.alwaysWhite,
+          backgroundColor: AppColors.primaryFill,
+          foregroundColor: AppColors.onPrimary,
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.radiusCircle),

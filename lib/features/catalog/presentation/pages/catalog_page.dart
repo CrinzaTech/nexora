@@ -420,12 +420,12 @@ class _CatalogViewState extends State<CatalogView> {
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? AppColors.primary
+                    ? AppColors.primaryFill
                     : AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(50),
                 border: Border.all(
                   color: isSelected
-                      ? AppColors.primary
+                      ? AppColors.primaryFill
                       : AppColors.primary.withValues(alpha: 0.25),
                   width: 1,
                 ),
@@ -434,7 +434,7 @@ class _CatalogViewState extends State<CatalogView> {
               child: Text(
                 category.categoryName,
                 style: AppTypography.bodyTextSemiBold.copyWith(
-                  color: isSelected ? AppColors.alwaysWhite : AppColors.primary,
+                  color: isSelected ? AppColors.onPrimary : AppColors.primary,
                   fontSize: Screen.getFontSize(13),
                 ),
               ),

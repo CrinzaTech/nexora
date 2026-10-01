@@ -70,7 +70,7 @@ class _LiveClassSpeedDialState extends State<LiveClassSpeedDial>
   Widget _trigger() {
     return FloatingActionButton(
       heroTag: widget.heroTag,
-      backgroundColor: AppColors.primary,
+      backgroundColor: AppColors.primaryFill,
       foregroundColor: AppColors.white,
       tooltip: _open ? 'Close menu' : 'Class controls',
       onPressed: _toggle,

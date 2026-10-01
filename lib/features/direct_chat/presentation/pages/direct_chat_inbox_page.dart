@@ -221,8 +221,8 @@ class _DirectChatInboxViewState extends State<_DirectChatInboxView> {
               }
               return FloatingActionButton(
                 onPressed: () => _openStaffPicker(directory),
-                backgroundColor: AppColors.primary,
-                foregroundColor: AppColors.alwaysWhite,
+                backgroundColor: AppColors.primaryFill,
+                foregroundColor: AppColors.onPrimary,
                 tooltip: 'New chat',
                 child: const Icon(Icons.edit_outlined),
               );

@@ -496,15 +496,15 @@ class _ExamPaperViewState extends State<ExamPaperView> {
     final textWidget = Text(
       label,
       style: AppTypography.bodyTextLargeSemiBold.copyWith(
-        color: AppColors.alwaysWhite,
+        color: AppColors.onPrimary,
       ),
     );
-    final iconWidget = Icon(icon, size: 20, color: AppColors.alwaysWhite);
+    final iconWidget = Icon(icon, size: 20, color: AppColors.onPrimary);
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.alwaysWhite,
+        backgroundColor: AppColors.primaryFill,
+        foregroundColor: AppColors.onPrimary,
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusCircle),

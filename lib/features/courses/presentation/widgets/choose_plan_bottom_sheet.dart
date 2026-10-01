@@ -409,13 +409,13 @@ class _PlanCard extends StatelessWidget {
             child: Container(
               padding: Screen.getPadding(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: AppColors.primary,
+                color: AppColors.primaryFill,
                 borderRadius: BorderRadius.circular(AppSizes.radiusXL),
               ),
               child: Text(
                 'Recommended',
                 style: AppTypography.bodyTextMedium.copyWith(
-                  color: AppColors.alwaysWhite,
+                  color: AppColors.onPrimary,
                   fontWeight: FontWeight.w600,
                   fontSize: Screen.getFontSize(12),
                 ),
@@ -441,18 +441,18 @@ class _Radio extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(
-          color: selected ? AppColors.primary : AppColors.mutedTextPrimary,
+          color: selected ? AppColors.primaryFill : AppColors.mutedTextPrimary,
           width: 2,
         ),
-        color: selected ? AppColors.primary : Colors.transparent,
+        color: selected ? AppColors.primaryFill : Colors.transparent,
       ),
       alignment: Alignment.center,
       child: selected
           ? Container(
               width: size * 0.45,
               height: size * 0.45,
-              decoration: const BoxDecoration(
-                color: AppColors.alwaysWhite,
+              decoration: BoxDecoration(
+                color: AppColors.onPrimary,
                 shape: BoxShape.circle,
               ),
             )

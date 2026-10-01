@@ -218,7 +218,7 @@ class _ExamCalculatorState extends State<ExamCalculator> {
       left: 12,
       bottom: 80,
       child: Material(
-        color: AppColors.primary,
+        color: AppColors.primaryFill,
         elevation: 4,
         borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
         child: InkWell(
@@ -232,13 +232,13 @@ class _ExamCalculatorState extends State<ExamCalculator> {
                 Icon(
                   Icons.calculate_outlined,
                   size: 18,
-                  color: AppColors.alwaysWhite,
+                  color: AppColors.onPrimary,
                 ),
                 const SizedBox(width: 6),
                 Text(
                   'Calculator',
                   style: AppTypography.bodyTextSmallSemiBold.copyWith(
-                    color: AppColors.alwaysWhite,
+                    color: AppColors.onPrimary,
                   ),
                 ),
               ],
@@ -310,13 +310,13 @@ class _ExamCalculatorState extends State<ExamCalculator> {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.primary,
+                    color: AppColors.primaryFill,
                     borderRadius: BorderRadius.circular(AppSizes.radiusS),
                   ),
                   child: Text(
                     _angleUnit.label,
                     style: AppTypography.bodyTextXtraSmallBold.copyWith(
-                      color: AppColors.alwaysWhite,
+                      color: AppColors.onPrimary,
                     ),
                   ),
                 ),
@@ -405,8 +405,8 @@ class _ExamCalculatorState extends State<ExamCalculator> {
     final Color foreground;
     switch (key.kind) {
       case _KeyKind.primary:
-        background = AppColors.primary;
-        foreground = AppColors.alwaysWhite;
+        background = AppColors.primaryFill;
+        foreground = AppColors.onPrimary;
       case _KeyKind.operator:
         background = AppColors.primary.withValues(alpha: 0.10);
         foreground = AppColors.primary;

@@ -508,7 +508,7 @@ class _ActionButton extends StatelessWidget {
         padding: Screen.getPadding(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: filled
-              ? AppColors.primary
+              ? AppColors.primaryFill
               : AppColors.primary.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(999),
           border: filled
@@ -521,13 +521,13 @@ class _ActionButton extends StatelessWidget {
             Icon(
               icon,
               size: Screen.getSize(15),
-              color: filled ? AppColors.alwaysWhite : AppColors.primary,
+              color: filled ? AppColors.onPrimary : AppColors.primary,
             ),
             SizedBox(width: Screen.getHorizontalSize(6)),
             Text(
               label,
               style: AppTypography.bodyTextSemiBold.copyWith(
-                color: filled ? AppColors.alwaysWhite : AppColors.primary,
+                color: filled ? AppColors.onPrimary : AppColors.primary,
                 fontSize: Screen.getFontSize(12),
               ),
             ),

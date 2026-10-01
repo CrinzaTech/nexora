@@ -156,14 +156,14 @@ class _UnreadPill extends StatelessWidget {
         vertical: Screen.getVerticalSize(2),
       ),
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        color: AppColors.primaryFill,
         borderRadius: BorderRadius.circular(Screen.getSize(10)),
       ),
       alignment: Alignment.center,
       child: Text(
         label,
         style: AppTypography.bodyTextSmallMedium.copyWith(
-          color: AppColors.alwaysWhite,
+          color: AppColors.onPrimary,
           fontWeight: FontWeight.w700,
           fontSize: Screen.getFontSize(11),
         ),

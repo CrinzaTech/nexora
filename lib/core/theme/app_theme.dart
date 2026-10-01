@@ -48,8 +48,14 @@ class AppTheme {
       useMaterial3: true,
       brightness: brightness,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: AppColors.primary,
+        seedColor: AppColors.brandPrimary,
         brightness: brightness,
+        // The seed only drives the tonal roles; primary itself is pinned
+        // to the theme accent so Material's own widgets (spinners,
+        // cursors, focus rings) go off-white in dark mode along with
+        // everything painted from AppColors.
+        primary: AppColors.primary,
+        onPrimary: AppColors.onFill(AppColors.primary),
         // Pin the surfaces Material derives from the seed to the brand's
         // own canvas — otherwise M3's tonal palette tints every sheet,
         // menu, and dialog indigo instead of the neutral slate the rest

@@ -146,7 +146,7 @@ class _SecurityBlockScreen extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: onRecheck,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
+                      backgroundColor: AppColors.primaryFill,
                       foregroundColor: AppColors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(
@@ -157,7 +157,7 @@ class _SecurityBlockScreen extends StatelessWidget {
                     child: Text(
                       'Re-check',
                       style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                        color: AppColors.alwaysWhite,
+                        color: AppColors.onPrimary,
                         fontSize: Screen.getFontSize(15),
                       ),
                     ),

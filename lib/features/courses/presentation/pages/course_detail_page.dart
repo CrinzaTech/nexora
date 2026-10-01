@@ -1,4 +1,5 @@
 import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/core/config/payment_policy.dart';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
@@ -486,6 +487,8 @@ class _PriceRow extends StatelessWidget {
     // "Purchased" pill — the user already paid and the bottom bar handles
     // resume/continue actions.
     if (course.isPurchased) return const _PurchasedBadge();
+    // No prices at all where the platform can't sell (iOS).
+    if (!PaymentPolicy.allowsPurchases) return const SizedBox.shrink();
     // Multi-tier courses defer pricing to the "Choose Plan" sheet —
     // showing just `primaryPricing` up top would mislead the user
     // into thinking that's the only option. The CTA below renders
@@ -543,6 +546,11 @@ class _ExpiryDetailsLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final raw = course.expiryDetails?.trim();
     if (raw == null || raw.isEmpty) return const SizedBox.shrink();
+    // Before purchase this line describes what a plan would grant —
+    // sales copy, which iOS doesn't show (see PaymentPolicy).
+    if (!course.isPurchased && !PaymentPolicy.allowsPurchases) {
+      return const SizedBox.shrink();
+    }
     return Padding(
       padding: EdgeInsets.only(top: Screen.getVerticalSize(10)),
       child: Row(
@@ -942,6 +950,16 @@ class _CourseDetailBottomBar extends StatelessWidget {
     // Purchased users only see the bar on the Reviews tab.
     if (course.isPurchased && !isOnReviewsTab) return const SizedBox.shrink();
 
+    // iOS can't sell (see PaymentPolicy): a paid, unpurchased course has
+    // no action to offer here, so the bar goes. Free courses keep their
+    // "Get Free Access" — nothing is being sold.
+    final isFree = course.isCourseFree ||
+        (course.pricing.isNotEmpty &&
+            course.pricing.every((t) => t.calculatedFinalPrice <= 0));
+    if (!course.isPurchased && !isFree && !PaymentPolicy.allowsPurchases) {
+      return const SizedBox.shrink();
+    }
+
     final rh = ResponsiveHelper.of(context);
 
     return Container(
@@ -1134,13 +1152,13 @@ class _ReviewAvatar extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: AppColors.primary,
+        color: AppColors.primaryFill,
       ),
       alignment: Alignment.center,
       child: Text(
         initials,
         style: AppTypography.bodyTextSemiBold.copyWith(
-          color: AppColors.alwaysWhite,
+          color: AppColors.onPrimary,
           fontSize: Screen.getFontSize(14),
         ),
       ),

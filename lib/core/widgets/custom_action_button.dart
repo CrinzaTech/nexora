@@ -54,13 +54,29 @@ class CustomActionButtonTone {
 
   /// Default brand button — same look the button has shipped with since
   /// the neumorphism polish (purple/indigo with light-purple glow).
-  /// `static final` (not `const`) because the background pulls from
-  /// brand-driven [AppColors.primary], which is itself runtime-init.
-  static final CustomActionButtonTone primary = CustomActionButtonTone(
-    background: AppColors.primary,
-    borderGradient: const Color(0xFFAFAAFF),
-    innerShadowTop: const Color(0xFFB6B2FF),
-  );
+  ///
+  /// A getter rather than `static final`: the fill is theme-dependent, and
+  /// a field would freeze whichever theme was active the first time it was
+  /// read. The dark variant keeps the brand face with its white label,
+  /// but takes the off-white accent for the rim and a brand-tinted white
+  /// for the top glow: the light tone's lavender tints are tuned to the
+  /// default indigo, and a dark brand on a dark canvas needs the rim to
+  /// mark where the button ends.
+  static CustomActionButtonTone get primary => AppColors.isDark
+      ? CustomActionButtonTone(
+          background: AppColors.primaryFill,
+          borderGradient: AppColors.primary,
+          innerShadowTop: Color.lerp(
+            AppColors.primaryFill,
+            AppColors.alwaysWhite,
+            0.45,
+          )!,
+        )
+      : CustomActionButtonTone(
+          background: AppColors.primary,
+          borderGradient: const Color(0xFFAFAAFF),
+          innerShadowTop: const Color(0xFFB6B2FF),
+        );
 
   /// Success / confirm — green (used for "Rewatch", "Mark complete").
   /// Geometry + colours from the Figma success-button spec:
@@ -223,7 +239,7 @@ class CustomActionButton extends StatelessWidget {
                     // filled tone, so it must not follow the surface.
                     color: isWhiteThemed || isOutlined
                         ? AppColors.primary
-                        : AppColors.alwaysWhite,
+                        : AppColors.onFill(bgColor),
                   ),
                 ),
                 onTap: onTap,
@@ -240,9 +256,11 @@ class CustomActionButton extends StatelessWidget {
                           minFontSize: 12,
                           style: AppTypography.bodyTextLargeSemiBold.copyWith(
                             color: isFormFilled
-                                ? AppColors.alwaysWhite
+                                ? AppColors.onFill(bgColor)
                                 : (disabledTextColor ??
-                                      AppColors.alwaysWhite.withValues(alpha: 0.7)),
+                                      AppColors.onFill(
+                                        bgColor,
+                                      ).withValues(alpha: 0.7)),
                             fontSize: Screen.getFontSizeCapped(16),
                             height: 1.0,
                           ),

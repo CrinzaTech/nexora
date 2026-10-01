@@ -530,22 +530,22 @@ class _ExamPracticeViewState extends State<ExamPracticeView> {
       child: ElevatedButton(
         onPressed: widget.checking ? null : onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
+          backgroundColor: AppColors.primaryFill,
           foregroundColor: AppColors.white,
-          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.5),
+          disabledBackgroundColor: AppColors.primaryFill.withValues(alpha: 0.5),
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
           ),
         ),
         child: widget.checking
-            ? const SizedBox(
+            ? SizedBox(
                 width: 22,
                 height: 22,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.4,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    AppColors.alwaysWhite,
+                    AppColors.onPrimary,
                   ),
                 ),
               )
@@ -556,11 +556,11 @@ class _ExamPracticeViewState extends State<ExamPracticeView> {
                   Text(
                     label,
                     style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                      color: AppColors.alwaysWhite,
+                      color: AppColors.onPrimary,
                     ),
                   ),
                   const SizedBox(width: 6),
-                  Icon(icon, size: 20, color: AppColors.alwaysWhite),
+                  Icon(icon, size: 20, color: AppColors.onPrimary),
                 ],
               ),
       ),
@@ -639,8 +639,8 @@ class ExamPracticeSummaryView extends StatelessWidget {
                 icon: const Icon(Icons.replay_rounded, size: 20),
                 label: const Text('Practice again'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.alwaysWhite,
+                  backgroundColor: AppColors.primaryFill,
+                  foregroundColor: AppColors.onPrimary,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppSizes.radiusCircle),

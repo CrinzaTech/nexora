@@ -189,7 +189,8 @@ class _Cover extends StatelessWidget {
                 if (duration.isNotEmpty)
                   _GlassChip(icon: Icons.timelapse_rounded, label: duration),
                 const Spacer(),
-                _PricePill(webinar: webinar),
+                if (WebinarFormatting.showsPrice(webinar))
+                  _PricePill(webinar: webinar),
               ],
             ),
           ),
@@ -596,8 +597,10 @@ class _CoverFallback extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColors.primary.withValues(alpha: 0.92),
-            AppColors.secondary.withValues(alpha: 0.92),
+            // Brand, not the theme accent: this is a thumbnail stand-in
+            // carrying a white glyph, so it must stay coloured in dark mode.
+            AppColors.brandPrimary.withValues(alpha: 0.92),
+            AppColors.brandSecondary.withValues(alpha: 0.92),
           ],
         ),
       ),

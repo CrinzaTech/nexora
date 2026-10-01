@@ -389,8 +389,8 @@ class _SendButtonState extends State<_SendButton>
                   gradient: widget.enabled
                       ? LinearGradient(
                           colors: [
-                            AppColors.primary,
-                            AppColors.primary.withValues(alpha: 0.85),
+                            AppColors.primaryFill,
+                            AppColors.primaryFill.withValues(alpha: 0.85),
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
@@ -428,7 +428,7 @@ class _SendButtonState extends State<_SendButton>
                           child: Icon(
                             Icons.send_rounded,
                             color: widget.enabled
-                                ? AppColors.alwaysWhite
+                                ? AppColors.onPrimary
                                 : AppColors.primary.withValues(alpha: 0.6),
                             size: Screen.getSize(20),
                           ),

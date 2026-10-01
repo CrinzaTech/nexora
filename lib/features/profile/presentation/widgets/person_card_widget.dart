@@ -389,8 +389,8 @@ class _Avatar extends StatelessWidget {
             ? null
             : LinearGradient(
                 colors: [
-                  AppColors.primary.withValues(alpha: 0.6),
-                  AppColors.primary.withValues(alpha: 0.3),
+                  AppColors.primaryFill.withValues(alpha: 0.6),
+                  AppColors.primaryFill.withValues(alpha: 0.3),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -402,7 +402,7 @@ class _Avatar extends StatelessWidget {
           : Text(
               Utils.getInitials(profile?.name ?? '?'),
               style: AppTypography.h6SemiBold.copyWith(
-                color: AppColors.alwaysWhite,
+                color: AppColors.onPrimary,
                 // Proportional too, for the same reason as the badge.
                 fontSize: edge * 0.36,
                 fontWeight: FontWeight.w700,
@@ -430,7 +430,7 @@ class _Avatar extends StatelessWidget {
               height: badge,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.primary,
+                color: AppColors.primaryFill,
                 // A ring in the card's own surface colour, so the badge
                 // reads as sitting on top of the photo rather than being
                 // part of it.
@@ -440,7 +440,7 @@ class _Avatar extends StatelessWidget {
               child: Icon(
                 Icons.edit_rounded,
                 size: badge * 0.52,
-                color: AppColors.alwaysWhite,
+                color: AppColors.onPrimary,
               ),
             ),
           ),

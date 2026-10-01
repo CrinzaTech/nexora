@@ -1142,22 +1142,22 @@ class _ExamQuizViewState extends State<ExamQuizView> {
       child: ElevatedButton(
         onPressed: enabled && !submitting ? onPressed : null,
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
+          backgroundColor: AppColors.primaryFill,
           foregroundColor: AppColors.white,
-          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.5),
+          disabledBackgroundColor: AppColors.primaryFill.withValues(alpha: 0.5),
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
           ),
         ),
         child: submitting
-            ? const SizedBox(
+            ? SizedBox(
                 width: 22,
                 height: 22,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.4,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    AppColors.alwaysWhite,
+                    AppColors.onPrimary,
                   ),
                 ),
               )
@@ -1168,11 +1168,11 @@ class _ExamQuizViewState extends State<ExamQuizView> {
                   Text(
                     label,
                     style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                      color: AppColors.alwaysWhite,
+                      color: AppColors.onPrimary,
                     ),
                   ),
                   const SizedBox(width: 6),
-                  Icon(icon, size: 20, color: AppColors.alwaysWhite),
+                  Icon(icon, size: 20, color: AppColors.onPrimary),
                 ],
               ),
       ),

@@ -11,8 +11,8 @@ import 'package:nexora/features/home/data/models/home_model.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-/// Soft white halo behind tile labels drawn in [AppColors.primaryContent] on
-/// the dark canvas, so the purple text reads clearly. Kept wide and faint (no
+/// Soft white halo behind tile labels drawn in [AppColors.primary] (white)
+/// on the dark canvas, so the text reads clearly. Kept wide and faint (no
 /// offset, low alpha) — a tight, strong glow thickens the letterforms and
 /// makes the labels look bolded. Null in light mode.
 List<Shadow>? _tileLabelGlow() => AppColors.isDark
@@ -1057,12 +1057,9 @@ class _DefaultCard extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
-          // primaryContent, not primary: on a white page they are the same
-          // colour, and on the dark canvas this is the variant lifted far
-          // enough to stay legible. The dark-mode glow is deliberately faint
-          // — see [_tileLabelGlow].
+          // The dark-mode glow is deliberately faint — see [_tileLabelGlow].
           style: AppTypography.bodyTextLargeSemiBold.copyWith(
-            color: AppColors.primaryContent,
+            color: AppColors.primary,
             fontSize: metrics.fontSize,
             shadows: _tileLabelGlow(),
           ),
@@ -1244,7 +1241,7 @@ class _DefaultCard extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                              color: AppColors.primaryContent,
+                              color: AppColors.primary,
                               fontSize: rh.isLargeScreen
                                   ? rh.cappedFontSize(isFull ? 18 : 16)
                                   : Screen.getFontSizeCapped(isFull ? 16 : 13),
@@ -1711,7 +1708,7 @@ class _FilledCardState extends State<_FilledCard>
             // the theme-aware token is the right call here — the reverse of
             // the rule that applies to text drawn *on* the card.
             style: AppTypography.bodyTextLargeSemiBold.copyWith(
-              color: AppColors.primaryContent,
+              color: AppColors.primary,
               fontSize: metrics.fontSize,
               shadows: _tileLabelGlow(),
             ),

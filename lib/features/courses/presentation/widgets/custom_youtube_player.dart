@@ -797,10 +797,10 @@ class _CustomYoutubePlayerState extends State<CustomYoutubePlayer>
                   constraints: const BoxConstraints(minHeight: 52),
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   decoration: BoxDecoration(
-                    color: isPlaying ? _kSurfaceStrong : AppColors.primary,
+                    color: isPlaying ? _kSurfaceStrong : AppColors.primaryFill,
                     borderRadius: AppSizes.borderRadiusM,
                     border: Border.all(
-                      color: isPlaying ? _kHairline : AppColors.primary,
+                      color: isPlaying ? _kHairline : AppColors.primaryFill,
                     ),
                     boxShadow: isPlaying
                         ? const []
@@ -819,7 +819,7 @@ class _CustomYoutubePlayerState extends State<CustomYoutubePlayer>
                         isPlaying
                             ? Icons.pause_rounded
                             : Icons.play_arrow_rounded,
-                        color: AppColors.alwaysWhite,
+                        color: isPlaying ? AppColors.alwaysWhite : AppColors.onPrimary,
                         size: AppSizes.iconM,
                       ),
                       const SizedBox(width: 6),
@@ -828,7 +828,7 @@ class _CustomYoutubePlayerState extends State<CustomYoutubePlayer>
                         style: _chrome(
                           AppTypography.buttonMedium,
                           14,
-                          AppColors.alwaysWhite,
+                          isPlaying ? AppColors.alwaysWhite : AppColors.onPrimary,
                         ),
                       ),
                     ],

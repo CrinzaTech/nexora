@@ -205,7 +205,7 @@ class ScheduledContentDialog extends StatelessWidget {
                       height: Screen.getVerticalSize(48),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
+                        color: AppColors.primaryFill,
                         borderRadius: BorderRadius.circular(50),
                         boxShadow: [
                           BoxShadow(
@@ -218,7 +218,7 @@ class ScheduledContentDialog extends StatelessWidget {
                       child: Text(
                         'Got It',
                         style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                          color: AppColors.alwaysWhite,
+                          color: AppColors.onPrimary,
                           fontSize: Screen.getFontSize(14),
                         ),
                       ),

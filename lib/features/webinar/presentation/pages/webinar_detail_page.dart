@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 
+import 'package:nexora/core/config/payment_policy.dart';
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_colors.dart';
@@ -280,6 +281,7 @@ class _PriceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final original = webinar.originalPrice;
+    if (!WebinarFormatting.showsPrice(webinar)) return const SizedBox.shrink();
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -771,7 +773,11 @@ class _JoinBarState extends State<_JoinBar> {
   @override
   Widget build(BuildContext context) {
     final webinar = widget.webinar;
-    final canJoin = webinar.canJoin;
+    // A paid seat can't be sold on iOS (see PaymentPolicy): the button
+    // stays, disabled, and says the webinar isn't available.
+    final blockedPurchase =
+        webinar.needsPayment && !PaymentPolicy.allowsPurchases;
+    final canJoin = webinar.canJoin && !blockedPurchase;
     final shareLink = webinar.shareLink;
 
     return BlocConsumer<WebinarCheckoutCubit, WebinarCheckoutState>(
@@ -860,7 +866,9 @@ class _JoinBarState extends State<_JoinBar> {
                     isFormFilled: canJoin && !busy,
                     name: busy
                         ? _busyLabel(checkout)
-                        : _joinLabel(webinar),
+                        : blockedPurchase
+                            ? 'Not available now'
+                            : _joinLabel(webinar),
                     shouldAnimate: false,
                     tone: webinar.isLive
                         ? CustomActionButtonTone.error
@@ -871,7 +879,7 @@ class _JoinBarState extends State<_JoinBar> {
                       ),
                       child: Icon(
                         _joinIcon(webinar),
-                        color: AppColors.alwaysWhite,
+                        color: webinar.isLive ? AppColors.alwaysWhite : AppColors.onPrimary,
                         size: Screen.getSize(20),
                       ),
                     ),

@@ -167,7 +167,7 @@ class _SwipeToPayButtonState extends State<SwipeToPayButton>
                         width: thumbSize,
                         height: thumbSize,
                         decoration: BoxDecoration(
-                          color: AppColors.primary,
+                          color: AppColors.primaryFill,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
@@ -180,13 +180,13 @@ class _SwipeToPayButtonState extends State<SwipeToPayButton>
                         child: Center(
                           child:
                               _isCompleted || _animationController.value == 1.0
-                              ? const Icon(
+                              ? Icon(
                                   Icons.check_rounded,
-                                  color: AppColors.alwaysWhite,
+                                  color: AppColors.onPrimary,
                                 )
                               : Icon(
                                   Icons.keyboard_double_arrow_right_rounded,
-                                  color: AppColors.alwaysWhite,
+                                  color: AppColors.onPrimary,
                                   size: Screen.getSize(24),
                                 ),
                         ),

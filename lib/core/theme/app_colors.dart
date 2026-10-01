@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import 'branding_config.dart';
@@ -56,70 +54,62 @@ class AppColors {
   static Color _pick(Color light, Color dark) => isDark ? dark : light;
 
   // ============================================
-  // CONTRAST — keeping a fixed brand colour legible
-  // ============================================
-
-  /// WCAG 2.1 contrast ratio between two opaque colours, 1.0 → 21.0.
-  ///
-  /// AA wants 4.5 for body text, 3.0 for large text and for graphics
-  /// such as icon glyphs and focus rings.
-  static double contrastRatio(Color a, Color b) {
-    final la = a.computeLuminance();
-    final lb = b.computeLuminance();
-    final hi = math.max(la, lb);
-    final lo = math.min(la, lb);
-    return (hi + 0.05) / (lo + 0.05);
-  }
-
-  /// [fg] lifted until it clears [target] contrast against [bg].
-  ///
-  /// Only the HSL lightness moves — hue and saturation are left alone so
-  /// the result still reads as the same brand colour rather than an
-  /// unrelated pastel. Returns [fg] untouched when it already passes,
-  /// and bottoms out at pure white rather than looping forever.
-  ///
-  /// Deliberately one-directional: it lightens. That is what a dark
-  /// surface needs, and every caller here is a foreground on dark.
-  static Color legibleOn(Color fg, Color bg, {double target = 4.5}) {
-    if (contrastRatio(fg, bg) >= target) return fg;
-    final hsl = HSLColor.fromColor(fg);
-    for (double l = hsl.lightness; l < 1.0; l += 0.02) {
-      final candidate = hsl.withLightness(l).toColor();
-      if (contrastRatio(candidate, bg) >= target) return candidate;
-    }
-    return alwaysWhite;
-  }
-
-  // ============================================
   // PRIMARY COLORS — brand-driven via BrandingConfig
   // ============================================
-  static final Color primary = currentBranding.primary;
 
-  /// Brand primary, safe to use as a **foreground** — an icon tint, a
-  /// label, a link, a focus ring — on the active surface.
-  ///
-  /// Unlike every neutral token here, [primary] is a single fixed brand
-  /// value with no dark half, because it also serves as a *background*
-  /// (filled buttons) where it must stay exactly on-brand. That leaves
-  /// foreground uses stranded on a near-black surface: the default
-  /// indigo lands at 3.99:1 against `darkSurface`, and an org whose
-  /// brand colour is genuinely dark — a deep navy, say — lands near
-  /// 1.4:1, which is invisible.
-  ///
-  /// Rather than hand-maintaining a second brand token per org, this
-  /// lifts the primary just far enough to clear AA for small text. Light
-  /// mode returns [primary] untouched: a brand colour chosen to work on
-  /// a white page already has the contrast it needs.
-  static Color get primaryContent =>
-      isDark ? (_primaryContentDark ??= legibleOn(primary, white)) : primary;
+  /// The client's brand colour, exactly as configured — the same in both
+  /// themes. Reach for this only where the brand itself must show through
+  /// regardless of theme: the header gradient and the surfaces mirroring
+  /// it, which carry their own white content.
+  static Color get brandPrimary => currentBranding.primary;
 
-  /// Memoised because the dark surface it is measured against is a
-  /// compile-time constant, so the search only ever needs running once.
-  static Color? _primaryContentDark;
+  /// Theme accent: the brand colour in light mode, a soft off-white in
+  /// dark mode.
+  ///
+  /// Clients pick their own brand colour, and a genuinely dark one — a
+  /// deep navy, say — lands near 1.4:1 against the dark surface, which is
+  /// invisible. Rather than nudging each brand towards legibility, dark
+  /// mode drops the brand from foregrounds — icons, labels, borders,
+  /// indicators, tints — and uses `currentBranding.darkAccent`, so every
+  /// client renders the same way.
+  ///
+  /// Solid fills (buttons, badges, selected chips) keep the brand: use
+  /// [primaryFill] for those, with [onPrimary] content on top.
+  static Color get primary =>
+      isDark ? currentBranding.darkAccent : brandPrimary;
+
+  /// Solid fill of a primary button, badge or selected chip — the brand
+  /// colour in both themes. A dark brand stays legible here because its
+  /// content is white ([onPrimary]), unlike a dark brand used as text.
+  static Color get primaryFill => brandPrimary;
+
+  /// Content painted on a solid [primaryFill] — button labels, icons on
+  /// badges, the initials in an avatar disc. White in both themes.
+  static Color get onPrimary => alwaysWhite;
+
+  /// Content painted on a solid [fill] that may not be the brand — e.g. a
+  /// button whose colour is a parameter, or a tile that swaps to a
+  /// green/red verdict colour.
+  ///
+  /// White, except on a light fill in dark mode (such as the off-white
+  /// [primary]), which takes the dark canvas colour instead. Light mode
+  /// always answers white, exactly as before.
+  static Color onFill(Color fill) =>
+      isDark && fill.computeLuminance() > 0.5
+      ? currentBranding.darkScaffold
+      : alwaysWhite;
+
   // static final Color primaryLight = currentBranding.primaryLight;
   // static final Color primaryDark = currentBranding.primaryDark;
 
-  static final Color secondary = currentBranding.secondary;
+  /// The client's secondary brand colour, exactly as configured — see
+  /// [brandPrimary].
+  static Color get brandSecondary => currentBranding.secondary;
+
+  /// Secondary accent: the brand colour in light mode, the same off-white
+  /// as [primary] in dark mode, for the same reason.
+  static Color get secondary =>
+      isDark ? currentBranding.darkAccent : brandSecondary;
   // static final Color secondaryLight = currentBranding.secondaryLight;
   // static final Color secondaryDark = currentBranding.secondaryDark;
 
@@ -257,8 +247,12 @@ class AppColors {
   // GRADIENTS
   // ============================================
   // Brand-derived gradients are `static final` rather than `const`
-  // because [primary] / [secondary] are themselves runtime-initialised
-  // (see the note above the brand-colour block).
+  // because the brand colours are runtime-initialised (see the note
+  // above the brand-colour block). They read [brandPrimary] /
+  // [brandSecondary], never the theme-dependent [primary] / [secondary]:
+  // a `static final` is evaluated once, so it would freeze whichever
+  // theme happened to be active at first use. The header keeps the brand
+  // in both themes — its content is white on top of it.
   /// Full pink → lavender gradient — use for the app bar band and any
   /// surface that should mirror the hero gradient image.
   ///
@@ -267,12 +261,12 @@ class AppColors {
   /// and every surface mirroring the hero gradient turns with it.
   static final LinearGradient primaryGradient = LinearGradient(
     colors: [
-      secondary, // 🩷 Hot pink — full opacity (gradient start)
+      brandSecondary, // 🩷 Hot pink — full opacity (gradient start)
       // 🟣 Indigo — faded light (gradient end). Header_Gradient_Dark holds it
       // at full strength instead.
       currentBranding.headerGradientDark
-          ? primary
-          : primary.withValues(alpha: 0.4),
+          ? brandPrimary
+          : brandPrimary.withValues(alpha: 0.4),
     ],
     begin: currentBranding.headerGradientBegin,
     end: currentBranding.headerGradientEnd,
@@ -282,7 +276,7 @@ class AppColors {
   static final LinearGradient appGradient = primaryGradient;
 
   static final LinearGradient secondaryGradient = LinearGradient(
-    colors: [secondary, secondary],
+    colors: [brandSecondary, brandSecondary],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

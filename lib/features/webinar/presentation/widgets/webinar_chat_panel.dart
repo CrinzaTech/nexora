@@ -403,18 +403,18 @@ class _WebinarChatPanelState extends State<WebinarChatPanel> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        color: AppColors.primaryFill,
         borderRadius: BorderRadius.circular(AppSizes.radiusS),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.verified, size: 10, color: AppColors.alwaysWhite),
+          Icon(Icons.verified, size: 10, color: AppColors.onPrimary),
           const SizedBox(width: 3),
           Text(
             'Host',
             style: AppTypography.labelSmall.copyWith(
-              color: AppColors.alwaysWhite,
+              color: AppColors.onPrimary,
               fontSize: 9,
               fontWeight: FontWeight.w700,
             ),

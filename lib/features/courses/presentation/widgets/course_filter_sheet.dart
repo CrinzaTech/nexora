@@ -559,11 +559,11 @@ class _FilterChip extends StatelessWidget {
           curve: Curves.easeOut,
           padding: Screen.getPadding(horizontal: 18, vertical: 10),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.primary : AppColors.white,
+            color: isSelected ? AppColors.primaryFill : AppColors.white,
             borderRadius: radius,
             border: Border.all(
               color: isSelected
-                  ? AppColors.primary
+                  ? AppColors.primaryFill
                   : AppColors.primary.withValues(alpha: 0.35),
               width: 1,
             ),
@@ -584,7 +584,7 @@ class _FilterChip extends StatelessWidget {
                 Icon(
                   Icons.check_rounded,
                   size: Screen.getSize(16),
-                  color: AppColors.alwaysWhite,
+                  color: AppColors.onPrimary,
                 ),
                 SizedBox(width: Screen.getHorizontalSize(6)),
               ],
@@ -592,7 +592,7 @@ class _FilterChip extends StatelessWidget {
                 label,
                 style: AppTypography.bodyTextSemiBold.copyWith(
                   fontSize: Screen.getFontSize(13),
-                  color: isSelected ? AppColors.alwaysWhite : AppColors.textPrimary,
+                  color: isSelected ? AppColors.onPrimary : AppColors.textPrimary,
                 ),
               ),
             ],

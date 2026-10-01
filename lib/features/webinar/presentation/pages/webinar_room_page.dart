@@ -858,8 +858,8 @@ class _WebinarRoomViewState extends State<_WebinarRoomView>
                   heroTag: 'webinar-chat-toggle',
                   backgroundColor: _chatOverlayOpen
                       ? AppColors.error
-                      : AppColors.primary,
-                  foregroundColor: AppColors.alwaysWhite,
+                      : AppColors.primaryFill,
+                  foregroundColor: _chatOverlayOpen ? AppColors.alwaysWhite : AppColors.onPrimary,
                   tooltip: _chatOverlayOpen ? 'Hide chat' : 'Show chat',
                   onPressed: () =>
                       setState(() => _chatOverlayOpen = !_chatOverlayOpen),

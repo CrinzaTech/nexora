@@ -318,7 +318,9 @@ class _OrgCodeInputField extends StatelessWidget {
 
     final focusedPinTheme = defaultPinTheme.copyWith(
       decoration: BoxDecoration(
-        color: AppColors.alwaysWhite,
+        // Surface token, not alwaysWhite: the digit is textPrimary, which
+        // is near-white in dark mode and vanished on a pure-white box.
+        color: AppColors.white,
         borderRadius: BorderRadius.circular(AppSizes.radiusM),
         border: Border.all(color: AppColors.primary, width: 1.5),
       ),

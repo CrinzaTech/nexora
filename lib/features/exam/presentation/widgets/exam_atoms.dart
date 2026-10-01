@@ -454,12 +454,12 @@ class ExamDialogAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background = color ?? AppColors.primary;
+    final background = color ?? AppColors.primaryFill;
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
         backgroundColor: background,
-        foregroundColor: AppColors.alwaysWhite,
+        foregroundColor: AppColors.onFill(background),
         elevation: 0,
         padding: const EdgeInsets.symmetric(vertical: 15),
         shape: RoundedRectangleBorder(
@@ -471,13 +471,13 @@ class ExamDialogAction extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 19, color: AppColors.alwaysWhite),
+            Icon(icon, size: 19, color: AppColors.onFill(background)),
             const SizedBox(width: 8),
           ],
           Text(
             label,
             style: AppTypography.bodyTextLargeSemiBold.copyWith(
-              color: AppColors.alwaysWhite,
+              color: AppColors.onFill(background),
             ),
           ),
         ],

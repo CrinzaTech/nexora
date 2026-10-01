@@ -246,23 +246,23 @@ class _LivePollCardState extends State<LivePollCard> {
             child: FilledButton(
               onPressed: _selected.isEmpty || _submitting ? null : _submit,
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: AppColors.primaryFill,
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: _submitting
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: AppColors.alwaysWhite,
+                        color: AppColors.onPrimary,
                       ),
                     )
                   : Text(
                       'Submit',
                       style: AppTypography.labelSmall.copyWith(
-                        color: AppColors.alwaysWhite,
+                        color: AppColors.onPrimary,
                         fontWeight: FontWeight.w700,
                       ),
                     ),

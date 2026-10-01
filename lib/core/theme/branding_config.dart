@@ -73,6 +73,13 @@ class BrandingConfig {
   /// Hairline separators on a dark canvas.
   final Color darkDivider;
 
+  /// Stand-in for [primary] / [secondary] in dark mode — icons, labels,
+  /// borders, indicators. A client's brand colour can be dark enough to
+  /// vanish on the dark canvas, so dark mode swaps it for this soft
+  /// off-white rather than pure white, which glares. Buttons keep the
+  /// brand fill with white labels.
+  final Color darkAccent;
+
   // ── Premium accent ─────────────────────────────────────────────────
 
   /// Warm metallic accent used for the thin top-edge highlight on cards
@@ -386,6 +393,7 @@ class BrandingConfig {
     this.darkTextSecondary = const Color(0xFFC6D0DE),
     this.darkTextMuted = const Color(0xFF9AA7B8),
     this.darkDivider = const Color(0xFF26314A),
+    this.darkAccent = const Color(0xFFDCE1E9),
     this.accent = const Color(0xFFE3B857),
     this.accentSoft = const Color(0xFFF5D68A),
     this.headerGradientAngle = 0,

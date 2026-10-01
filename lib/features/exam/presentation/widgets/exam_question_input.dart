@@ -568,7 +568,7 @@ class _OptionTile extends StatelessWidget {
   Widget _indicator() {
     // A verdict replaces the radio/checkbox tint — a green "correct" dot
     // next to a red tile would be two accents fighting.
-    final accent = _verdictColor ?? AppColors.primary;
+    final accent = _verdictColor ?? AppColors.primaryFill;
     if (multi) {
       return Container(
         width: 20,
@@ -582,7 +582,7 @@ class _OptionTile extends StatelessWidget {
           ),
         ),
         child: selected
-            ? const Icon(Icons.check, size: 14, color: AppColors.alwaysWhite)
+            ? Icon(Icons.check, size: 14, color: AppColors.onFill(accent))
             : null,
       );
     }

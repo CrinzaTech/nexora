@@ -165,21 +165,21 @@ class ExamCompetitiveView extends StatelessWidget {
           // answer and advances (there is no going back regardless).
           onPressed: submitting ? null : onSaveNext,
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
+            backgroundColor: AppColors.primaryFill,
             foregroundColor: AppColors.white,
-            disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.5),
+            disabledBackgroundColor: AppColors.primaryFill.withValues(alpha: 0.5),
             padding: const EdgeInsets.symmetric(vertical: 14),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
             ),
           ),
           child: submitting
-              ? const SizedBox(
+              ? SizedBox(
                   width: 22,
                   height: 22,
                   child: CircularProgressIndicator(
                     strokeWidth: 2.4,
-                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.alwaysWhite),
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.onPrimary),
                   ),
                 )
               : Row(
@@ -189,14 +189,14 @@ class ExamCompetitiveView extends StatelessWidget {
                     Text(
                       label,
                       style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                        color: AppColors.alwaysWhite,
+                        color: AppColors.onPrimary,
                       ),
                     ),
                     const SizedBox(width: 6),
                     Icon(
                       data.isLast ? Icons.check : Icons.arrow_forward,
                       size: 20,
-                      color: AppColors.alwaysWhite,
+                      color: AppColors.onPrimary,
                     ),
                   ],
                 ),

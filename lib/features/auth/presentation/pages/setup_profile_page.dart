@@ -235,14 +235,14 @@ class _SetupProfilePageState extends State<SetupProfilePage> {
             // Built from the active brightness, not pinned to light —
             // otherwise the picker stays a white sheet with black text
             // in dark mode. onPrimary is the label on the selected day,
-            // which sits on AppColors.primary in both themes.
+            // which sits on AppColors.primary (white in dark mode).
             colorScheme:
                 (AppColors.isDark
                         ? const ColorScheme.dark()
                         : const ColorScheme.light())
                     .copyWith(
-                      primary: AppColors.primary,
-                      onPrimary: AppColors.alwaysWhite,
+                      primary: AppColors.primaryFill,
+                      onPrimary: AppColors.onPrimary,
                       surface: AppColors.white,
                       onSurface: AppColors.textPrimary,
                     ),
@@ -600,14 +600,14 @@ class _ProfilePicturePicker extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppColors.primary,
+                color: AppColors.primaryFill,
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.white, width: 2),
               ),
               child: Icon(
                 Icons.edit_outlined,
                 size: 16,
-                color: AppColors.alwaysWhite,
+                color: AppColors.onPrimary,
               ),
             ),
           ),

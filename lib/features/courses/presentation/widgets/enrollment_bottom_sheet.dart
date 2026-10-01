@@ -829,8 +829,8 @@ class _CouponSectionState extends State<_CouponSection> {
               child: ElevatedButton(
                 onPressed: widget.isLoading ? null : _handleApply,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  disabledBackgroundColor: AppColors.primary.withValues(
+                  backgroundColor: AppColors.primaryFill,
+                  disabledBackgroundColor: AppColors.primaryFill.withValues(
                     alpha: 0.6,
                   ),
                   foregroundColor: AppColors.white,
@@ -850,14 +850,14 @@ class _CouponSectionState extends State<_CouponSection> {
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            AppColors.alwaysWhite,
+                            AppColors.onPrimary,
                           ),
                         ),
                       )
                     : Text(
                         'Apply',
                         style: AppTypography.bodyTextSemiBold.copyWith(
-                          color: AppColors.alwaysWhite,
+                          color: AppColors.onPrimary,
                           fontSize: ResponsiveHelper.of(
                             context,
                           ).cappedFontSize(18),

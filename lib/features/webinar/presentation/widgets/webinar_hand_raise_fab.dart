@@ -71,7 +71,8 @@ class WebinarHandRaiseFab extends StatelessWidget {
     if (state.handPhase == WebinarHandPhase.queued && position != null) {
       return Badge(
         label: Text('$position'),
-        backgroundColor: AppColors.primary,
+        backgroundColor: AppColors.primaryFill,
+        textColor: AppColors.onPrimary,
         child: fab,
       );
     }

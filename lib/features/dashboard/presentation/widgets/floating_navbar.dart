@@ -76,11 +76,9 @@ class FloatingNavbar extends StatelessWidget {
     final innerShadowColor = AppColors.primary.withValues(
       alpha: AppColors.isDark ? 0.05 : 0.08,
     );
-    // The active icon and label are foregrounds sitting on the glass, so
-    // they take the contrast-corrected primary. On dark, a brand colour
-    // dark enough to disappear against the surface gets lifted until it
-    // is readable; on light this is [AppColors.primary] verbatim.
-    final activeTint = AppColors.primaryContent;
+    // The active icon and label are foregrounds sitting on the glass:
+    // the brand colour on light, white on dark.
+    final activeTint = AppColors.primary;
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: rh.maxNavBarWidth),
@@ -136,7 +134,7 @@ class FloatingNavbar extends StatelessWidget {
                                     // Backlight behind the active glyph. A
                                     // glow cannot rescue a low-contrast
                                     // colour on its own — that is what
-                                    // [AppColors.primaryContent] is for —
+                                    // [AppColors.primary] is for —
                                     // but once the glyph is legible this
                                     // makes it read as lit rather than
                                     // merely coloured. Tinted with the brand

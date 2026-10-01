@@ -153,10 +153,10 @@ class ExamSectionTransitionView extends StatelessWidget {
                     child: ElevatedButton(
                       onPressed: loading ? null : onContinue,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: AppColors.primaryFill,
                         foregroundColor: AppColors.white,
                         disabledBackgroundColor:
-                            AppColors.primary.withValues(alpha: 0.5),
+                            AppColors.primaryFill.withValues(alpha: 0.5),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius:
@@ -164,13 +164,13 @@ class ExamSectionTransitionView extends StatelessWidget {
                         ),
                       ),
                       child: loading
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 22,
                               height: 22,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.4,
                                 valueColor:
-                                    AlwaysStoppedAnimation<Color>(AppColors.alwaysWhite),
+                                    AlwaysStoppedAnimation<Color>(AppColors.onPrimary),
                               ),
                             )
                           : Row(
@@ -180,11 +180,11 @@ class ExamSectionTransitionView extends StatelessWidget {
                                 Text(
                                   'Continue',
                                   style: AppTypography.bodyTextLargeSemiBold
-                                      .copyWith(color: AppColors.alwaysWhite),
+                                      .copyWith(color: AppColors.onPrimary),
                                 ),
                                 const SizedBox(width: 6),
                                 Icon(Icons.arrow_forward,
-                                    size: 20, color: AppColors.alwaysWhite),
+                                    size: 20, color: AppColors.onPrimary),
                               ],
                             ),
                     ),

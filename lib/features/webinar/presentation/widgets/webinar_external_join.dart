@@ -294,7 +294,7 @@ class _MeetingCard extends StatelessWidget {
               padding: EdgeInsets.only(right: Screen.getHorizontalSize(8)),
               child: Icon(
                 isOpen ? Icons.open_in_new_rounded : Icons.lock_outline_rounded,
-                color: AppColors.alwaysWhite,
+                color: AppColors.onPrimary,
                 size: Screen.getSize(18),
               ),
             ),
@@ -465,7 +465,7 @@ class _VenueCard extends StatelessWidget {
               padding: EdgeInsets.only(right: Screen.getHorizontalSize(8)),
               child: Icon(
                 Icons.map_outlined,
-                color: AppColors.alwaysWhite,
+                color: AppColors.onPrimary,
                 size: Screen.getSize(18),
               ),
             ),

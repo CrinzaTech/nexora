@@ -558,7 +558,7 @@ class ExamStatsFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final deep = Color.lerp(AppColors.primary, AppColors.black, 0.24)!;
+    final deep = Color.lerp(AppColors.primaryFill, AppColors.black, 0.24)!;
     return SizedBox(
       // Room for the badge to overhang without being clipped by the Stack.
       width: 68,
@@ -577,7 +577,7 @@ class ExamStatsFab extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [AppColors.primary, deep],
+                  colors: [AppColors.primaryFill, deep],
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -602,7 +602,7 @@ class ExamStatsFab extends StatelessWidget {
                   child: Center(
                     child: Icon(
                       Icons.grid_view_rounded,
-                      color: AppColors.alwaysWhite,
+                      color: AppColors.onPrimary,
                       size: 24,
                     ),
                   ),

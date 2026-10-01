@@ -655,8 +655,8 @@ class _Message extends StatelessWidget {
               ElevatedButton(
                 onPressed: onRetry,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.alwaysWhite,
+                  backgroundColor: AppColors.primaryFill,
+                  foregroundColor: AppColors.onPrimary,
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSizes.paddingXL,
                     vertical: 12,

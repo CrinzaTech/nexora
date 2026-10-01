@@ -186,8 +186,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         ? const ColorScheme.dark()
                         : const ColorScheme.light())
                     .copyWith(
-                      primary: AppColors.primary,
-                      onPrimary: AppColors.alwaysWhite,
+                      primary: AppColors.primaryFill,
+                      onPrimary: AppColors.onPrimary,
                       surface: AppColors.white,
                       onSurface: AppColors.textPrimary,
                     ),
@@ -576,8 +576,8 @@ class _ProfilePicturePicker extends StatelessWidget {
                       shape: BoxShape.circle,
                       gradient: LinearGradient(
                         colors: [
-                          AppColors.primary.withValues(alpha: 0.6),
-                          AppColors.primary.withValues(alpha: 0.3),
+                          AppColors.primaryFill.withValues(alpha: 0.6),
+                          AppColors.primaryFill.withValues(alpha: 0.3),
                         ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -589,7 +589,7 @@ class _ProfilePicturePicker extends StatelessWidget {
                         profileName.isEmpty ? '?' : profileName,
                       ),
                       style: AppTypography.h6SemiBold.copyWith(
-                        color: AppColors.alwaysWhite,
+                        color: AppColors.onPrimary,
                         fontSize: Screen.getFontSize(36),
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5,
@@ -606,14 +606,14 @@ class _ProfilePicturePicker extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppColors.primary,
+                color: AppColors.primaryFill,
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.white, width: 2),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.edit_outlined,
                 size: 16,
-                color: AppColors.alwaysWhite,
+                color: AppColors.onPrimary,
               ),
             ),
           ),
