@@ -1,7 +1,7 @@
 name: nexora
 description: "A new Flutter project."
 publish_to: "none"
-version: 0.0.5+5
+version: 0.0.7+7
 
 environment:
   sdk: ^3.10.0
@@ -200,6 +200,7 @@ flutter:
     - assets/icons/
     - assets/icons/navbar/
     - assets/icons/content_icon/
+    - assets/icons/discover/
 
     - assets/fonts/
     - assets/animations/

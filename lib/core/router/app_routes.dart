@@ -160,6 +160,9 @@ class AppRoutes {
   /// disk, so there is no URL to carry in the path.
   static const String certificatePreview = '/certificates/preview';
 
+  /// Live Events — live classes and webinars in two tabs.
+  static const String liveEvents = '/live-events';
+
   /// All webinars — the full list behind Home's "View All".
   static const String webinars = '/webinars';
 

@@ -1,3 +1,4 @@
+import 'package:nexora/core/widgets/readable_text.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_theme.dart';
 import 'package:nexora/core/theme/responsive_helper.dart';
@@ -67,7 +68,7 @@ class FeaturedCoursesWidget extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              ReadableText(
                 title,
                 // Same size and weight as "View All" beside it.
                 style: AppTypography.bodyTextLargeMedium.copyWith(
@@ -150,16 +151,17 @@ class _CourseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(AppSizes.radiusL);
     return InkWell(
       onTap: () =>
           context.push('${AppRoutes.courseDetail}?courseId=${course.courseId}'),
-      borderRadius: BorderRadius.circular(AppSizes.radiusL),
+      borderRadius: radius,
       child: Container(
         width: cardWidth,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         decoration: BoxDecoration(
           color: AppColors.white,
-          borderRadius: BorderRadius.circular(AppSizes.radiusL),
+          borderRadius: radius,
           border: AppDecorations.cardBorder(
             width: 1.5,
             lightColor: AppColors.primary.withValues(alpha: 0.25),

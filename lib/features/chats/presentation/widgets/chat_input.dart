@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_text_form_field.dart';
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -143,50 +141,47 @@ class _ChatInputState extends State<ChatInput> {
             //   onTap: widget.enabled ? () {} : null,
             // ),
             Expanded(
-              child: _Frosted(
-                enabled: false,
-                child: CustomTextFormField(
-                  controller: _controller,
-                  enabled: widget.enabled,
-                  // Starts at one line, grows up to five rows, then
-                  // scrolls internally — exactly WhatsApp's composer
-                  // behaviour.
-                  minLine: 1,
-                  maxLine: 5,
-                  // Multi-line keyboard pairs with `TextInputAction.newline`
-                  // so Enter inserts a newline instead of submitting —
-                  // sending is via the trailing button. Required by
-                  // Flutter's TextField assertion (text type + newline
-                  // action + maxLines > 1 isn't allowed).
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
-                  // Single-line height lands at the send button's 52 dp, so
-                  // the two sit level.
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 15,
-                  ),
-                  // White field with the same ring as the send button, and
-                  // dark ink to match — the themed text is near-white in
-                  // dark mode and would vanish on the white fill.
-                  fillColor: AppColors.alwaysWhite,
-                  textColor: const Color(0xFF0D1B2A),
-                  hintColor: const Color(0xFF64748B),
-                  borderColor: AppColors.primary.withValues(
-                    alpha: widget.enabled ? 0.9 : 0.35,
-                  ),
-                  borderWidth: 1.5,
-                  // Keep the keyboard open across sends — tapping the
-                  // send button counts as "tap outside" by default, which
-                  // would otherwise dismiss the IME between every message.
-                  // WhatsApp-style behaviour: stay focused until the user
-                  // explicitly hits back / dismisses.
-                  unfocusOnTapOutside: false,
-                  hintText:
-                      widget.hint ??
-                      (widget.enabled ? 'Type a message…' : 'Read-only group'),
-                  onChanged: _onChanged,
+              child: CustomTextFormField(
+                controller: _controller,
+                enabled: widget.enabled,
+                // Starts at one line, grows up to five rows, then
+                // scrolls internally — exactly WhatsApp's composer
+                // behaviour.
+                minLine: 1,
+                maxLine: 5,
+                // Multi-line keyboard pairs with `TextInputAction.newline`
+                // so Enter inserts a newline instead of submitting —
+                // sending is via the trailing button. Required by
+                // Flutter's TextField assertion (text type + newline
+                // action + maxLines > 1 isn't allowed).
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                // Single-line height lands at the send button's 52 dp, so
+                // the two sit level.
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 15,
                 ),
+                // White field with the same ring as the send button, and
+                // dark ink to match — the themed text is near-white in
+                // dark mode and would vanish on the white fill.
+                fillColor: AppColors.alwaysWhite,
+                textColor: const Color(0xFF0D1B2A),
+                hintColor: const Color(0xFF64748B),
+                borderColor: AppColors.primary.withValues(
+                  alpha: widget.enabled ? 0.9 : 0.35,
+                ),
+                borderWidth: 1.5,
+                // Keep the keyboard open across sends — tapping the
+                // send button counts as "tap outside" by default, which
+                // would otherwise dismiss the IME between every message.
+                // WhatsApp-style behaviour: stay focused until the user
+                // explicitly hits back / dismisses.
+                unfocusOnTapOutside: false,
+                hintText:
+                    widget.hint ??
+                    (widget.enabled ? 'Type a message…' : 'Read-only group'),
+                onChanged: _onChanged,
               ),
             ),
             SizedBox(width: Screen.getHorizontalSize(8)),
@@ -468,28 +463,6 @@ class _SendButtonState extends State<_SendButton>
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Frosted-glass backing for the composer field: a light blur behind the
-/// translucent fill so typed text stays readable over a busy photo. A
-/// pass-through when [enabled] is false.
-class _Frosted extends StatelessWidget {
-  final bool enabled;
-  final Widget child;
-
-  const _Frosted({required this.enabled, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    if (!enabled) return child;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: child,
       ),
     );
   }

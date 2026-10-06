@@ -173,6 +173,13 @@ class AttemptStateResponse {
   /// which also derives it for a server that only sends the two flags.
   final bool isPracticeMode;
 
+  /// Whether this response actually carried the mode fields. A response
+  /// that omits `quizMode` would otherwise parse as "not a quiz", and the
+  /// client would ask a quiz for its whole paper — which the server refuses
+  /// ("This exam is taken one question at a time…"). When false, the caller
+  /// keeps the mode it already knew from the gate.
+  final bool hasModeFields;
+
   final bool hasInstructions;
   final String? instructions;
   final int? durationMinutes;
@@ -211,6 +218,7 @@ class AttemptStateResponse {
     this.retryPointsUsed = 0,
     this.retryMode = true,
     this.isPracticeMode = false,
+    this.hasModeFields = true,
     required this.hasInstructions,
     this.instructions,
     this.durationMinutes,
@@ -263,6 +271,7 @@ class AttemptStateResponse {
       // Absent means a graded quiz — the default before drills existed.
       retryMode: json['retryMode'] != false,
       isPracticeMode: json['isPracticeMode'] == true,
+      hasModeFields: json.containsKey('quizMode'),
       hasInstructions: json['hasInstructions'] == true,
       instructions: json['instructions']?.toString(),
       durationMinutes: _asInt(json['durationMinutes']),

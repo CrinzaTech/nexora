@@ -480,7 +480,7 @@ const crinestaBranding = BrandingConfig(
   logoWithText: 'assets/images/logo_with_text.png',
   splashBackground: 'assets/images/backgrounds/splash_background.png',
   loginBackground: 'assets/images/backgrounds/login_background.png',
-  appName: 'NEXORA',
+  appName: 'Minerva Academy',
   packageName: 'co.nex.ora',
   // ── Tile Theme ──────────────────────────────────────────────────
   // Mirrors the values that were previously in .env.

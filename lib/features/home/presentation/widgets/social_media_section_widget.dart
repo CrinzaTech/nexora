@@ -1,3 +1,4 @@
+import 'package:nexora/core/widgets/readable_text.dart';
 import 'package:nexora/core/theme/app_theme.dart';
 import 'package:nexora/core/widgets/custom_network_image.dart';
 import 'package:nexora/features/home/data/models/home_model.dart';
@@ -25,7 +26,7 @@ class SocialMediaSectionWidget extends StatelessWidget {
         // ── Section header ────────────────────────────────────────
         Padding(
           padding: Screen.getPadding(horizontal: 20),
-          child: Text(
+          child: ReadableText(
             'Follow Us',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

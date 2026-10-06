@@ -267,6 +267,10 @@ class ExamCubit extends SafeCubit<ExamState> {
   /// (gate, start or reattempt), which are the only responses that carry
   /// them — the per-question payload does not.
   void _adoptModeFrom(AttemptStateResponse attempt) {
+    // A start/reattempt response without the mode fields must not undo
+    // what the gate said: read as absent, `quizMode` would be false and a
+    // quiz would be sent to `/paper`, which refuses it.
+    if (!attempt.hasModeFields) return;
     _competitive = attempt.isCompetitive;
     _quizMode = attempt.quizMode;
     _practice = attempt.isPractice;
@@ -282,6 +286,20 @@ class ExamCubit extends SafeCubit<ExamState> {
       return;
     }
     final result = await getPaper(attemptId: attemptId, phoneNumber: phone);
+    // The server refuses `/paper` for an exam served one question at a
+    // time and says so. Its word on pacing beats ours, so switch to the
+    // question flow instead of stranding the student on an error screen.
+    final refusal = result.fold((f) => f.message, (_) => null);
+    if (refusal != null && _isOneAtATimeRefusal(refusal)) {
+      _attemptId = attemptId;
+      if (refusal.toLowerCase().contains('quiz')) {
+        _quizMode = true;
+      } else {
+        _competitive = true;
+      }
+      await _loadQuestion();
+      return;
+    }
     result.fold((failure) => emit(ExamState.error(failure.message)), (paper) {
       _attemptId = attemptId;
       _paper = paper;
@@ -292,6 +310,14 @@ class ExamCubit extends SafeCubit<ExamState> {
       _startAutosaveTimer();
       _emitTaking();
     });
+  }
+
+  /// The `/paper` refusal for a one-at-a-time exam ("This exam is taken one
+  /// question at a time (quiz mode) — use the question endpoint instead.").
+  static bool _isOneAtATimeRefusal(String message) {
+    final m = message.toLowerCase();
+    return m.contains('one question at a time') ||
+        m.contains('question endpoint');
   }
 
   /// Seed the answer map and the questionId→type index from the paper,

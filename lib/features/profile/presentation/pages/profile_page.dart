@@ -651,6 +651,17 @@ class _ProfilePageState extends State<ProfilePage>
                                   onTap: () =>
                                       context.push(AppRoutes.certificates),
                                 ),
+                                // Offline downloads moved here from the Home
+                                // discover row. No screen behind it yet.
+                                CustomProfileListTileWidget(
+                                  title: "Downloads",
+                                  leadingIconData: Icons.download_outlined,
+                                  onTap: () => CustomSnackbar.info(
+                                    context,
+                                    title: 'Downloads',
+                                    message: 'Coming soon',
+                                  ),
+                                ),
                               ],
                             ),
                           ),

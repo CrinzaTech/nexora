@@ -1,3 +1,4 @@
+import 'package:nexora/core/widgets/readable_text.dart';
 import 'dart:ui' show ImageFilter;
 
 import 'package:nexora/core/router/app_routes.dart';
@@ -634,7 +635,7 @@ class CategorySection extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
+              ReadableText(
                 "Featured Categories",
                 // One heading style across every Home section.
                 style: AppTypography.bodyTextLargeMedium.copyWith(
@@ -1169,6 +1170,71 @@ class _DefaultCard extends StatelessWidget {
     }
 
     // ── Normal: original white card with gradient border ─────────────────────
+    final Widget surface = Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: radius,
+        border: GradientBorder(
+          gradient: LinearGradient(colors: [borderLow, borderMid, borderLow]),
+          width: 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: radius,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: radius,
+          splashColor: AppColors.primary.withValues(alpha: 0.10),
+          highlightColor: AppColors.primary.withValues(alpha: 0.05),
+          child: Center(
+            child: Padding(
+              padding: isFull
+                  ? Screen.getPadding(all: 8)
+                  : Screen.getPadding(horizontal: 5),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    height: imgSize,
+                    width: imgSize,
+                    child: CustomNetworkImage(
+                      url: tile.tileLogoURL,
+                      fit: BoxFit.contain,
+                      errorWidget: Image.asset(AppImages.bookImg),
+                      imageBuilder: pngBg
+                          ? (context, image) => _ContourShadow(
+                              color: shadowColor,
+                              extent: imgSize,
+                              deep: pngBgDark,
+                              child: image,
+                            )
+                          : null,
+                    ),
+                  ),
+                  SizedBox(width: Screen.getHorizontalSize(10)),
+                  Expanded(
+                    child: Text(
+                      tile.tileName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.bodyTextLargeSemiBold.copyWith(
+                        color: AppColors.primary,
+                        fontSize: rh.isLargeScreen
+                            ? rh.cappedFontSize(isFull ? 18 : 16)
+                            : Screen.getFontSizeCapped(isFull ? 16 : 13),
+                        shadows: _tileLabelGlow(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: radius,
@@ -1183,72 +1249,7 @@ class _DefaultCard extends StatelessWidget {
       child: Stack(
         children: [
           // Card surface — solid white + gradient border.
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.white,
-              borderRadius: radius,
-              border: GradientBorder(
-                gradient: LinearGradient(
-                  colors: [borderLow, borderMid, borderLow],
-                ),
-                width: 1,
-              ),
-            ),
-            child: Material(
-              color: Colors.transparent,
-              borderRadius: radius,
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: radius,
-                splashColor: AppColors.primary.withValues(alpha: 0.10),
-                highlightColor: AppColors.primary.withValues(alpha: 0.05),
-                child: Center(
-                  child: Padding(
-                    padding: isFull
-                        ? Screen.getPadding(all: 8)
-                        : Screen.getPadding(horizontal: 5),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          height: imgSize,
-                          width: imgSize,
-                          child: CustomNetworkImage(
-                            url: tile.tileLogoURL,
-                            fit: BoxFit.contain,
-                            errorWidget: Image.asset(AppImages.bookImg),
-                            imageBuilder: pngBg
-                                ? (context, image) => _ContourShadow(
-                                    color: shadowColor,
-                                    extent: imgSize,
-                                    deep: pngBgDark,
-                                    child: image,
-                                  )
-                                : null,
-                          ),
-                        ),
-                        SizedBox(width: Screen.getHorizontalSize(10)),
-                        Expanded(
-                          child: Text(
-                            tile.tileName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                              color: AppColors.primary,
-                              fontSize: rh.isLargeScreen
-                                  ? rh.cappedFontSize(isFull ? 18 : 16)
-                                  : Screen.getFontSizeCapped(isFull ? 16 : 13),
-                              shadows: _tileLabelGlow(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+          surface,
 
           // Inner shadow overlay — Figma: (0, 4), blur 54, #6C63FF@12%.
           Positioned.fill(

@@ -35,30 +35,40 @@ class WebinarsPage extends StatelessWidget {
       child: Scaffold(
         backgroundColor: AppColors.white,
         appBar: const CustomAppBar(title: 'Webinars'),
-        body: SafeArea(
-          child: BlocBuilder<WebinarsCubit, WebinarsState>(
-            builder: (context, state) {
-              return state.maybeWhen(
-                loaded: (webinars, liveCount, total, hasMore, pageNo, more) =>
-                    _WebinarList(
-                      webinars: webinars,
-                      hasMore: hasMore,
-                      isLoadingMore: more,
-                    ),
-                error: (message) => _Refreshable(
-                  child: _Message(
-                    icon: Icons.error_outline,
-                    iconColor: AppColors.error,
-                    title: 'Something went wrong',
-                    body: message,
-                  ),
-                ),
-                orElse: () => const Center(child: CircularProgressIndicator()),
-              );
-            },
-          ),
-        ),
+        body: const SafeArea(child: WebinarsListView()),
       ),
+    );
+  }
+}
+
+/// The webinar list and its loading / error states, without a Scaffold,
+/// so it can sit inside other pages (e.g. the Live Events tabs). Needs a
+/// [WebinarsCubit] above it.
+class WebinarsListView extends StatelessWidget {
+  const WebinarsListView({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<WebinarsCubit, WebinarsState>(
+      builder: (context, state) {
+        return state.maybeWhen(
+          loaded: (webinars, liveCount, total, hasMore, pageNo, more) =>
+              _WebinarList(
+                webinars: webinars,
+                hasMore: hasMore,
+                isLoadingMore: more,
+              ),
+          error: (message) => _Refreshable(
+            child: _Message(
+              icon: Icons.error_outline,
+              iconColor: AppColors.error,
+              title: 'Something went wrong',
+              body: message,
+            ),
+          ),
+          orElse: () => const Center(child: CircularProgressIndicator()),
+        );
+      },
     );
   }
 }

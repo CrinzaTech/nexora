@@ -22,7 +22,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:nexora/features/courses/presentation/widgets/course_cover.dart';
+import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
+import 'package:nexora/core/widgets/custom_network_image.dart';
 
 /// Dynamic Catalog Screen
 /// Displays horizontal category chips loaded dynamically,
@@ -145,9 +146,7 @@ class _CatalogViewState extends State<CatalogView> {
           isPaid: _isPaid,
         );
       } else {
-        context.read<CourseListCubit>().loadCatalog(
-          isPaid: _isPaid,
-        );
+        context.read<CourseListCubit>().loadCatalog(isPaid: _isPaid);
       }
     });
   }
@@ -214,174 +213,218 @@ class _CatalogViewState extends State<CatalogView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.white,
-      body: SafeArea(
-        child: NestedScrollView(
-          controller: _scrollController,
-          headerSliverBuilder: (context, innerBoxIsScrolled) {
-            return [
-              SliverAppBar(
-                backgroundColor: AppColors.white,
-                surfaceTintColor: AppColors.white,
-                elevation: 0,
-                pinned: true,
-                floating: true,
-                centerTitle: true,
-                leading: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => Navigator.of(context).pop(),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Icon(
-                      Icons.chevron_left_rounded,
-                      color: AppColors.textPrimary,
-                      size: Screen.getSize(28),
-                    ),
-                  ),
-                ),
-                title: ScrollingTitle(
-                  text: widget.title,
-                  style: AppTypography.h6SemiBold.copyWith(color: AppColors.textPrimary),
-                ),
-                bottom: PreferredSize(
-                  preferredSize: Size.fromHeight(Screen.getVerticalSize(66)),
-                  child: Container(
-                    color: AppColors.white,
-                    padding: Screen.getPadding(horizontal: 20, top: 12, bottom: 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _SearchBar(
-                            controller: _searchController,
-                            focusNode: _searchFocusNode,
-                            hintText: widget.searchQuery != null &&
-                                    widget.searchQuery!.isNotEmpty
-                                ? 'Search: "${widget.searchQuery}"'
-                                : 'Search available courses...',
-                            onChanged: _onSearchChanged,
-                            onClear: _clearSearch,
+    // The app background photo behind the list, fixed while it scrolls —
+    // the same treatment as the search page.
+    return WallpaperDecorated(
+      scrimColor: AppColors.white,
+      scrimOpacity: AppColors.isDark ? 0.55 : 0.50,
+      child: Scaffold(
+        backgroundColor: hasWallpaper(context)
+            ? Colors.transparent
+            : AppColors.white,
+        body: Stack(
+          children: [
+            // No bottom inset: the list runs to the very bottom of the screen.
+            SafeArea(
+              bottom: false,
+              child: NestedScrollView(
+                controller: _scrollController,
+                headerSliverBuilder: (context, innerBoxIsScrolled) {
+                  return [
+                    SliverAppBar(
+                      backgroundColor: AppColors.white,
+                      surfaceTintColor: AppColors.white,
+                      elevation: 0,
+                      pinned: true,
+                      floating: true,
+                      centerTitle: true,
+                      leading: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Icon(
+                            Icons.chevron_left_rounded,
+                            color: AppColors.textPrimary,
+                            size: Screen.getSize(28),
                           ),
                         ),
-                        SizedBox(width: Screen.getHorizontalSize(10)),
-                        _FilterButton(
-                          onTap: () async {
-                            final filters = await CourseFilterSheet.show(
+                      ),
+                      title: ScrollingTitle(
+                        text: widget.title,
+                        style: AppTypography.h6SemiBold.copyWith(
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      bottom: PreferredSize(
+                        preferredSize: Size.fromHeight(
+                          Screen.getVerticalSize(56),
+                        ),
+                        child: Container(
+                          color: AppColors.white,
+                          padding: Screen.getPadding(
+                            horizontal: 20,
+                            top: 2,
+                            bottom: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _SearchBar(
+                                  controller: _searchController,
+                                  focusNode: _searchFocusNode,
+                                  hintText:
+                                      widget.searchQuery != null &&
+                                          widget.searchQuery!.isNotEmpty
+                                      ? 'Search: "${widget.searchQuery}"'
+                                      : 'Search available courses...',
+                                  onChanged: _onSearchChanged,
+                                  onClear: _clearSearch,
+                                ),
+                              ),
+                              SizedBox(width: Screen.getHorizontalSize(10)),
+                              _FilterButton(
+                                onTap: () async {
+                                  final filters = await CourseFilterSheet.show(
+                                    context,
+                                    initial: _activeFilters,
+                                  );
+                                  if (filters == null || !context.mounted)
+                                    return;
+
+                                  // Persist the selection for the next sheet open.
+                                  setState(() => _activeFilters = filters);
+
+                                  // Derive isPaid from the selected course-type chip.
+                                  final bool? isPaidFilter =
+                                      filters.typeId == null
+                                      ? null
+                                      : filters.typeName.toLowerCase() == 'paid'
+                                      ? true
+                                      : filters.typeName.toLowerCase() == 'free'
+                                      ? false
+                                      : null;
+
+                                  final cubit = context.read<CourseListCubit>();
+
+                                  // Category filter overrides everything else.
+                                  if (filters.categoryId != null) {
+                                    cubit.loadByCategory(
+                                      filters.categoryId!,
+                                      isPaid: isPaidFilter,
+                                    );
+                                  } else if (widget.tileId != null) {
+                                    cubit.loadByTile(
+                                      widget.tileId!,
+                                      isPaid: isPaidFilter ?? _isPaid,
+                                    );
+                                  } else if (widget.courseStatusType != null) {
+                                    cubit.loadByStatusType(
+                                      widget.courseStatusType!,
+                                      isPaid: isPaidFilter ?? _isPaid,
+                                    );
+                                  } else if (widget.sortBy != null) {
+                                    cubit.loadBySortBy(
+                                      widget.sortBy!,
+                                      isPaid: isPaidFilter ?? _isPaid,
+                                    );
+                                  } else if (widget.searchQuery != null &&
+                                      widget.searchQuery!.isNotEmpty) {
+                                    cubit.loadBySearchQuery(
+                                      widget.searchQuery!,
+                                      isPaid: isPaidFilter ?? _isPaid,
+                                    );
+                                  } else {
+                                    cubit.loadCatalog(
+                                      isPaid: isPaidFilter ?? _isPaid,
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ];
+                },
+                body: NotificationListener<ScrollNotification>(
+                  onNotification: (ScrollNotification notification) {
+                    if (notification.metrics.pixels >=
+                        notification.metrics.maxScrollExtent - 200) {
+                      context.read<CourseListCubit>().loadNextPage();
+                    }
+                    return false;
+                  },
+                  child: BlocBuilder<CourseListCubit, CourseListState>(
+                    builder: (context, state) {
+                      return state.maybeWhen(
+                        loading: () => const _CourseListShimmer(),
+                        loaded:
+                            (
+                              courses,
+                              hasMoreData,
+                              currentPage,
+                              isLoadingMore,
+                            ) => _buildCourseList(
                               context,
-                              initial: _activeFilters,
-                            );
-                            if (filters == null || !context.mounted) return;
-
-                            // Persist the selection for the next sheet open.
-                            setState(() => _activeFilters = filters);
-
-                            // Derive isPaid from the selected course-type chip.
-                            final bool? isPaidFilter = filters.typeId == null
-                                ? null
-                                : filters.typeName.toLowerCase() == 'paid'
-                                ? true
-                                : filters.typeName.toLowerCase() == 'free'
-                                ? false
-                                : null;
-
-                            final cubit = context.read<CourseListCubit>();
-
-                            // Category filter overrides everything else.
-                            if (filters.categoryId != null) {
-                              cubit.loadByCategory(
-                                filters.categoryId!,
-                                isPaid: isPaidFilter,
-                              );
-                            } else if (widget.tileId != null) {
-                              cubit.loadByTile(
+                              courses,
+                              isLoadingMore,
+                            ),
+                        error: (msg) => _ErrorView(
+                          message: msg,
+                          onRetry: () {
+                            if (widget.tileId != null) {
+                              context.read<CourseListCubit>().loadByTile(
                                 widget.tileId!,
-                                isPaid: isPaidFilter ?? _isPaid,
+                                isPaid: _isPaid,
+                              );
+                            } else if (_selectedCategoryId != null) {
+                              context.read<CourseListCubit>().loadByCategory(
+                                _selectedCategoryId!,
+                                isPaid: _isPaid,
                               );
                             } else if (widget.courseStatusType != null) {
-                              cubit.loadByStatusType(
+                              context.read<CourseListCubit>().loadByStatusType(
                                 widget.courseStatusType!,
-                                isPaid: isPaidFilter ?? _isPaid,
+                                isPaid: _isPaid,
                               );
                             } else if (widget.sortBy != null) {
-                              cubit.loadBySortBy(
+                              context.read<CourseListCubit>().loadBySortBy(
                                 widget.sortBy!,
-                                isPaid: isPaidFilter ?? _isPaid,
+                                isPaid: _isPaid,
                               );
                             } else if (widget.searchQuery != null &&
                                 widget.searchQuery!.isNotEmpty) {
-                              cubit.loadBySearchQuery(
+                              context.read<CourseListCubit>().loadBySearchQuery(
                                 widget.searchQuery!,
-                                isPaid: isPaidFilter ?? _isPaid,
+                                isPaid: _isPaid,
                               );
                             } else {
-                              cubit.loadCatalog(isPaid: isPaidFilter ?? _isPaid);
+                              context.read<CourseListCubit>().loadCatalog(
+                                isPaid: _isPaid,
+                              );
                             }
                           },
                         ),
-                      ],
-                    ),
+                        orElse: () => const Center(
+                          child: Text('Select a category to browse courses'),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
-            ];
-          },
-          body: NotificationListener<ScrollNotification>(
-            onNotification: (ScrollNotification notification) {
-              if (notification.metrics.pixels >=
-                  notification.metrics.maxScrollExtent - 200) {
-                context.read<CourseListCubit>().loadNextPage();
-              }
-              return false;
-            },
-            child: BlocBuilder<CourseListCubit, CourseListState>(
-              builder: (context, state) {
-                return state.maybeWhen(
-                  loading: () => const _CourseListShimmer(),
-                  loaded:
-                      (courses, hasMoreData, currentPage, isLoadingMore) =>
-                          _buildCourseList(context, courses, isLoadingMore),
-                  error: (msg) => _ErrorView(
-                    message: msg,
-                    onRetry: () {
-                      if (widget.tileId != null) {
-                        context.read<CourseListCubit>().loadByTile(
-                          widget.tileId!,
-                          isPaid: _isPaid,
-                        );
-                      } else if (_selectedCategoryId != null) {
-                        context.read<CourseListCubit>().loadByCategory(
-                          _selectedCategoryId!,
-                          isPaid: _isPaid,
-                        );
-                      } else if (widget.courseStatusType != null) {
-                        context.read<CourseListCubit>().loadByStatusType(
-                          widget.courseStatusType!,
-                          isPaid: _isPaid,
-                        );
-                      } else if (widget.sortBy != null) {
-                        context.read<CourseListCubit>().loadBySortBy(
-                          widget.sortBy!,
-                          isPaid: _isPaid,
-                        );
-                      } else if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
-                        context.read<CourseListCubit>().loadBySearchQuery(
-                          widget.searchQuery!,
-                          isPaid: _isPaid,
-                        );
-                      } else {
-                        context.read<CourseListCubit>().loadCatalog(
-                          isPaid: _isPaid,
-                        );
-                      }
-                    },
-                  ),
-                  orElse: () => const Center(
-                    child: Text('Select a category to browse courses'),
-                  ),
-                );
-              },
             ),
-          ),
+            // The status-bar area is white too, not the photo.
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: MediaQuery.of(context).padding.top,
+              child: ColoredBox(color: AppColors.white),
+            ),
+          ],
         ),
       ),
     );
@@ -604,7 +647,9 @@ class _CourseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: Screen.getPadding(horizontal: 12, vertical: 12),
+      // The card clips its own corners so the cover can run edge to edge
+      // along the top, with no inset around it.
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(AppSizes.radiusL),
@@ -625,41 +670,60 @@ class _CourseCard extends StatelessWidget {
         children: [
           GestureDetector(
             onTap: onTap,
-            // Whole banner, never a crop — see [CourseCoverImage].
-            child: CourseCoverImage(
+            // Fills the frame edge to edge — no blurred side bars, so wide
+            // banners are cropped at the sides (unlike [CourseCoverImage]).
+            child: CustomNetworkImage(
               url: course.courseImageUrl,
               height: Screen.getVerticalSize(160),
               width: double.infinity,
-              borderRadius: BorderRadius.circular(AppSizes.radiusL),
-            ),
-          ),
-          SizedBox(height: Screen.getVerticalSize(10)),
-          GestureDetector(
-            onTap: onTap,
-            child: Text(
-              course.courseTitle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                color: AppColors.textPrimary,
+              fit: BoxFit.cover,
+              errorWidget: Container(
+                color: AppColors.grey100,
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.image_outlined,
+                  color: AppColors.grey300,
+                  size: Screen.getSize(28),
+                ),
               ),
             ),
           ),
-          SizedBox(height: Screen.getVerticalSize(6)),
-          RatingAndReviewRowWidget(
-            rating: course.rating.toString(),
-            reviewCount: Utils.formatReviewCount(course.totalReviewsCounts),
-          ),
-          SizedBox(height: Screen.getVerticalSize(12)),
-          ViewDemoBuyNowRow(
-            courseId: course.courseId,
-            showViewDetails: true,
-            showViewDemo: false,
-            showBuyNow: course.isPurchased == false,
-            isCourseFree: course.isCourseFree,
-            onPurchased: () => context
-                .read<CourseListCubit>()
-                .updatePurchasedStatus(course.courseId, true),
+          Padding(
+            padding: Screen.getPadding(horizontal: 12, top: 10, bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  onTap: onTap,
+                  child: Text(
+                    course.courseTitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodyTextLargeSemiBold.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                SizedBox(height: Screen.getVerticalSize(6)),
+                RatingAndReviewRowWidget(
+                  rating: course.rating.toString(),
+                  reviewCount: Utils.formatReviewCount(
+                    course.totalReviewsCounts,
+                  ),
+                ),
+                SizedBox(height: Screen.getVerticalSize(12)),
+                ViewDemoBuyNowRow(
+                  courseId: course.courseId,
+                  showViewDetails: true,
+                  showViewDemo: false,
+                  showBuyNow: course.isPurchased == false,
+                  isCourseFree: course.isCourseFree,
+                  onPurchased: () => context
+                      .read<CourseListCubit>()
+                      .updatePurchasedStatus(course.courseId, true),
+                ),
+              ],
+            ),
           ),
         ],
       ),

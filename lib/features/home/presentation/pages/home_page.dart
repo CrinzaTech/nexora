@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 import 'dart:ui' show lerpDouble;
 
 import 'package:nexora/core/widgets/gradient_border.dart';
@@ -19,19 +20,19 @@ import 'package:nexora/features/home/data/models/home_model.dart';
 import 'package:nexora/core/widgets/scrolling_title.dart';
 import 'package:nexora/features/home/presentation/bloc/home_cubit.dart';
 import 'package:nexora/features/home_live/presentation/bloc/home_live_cubit.dart';
-import 'package:nexora/features/home_live/presentation/widgets/home_live_section_widget.dart';
 import 'package:nexora/features/home/presentation/widgets/banner_widget.dart';
 import 'package:nexora/features/home/presentation/widgets/category_section_widget.dart';
+import 'package:nexora/features/home/presentation/widgets/discover_icons_row.dart';
 import 'package:nexora/features/home/presentation/widgets/featured_courses_widget.dart';
 import 'package:nexora/features/home/presentation/widgets/home_loading_skeleton.dart';
 import 'package:nexora/features/home/presentation/widgets/reviews_section_widget.dart';
 import 'package:nexora/features/home/presentation/widgets/social_media_section_widget.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinars_cubit.dart';
-import 'package:nexora/features/webinar/presentation/widgets/webinar_section_widget.dart';
 import 'package:nexora/features/profile/data/models/user_profile_model.dart';
 import 'package:nexora/features/profile/presentation/bloc/profile_cubit.dart';
 import 'package:nexora/core/theme/app_decorations.dart';
 import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
+import 'package:nexora/core/wallpaper/wallpaper_cubit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -49,9 +50,22 @@ class _HomePageState extends State<HomePage>
   final ScrollController _scrollController = ScrollController();
   bool _isSearchVisible = true;
 
+  // The header collapses to a slim "Welcome to {brand}" strip once the page
+  // has scrolled up to it, and opens again as the learner scrolls back.
+  final ValueNotifier<bool> _headerCollapsed = ValueNotifier<bool>(false);
+  double _lastScrollOffset = 0;
+  static const double _collapsedContentHeight = 28.0;
+  static const double _scrollDirectionSlop = 6.0;
+
   final GlobalKey _railKey = GlobalKey();
   double _railHeight = 0.0;
   bool _isRailHeightMeasured = false;
+
+  // Where the in-flow discover row sits in the scroll content (offset-
+  // independent), measured from the real layout rather than estimated.
+  final GlobalKey _iconsKey = GlobalKey();
+  final GlobalKey _stackKey = GlobalKey();
+  double? _iconsContentTop;
 
   @override
   bool get wantKeepAlive => true;
@@ -91,6 +105,7 @@ class _HomePageState extends State<HomePage>
   @override
   void dispose() {
     _scrollController.removeListener(_onScroll);
+    _headerCollapsed.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -114,9 +129,58 @@ class _HomePageState extends State<HomePage>
     }
   }
 
+  /// True once the scrolling icon row has reached the AppBar and the
+  /// pinned copy has taken over.
+  bool get _isIconsPinned {
+    final top = _iconsContentTop;
+    if (top == null || !_scrollController.hasClients) return false;
+    return _scrollController.offset >=
+        top + (DiscoverIconsRow.topPadding - DiscoverIconsRow.pinnedTopPadding);
+  }
+
+  void _measureIcons() {
+    if (!mounted || !_scrollController.hasClients) return;
+    final iconsBox = _iconsKey.currentContext?.findRenderObject() as RenderBox?;
+    final stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (iconsBox == null ||
+        stackBox == null ||
+        !iconsBox.attached ||
+        !stackBox.attached) {
+      return;
+    }
+    final dy = iconsBox.localToGlobal(Offset.zero, ancestor: stackBox).dy;
+    final top = dy + _scrollController.offset;
+    if (_iconsContentTop == null || (_iconsContentTop! - top).abs() > 0.5) {
+      setState(() => _iconsContentTop = top);
+    }
+  }
+
+  /// Collapse once the white card has reached the header (after the rail
+  /// has scrolled away — straight away when there is no rail); expand again
+  /// on any upward scroll, and always at the top.
+  void _updateHeaderCollapse(double offset) {
+    final hasRail = context.read<ContinueCoursesCubit>().state.maybeWhen(
+      loaded: (c) => c.isNotEmpty,
+      orElse: () => false,
+    );
+    final start = hasRail && _isRailHeightMeasured ? _railHeight : 0.0;
+    final delta = offset - _lastScrollOffset;
+    if (offset <= start) {
+      _headerCollapsed.value = false;
+      _lastScrollOffset = offset;
+    } else if (delta > _scrollDirectionSlop) {
+      _headerCollapsed.value = true;
+      _lastScrollOffset = offset;
+    } else if (delta < -_scrollDirectionSlop) {
+      _headerCollapsed.value = false;
+      _lastScrollOffset = offset;
+    }
+  }
+
   void _onScroll() {
     if (_scrollController.hasClients) {
       final double offset = _scrollController.offset;
+      _updateHeaderCollapse(offset);
       final bool shouldShowSearch = offset < 50;
 
       if (_isSearchVisible != shouldShowSearch) {
@@ -133,7 +197,13 @@ class _HomePageState extends State<HomePage>
     Screen().adaptDeviceScreenSize(context);
     // Read here, in build proper, so changing the background from the
     // Profile tab rebuilds Home even though it stays mounted.
-    final withWallpaper = hasWallpaper(context);
+    // True only for a student's own photo. The bundled Theme background is
+    // a pink-lavender gradient rather than a picture, and showing it
+    // through a translucent card tinted the banner and content pink — so
+    // with Theme (or None) the card stays solid white.
+    final withWallpaper = context.select<WallpaperCubit, bool>(
+      (cubit) => cubit.mode == WallpaperMode.custom,
+    );
 
     return BlocBuilder<HomeCubit, HomeState>(
       builder: (context, state) {
@@ -160,6 +230,7 @@ class _HomePageState extends State<HomePage>
     required bool withWallpaper,
   }) {
     final rh = ResponsiveHelper.of(context);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measureIcons());
     // Single-row header matching the reference design: 72px tall.
     // Clamped to avoid overflow on iPads where topInset can be very tall.
     final topInset = MediaQuery.of(context).padding.top;
@@ -170,336 +241,516 @@ class _HomePageState extends State<HomePage>
       decoration: BoxDecoration(gradient: AppColors.primaryGradient),
       child: Scaffold(
         backgroundColor: AppColors.white,
-        appBar: PreferredSize(
-          preferredSize: Size.fromHeight(bandHeight),
-          child: _HeaderBand(child: _buildHeader(dashboard)),
-        ),
-        body: Stack(
+        body: Column(
           children: [
-            // ── 0. Custom background ──
-            // Fixed to the screen, not to the content: it sits under the
-            // scroll view, so the photo stays exactly where it is while
-            // the sections scroll over it. The veil keeps headings
-            // readable; the tiles are opaque on their own.
-            Positioned.fill(
-              child: WallpaperLayer(
-                scrimColor: AppColors.white,
-                scrimOpacity: AppColors.isDark ? 0.55 : 0.50,
+            // The header lives in the body rather than the Scaffold's
+            // appBar slot so its height can animate without rebuilding
+            // the page every frame.
+            ValueListenableBuilder<bool>(
+              valueListenable: _headerCollapsed,
+              builder: (context, collapsed, _) => AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                // Collapsed, the header keeps the status-bar inset (safe
+                // area) and shrinks to a slim strip below it.
+                height: collapsed
+                    ? topInset + _collapsedContentHeight
+                    : bandHeight,
+                child: collapsed
+                    ? _HeaderBand(child: _buildCollapsedHeader())
+                    : _HeaderBand(
+                        child: ClipRect(
+                          child: OverflowBox(
+                            alignment: Alignment.topCenter,
+                            minHeight: 0,
+                            maxHeight: 72,
+                            child: SizedBox(
+                              height: 72,
+                              child: _buildHeader(dashboard),
+                            ),
+                          ),
+                        ),
+                      ),
               ),
             ),
-
-            // ── 1. Scrollable Content ──
-            RefreshIndicator(
-              color: AppColors.secondary,
-              onRefresh: () => Future.wait([
-                context.read<HomeCubit>().silentRefresh(),
-                context.read<ContinueCoursesCubit>().silentRefresh(),
-                context.read<HomeLiveCubit>().silentRefresh(),
-                context.read<WebinarsCubit>().silentRefresh(),
-              ]),
-              child: SingleChildScrollView(
-                controller: _scrollController,
-                physics:
-                    const AlwaysScrollableScrollPhysics(), // Allow pull-to-refresh even if content is short
-                child: Center(
-                  child: ConstrainedBox(
-                    // Limit content width on tablets so it doesn't stretch
-                    // across a full iPad screen (looks too sparse otherwise).
-                    constraints: const BoxConstraints(
-                      maxWidth: double.infinity,
+            Expanded(
+              child: Stack(
+                key: _stackKey,
+                children: [
+                  // ── 0. Custom background ──
+                  // Fixed to the screen, not to the content: it sits under the
+                  // scroll view, so the photo stays exactly where it is while
+                  // the sections scroll over it. The veil keeps headings
+                  // readable; the tiles are opaque on their own.
+                  Positioned.fill(
+                    child: WallpaperLayer(
+                      scrimColor: AppColors.white,
+                      scrimOpacity: AppColors.isDark ? 0.55 : 0.50,
                     ),
-                    child: Column(
-                      children: [
-                        // ── Continue Purchase Rail ──
-                        // Translated to visually stay fixed while the rest of the column scrolls over it.
-                        // Also fades out as the white card scrolls up to the AppBar,
-                        // and fades back in when the user scrolls back down.
-                        AnimatedBuilder(
-                          animation: _scrollController,
-                          builder: (context, child) {
-                            final offset = _scrollController.hasClients
-                                ? _scrollController.offset
-                                : 0.0;
+                  ),
 
-                            // Fade zone: fully visible at offset 0,
-                            // fully transparent when the white card
-                            // reaches the AppBar (_railHeight).
-                            // Falls back to 80 px when rail is unmeasured / empty.
-                            final fadeEnd =
-                                (_isRailHeightMeasured && _railHeight > 10.0)
-                                ? _railHeight
-                                : 250.0;
-                            final railOpacity = (1.0 - (offset / fadeEnd))
-                                .clamp(0.0, 1.0);
+                  // ── 1. Scrollable Content ──
+                  RefreshIndicator(
+                    color: AppColors.secondary,
+                    onRefresh: () => Future.wait([
+                      context.read<HomeCubit>().silentRefresh(),
+                      context.read<ContinueCoursesCubit>().silentRefresh(),
+                      context.read<HomeLiveCubit>().silentRefresh(),
+                      context.read<WebinarsCubit>().silentRefresh(),
+                    ]),
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      physics:
+                          const AlwaysScrollableScrollPhysics(), // Allow pull-to-refresh even if content is short
+                      child: Center(
+                        child: ConstrainedBox(
+                          // Limit content width on tablets so it doesn't stretch
+                          // across a full iPad screen (looks too sparse otherwise).
+                          constraints: const BoxConstraints(
+                            maxWidth: double.infinity,
+                          ),
+                          child: Column(
+                            children: [
+                              // ── Continue Purchase Rail ──
+                              // Translated to visually stay fixed while the rest of the column scrolls over it.
+                              // Also fades out as the white card scrolls up to the AppBar,
+                              // and fades back in when the user scrolls back down.
+                              AnimatedBuilder(
+                                animation: _scrollController,
+                                builder: (context, child) {
+                                  final offset = _scrollController.hasClients
+                                      ? _scrollController.offset
+                                      : 0.0;
 
-                            return Opacity(
-                              opacity: railOpacity,
-                              child: Transform.translate(
-                                offset: Offset(0, offset > 0 ? offset : 0),
-                                child: child,
-                              ),
-                            );
-                          },
-                          child:
-                              BlocSelector<
-                                ContinueCoursesCubit,
-                                ContinueCoursesState,
-                                bool
-                              >(
-                                selector: (state) => state.maybeWhen(
-                                  loaded: (c) => c.isNotEmpty,
-                                  orElse: () => false,
-                                ),
-                                builder: (context, hasItems) {
-                                  if (!hasItems) return const SizedBox.shrink();
-                                  return NotificationListener<
-                                    SizeChangedLayoutNotification
-                                  >(
-                                    onNotification: (notification) {
-                                      WidgetsBinding.instance
-                                          .addPostFrameCallback(
-                                            (_) => _updateRailHeight(),
-                                          );
-                                      return true;
-                                    },
-                                    child: SizeChangedLayoutNotifier(
-                                      child: Container(
-                                        key: _railKey,
-                                        color: Colors.transparent,
-                                        child: Column(
-                                          children: [
-                                            SizedBox(
-                                              height: Screen.getVerticalSize(
-                                                15,
-                                              ),
-                                            ),
-                                            const _ContinuePurchaseRail(),
-                                            SizedBox(
-                                              height: Screen.getVerticalSize(
-                                                16,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
+                                  // Fade zone: fully visible at offset 0,
+                                  // fully transparent when the white card
+                                  // reaches the AppBar (_railHeight).
+                                  // Falls back to 80 px when rail is unmeasured / empty.
+                                  final fadeEnd =
+                                      (_isRailHeightMeasured &&
+                                          _railHeight > 10.0)
+                                      ? _railHeight
+                                      : 250.0;
+                                  final railOpacity = (1.0 - (offset / fadeEnd))
+                                      .clamp(0.0, 1.0);
+
+                                  return Opacity(
+                                    opacity: railOpacity,
+                                    child: Transform.translate(
+                                      offset: Offset(
+                                        0,
+                                        offset > 0 ? offset : 0,
                                       ),
+                                      child: child,
                                     ),
                                   );
                                 },
-                              ),
-                        ),
-
-                        // ── White content card ────────────────────────────────
-                        // AnimatedBuilder drives the top-corner radius:
-                        //   • Full curve (AppSizes.radiusXXL) when the card sits
-                        //     in its natural resting position.
-                        //   • Begins flattening 20 px before the card reaches
-                        //     the AppBar (offset = _railHeight − 20).
-                        //   • Fully flat (radius = 0) the moment it contacts the
-                        //     AppBar (offset = _railHeight).
-                        //   • Reverts smoothly when the user scrolls back down.
-                        AnimatedBuilder(
-                          animation: _scrollController,
-                          builder: (context, child) {
-                            final offset = _scrollController.hasClients
-                                ? _scrollController.offset
-                                : 0.0;
-
-                            // ── Border-radius flatten zone ─────────────────────
-                            // flattenStart: the EXACT scroll-offset pixel where
-                            //   the animation begins. Nothing happens before this.
-                            //   ↑ Increase this number to delay when it kicks in.
-                            //
-                            // flattenEnd: the scroll-offset pixel where the corners
-                            //   are fully flat (radius = 0). This should roughly
-                            //   match when the white card reaches the AppBar.
-                            //   Use _railHeight when measured, else a safe default.
-                            //
-                            // Both values are INDEPENDENT of each other — tuning
-                            // flattenStart never affects flattenEnd.
-                            const double flattenStart =
-                                200.0; // ← change this only
-                            final double flattenEnd =
-                                (_isRailHeightMeasured &&
-                                    _railHeight > flattenStart)
-                                ? _railHeight // card measured → use it
-                                : flattenStart + 80.0; // fallback: 80 px window
-
-                            final progress =
-                                ((offset - flattenStart) /
-                                        (flattenEnd - flattenStart))
-                                    .clamp(0.0, 1.0);
-
-                            // When there are no continue-courses the white card
-                            // sits flush against the AppBar from offset=0, so
-                            // always show flat corners. When courses exist,
-                            // animate from full curve → flat as the user scrolls.
-                            final hasContinueCourses = context
-                                .read<ContinueCoursesCubit>()
-                                .state
-                                .maybeWhen(
-                                  loaded: (c) => c.isNotEmpty,
-                                  orElse: () => false,
-                                );
-
-                            final currentRadius = hasContinueCourses
-                                ? lerpDouble(AppSizes.radiusXXL, 0.0, progress)!
-                                : 0.0;
-
-                            return Container(
-                              width: Screen.width,
-                              decoration: BoxDecoration(
-                                // A solid card would hide the fixed photo
-                                // the moment it scrolls over it. Over a
-                                // custom background it is a light wash
-                                // instead, so the photo shows all the way
-                                // down the page.
-                                color: withWallpaper
-                                    ? AppColors.white.withValues(alpha: 0.30)
-                                    : AppColors.white,
-                                borderRadius: BorderRadius.only(
-                                  topLeft: Radius.circular(currentRadius),
-                                  topRight: Radius.circular(currentRadius),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primary.withValues(
-                                      alpha: 0.30,
+                                child:
+                                    BlocSelector<
+                                      ContinueCoursesCubit,
+                                      ContinueCoursesState,
+                                      bool
+                                    >(
+                                      selector: (state) => state.maybeWhen(
+                                        loaded: (c) => c.isNotEmpty,
+                                        orElse: () => false,
+                                      ),
+                                      builder: (context, hasItems) {
+                                        if (!hasItems)
+                                          return const SizedBox.shrink();
+                                        return NotificationListener<
+                                          SizeChangedLayoutNotification
+                                        >(
+                                          onNotification: (notification) {
+                                            WidgetsBinding.instance
+                                                .addPostFrameCallback(
+                                                  (_) => _updateRailHeight(),
+                                                );
+                                            return true;
+                                          },
+                                          child: SizeChangedLayoutNotifier(
+                                            child: Container(
+                                              key: _railKey,
+                                              color: Colors.transparent,
+                                              child: Column(
+                                                children: [
+                                                  SizedBox(
+                                                    height:
+                                                        Screen.getVerticalSize(
+                                                          15,
+                                                        ),
+                                                  ),
+                                                  const _ContinuePurchaseRail(),
+                                                  SizedBox(
+                                                    height:
+                                                        Screen.getVerticalSize(
+                                                          16,
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
                                     ),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, -2),
-                                  ),
-                                ],
                               ),
-                              child: child,
-                            );
-                          },
-                          child: ConstrainedBox(
-                            // minHeight = full device screen height so the white
-                            // card always extends far enough to be scrollable /
-                            // draggable upward, regardless of visible sections.
-                            constraints: BoxConstraints(
-                              minHeight: MediaQuery.of(context).size.height,
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(height: 16),
-                                BannerSection(banners: dashboard.banner),
-                                // Top of the page for the same reason the
-                                // webinar rail is near it, only more so: a
-                                // course class on air this second is the
-                                // one thing here they lose by not seeing.
-                                // Served by its own endpoint (the educator
-                                // decides per class who sees it), and it
-                                // collapses to nothing when there are none.
-                                const HomeLiveSectionWidget(),
-                                // Above the course rails on purpose: a
-                                // webinar is time-bound, and one that is
-                                // live right now is the most perishable
-                                // thing on this screen. Renders nothing
-                                // when the org runs no webinars.
-                                const WebinarSectionWidget(),
-                                SizedBox(height: Screen.getVerticalSize(25)),
-                                FeaturedCoursesWidget(
-                                  title: 'New Courses',
-                                  showNewBadge: true,
-                                  viewAllRoute:
-                                      '${AppRoutes.catalog}?sortBy=new',
-                                  courses: dashboard.newCourses
-                                      .map(
-                                        (c) => CourseCardData(
-                                          courseId: c.courseId,
-                                          courseTitle: c.courseTitle,
-                                          courseImageUrl: c.courseImageUrl,
-                                          rating: c.rating,
-                                          totalReviewsCounts:
-                                              c.totalReviewsCounts,
+
+                              // ── White content card ────────────────────────────────
+                              // AnimatedBuilder drives the top-corner radius:
+                              //   • Full curve (AppSizes.radiusXXL) when the card sits
+                              //     in its natural resting position.
+                              //   • Begins flattening 20 px before the card reaches
+                              //     the AppBar (offset = _railHeight − 20).
+                              //   • Fully flat (radius = 0) the moment it contacts the
+                              //     AppBar (offset = _railHeight).
+                              //   • Reverts smoothly when the user scrolls back down.
+                              AnimatedBuilder(
+                                animation: _scrollController,
+                                builder: (context, child) {
+                                  final offset = _scrollController.hasClients
+                                      ? _scrollController.offset
+                                      : 0.0;
+
+                                  // ── Border-radius flatten zone ─────────────────────
+                                  // flattenStart: the EXACT scroll-offset pixel where
+                                  //   the animation begins. Nothing happens before this.
+                                  //   ↑ Increase this number to delay when it kicks in.
+                                  //
+                                  // flattenEnd: the scroll-offset pixel where the corners
+                                  //   are fully flat (radius = 0). This should roughly
+                                  //   match when the white card reaches the AppBar.
+                                  //   Use _railHeight when measured, else a safe default.
+                                  //
+                                  // Both values are INDEPENDENT of each other — tuning
+                                  // flattenStart never affects flattenEnd.
+                                  const double flattenStart =
+                                      200.0; // ← change this only
+                                  final double flattenEnd =
+                                      (_isRailHeightMeasured &&
+                                          _railHeight > flattenStart)
+                                      ? _railHeight // card measured → use it
+                                      : flattenStart +
+                                            80.0; // fallback: 80 px window
+
+                                  final progress =
+                                      ((offset - flattenStart) /
+                                              (flattenEnd - flattenStart))
+                                          .clamp(0.0, 1.0);
+
+                                  // When there are no continue-courses the white card
+                                  // sits flush against the AppBar from offset=0, so
+                                  // always show flat corners. When courses exist,
+                                  // animate from full curve → flat as the user scrolls.
+                                  final hasContinueCourses = context
+                                      .read<ContinueCoursesCubit>()
+                                      .state
+                                      .maybeWhen(
+                                        loaded: (c) => c.isNotEmpty,
+                                        orElse: () => false,
+                                      );
+
+                                  final currentRadius = hasContinueCourses
+                                      ? lerpDouble(
+                                          AppSizes.radiusXXL,
+                                          0.0,
+                                          progress,
+                                        )!
+                                      : 0.0;
+
+                                  return Container(
+                                    width: Screen.width,
+                                    decoration: BoxDecoration(
+                                      // A solid card would hide the fixed photo
+                                      // the moment it scrolls over it. Over a
+                                      // custom photo it is a light wash instead,
+                                      // so the photo shows all the way down the
+                                      // page.
+                                      color: withWallpaper
+                                          ? AppColors.white.withValues(
+                                              alpha: 0.30,
+                                            )
+                                          : AppColors.white,
+                                      borderRadius: BorderRadius.only(
+                                        topLeft: Radius.circular(currentRadius),
+                                        topRight: Radius.circular(
+                                          currentRadius,
                                         ),
-                                      )
-                                      .toList(),
-                                ),
-                                SizedBox(height: Screen.getVerticalSize(25)),
-                                CategorySection(tiles: dashboard.educatorTiles),
-                                SizedBox(height: Screen.getVerticalSize(25)),
-                                FeaturedCoursesWidget(
-                                  title: 'Trending Courses',
-                                  viewAllRoute:
-                                      '${AppRoutes.catalog}?sortBy=trending',
-                                  courses: dashboard.trendingCourses
-                                      .map(
-                                        (c) => CourseCardData(
-                                          courseId: c.courseId,
-                                          courseTitle: c.courseTitle,
-                                          courseImageUrl: c.courseImageUrl,
-                                          rating: c.rating,
-                                          totalReviewsCounts:
-                                              c.totalReviewsCounts,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: AppColors.primary.withValues(
+                                            alpha: 0.30,
+                                          ),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, -2),
                                         ),
-                                      )
-                                      .toList(),
+                                      ],
+                                    ),
+                                    child: child,
+                                  );
+                                },
+                                child: ConstrainedBox(
+                                  // minHeight = full device screen height so the white
+                                  // card always extends far enough to be scrollable /
+                                  // draggable upward, regardless of visible sections.
+                                  constraints: BoxConstraints(
+                                    minHeight: MediaQuery.of(
+                                      context,
+                                    ).size.height,
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const SizedBox(height: 16),
+                                      BannerSection(banners: dashboard.banner),
+                                      KeyedSubtree(
+                                        key: _iconsKey,
+                                        // Hidden once the pinned copy is showing,
+                                        // so the two never overlap while the
+                                        // scrolling one slides away beneath.
+                                        child: AnimatedBuilder(
+                                          animation: _scrollController,
+                                          builder: (context, child) => Opacity(
+                                            opacity: _isIconsPinned ? 0 : 1,
+                                            child: child,
+                                          ),
+                                          child: const DiscoverIconsRow(),
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        height: Screen.getVerticalSize(25),
+                                      ),
+                                      FeaturedCoursesWidget(
+                                        title: 'New Courses',
+                                        showNewBadge: true,
+                                        viewAllRoute:
+                                            '${AppRoutes.catalog}?sortBy=new',
+                                        courses: dashboard.newCourses
+                                            .map(
+                                              (c) => CourseCardData(
+                                                courseId: c.courseId,
+                                                courseTitle: c.courseTitle,
+                                                courseImageUrl:
+                                                    c.courseImageUrl,
+                                                rating: c.rating,
+                                                totalReviewsCounts:
+                                                    c.totalReviewsCounts,
+                                              ),
+                                            )
+                                            .toList(),
+                                      ),
+                                      SizedBox(
+                                        height: Screen.getVerticalSize(25),
+                                      ),
+                                      CategorySection(
+                                        tiles: dashboard.educatorTiles,
+                                      ),
+                                      SizedBox(
+                                        height: Screen.getVerticalSize(25),
+                                      ),
+                                      FeaturedCoursesWidget(
+                                        title: 'Trending Courses',
+                                        viewAllRoute:
+                                            '${AppRoutes.catalog}?sortBy=trending',
+                                        courses: dashboard.trendingCourses
+                                            .map(
+                                              (c) => CourseCardData(
+                                                courseId: c.courseId,
+                                                courseTitle: c.courseTitle,
+                                                courseImageUrl:
+                                                    c.courseImageUrl,
+                                                rating: c.rating,
+                                                totalReviewsCounts:
+                                                    c.totalReviewsCounts,
+                                              ),
+                                            )
+                                            .toList(),
+                                      ),
+                                      SizedBox(
+                                        height: Screen.getVerticalSize(25),
+                                      ),
+                                      ReviewsSectionWidget(
+                                        reviews: dashboard.learnerReviews,
+                                      ),
+                                      SizedBox(
+                                        height: Screen.getVerticalSize(25),
+                                      ),
+                                      SocialMediaSectionWidget(
+                                        links: dashboard.socialMediaLinks,
+                                      ),
+                                      SizedBox(
+                                        height: Screen.getVerticalSize(25),
+                                      ),
+                                      Utils.defaultBottomSpace(),
+                                    ],
+                                  ),
                                 ),
-                                SizedBox(height: Screen.getVerticalSize(25)),
-                                ReviewsSectionWidget(
-                                  reviews: dashboard.learnerReviews,
-                                ),
-                                SizedBox(height: Screen.getVerticalSize(25)),
-                                SocialMediaSectionWidget(
-                                  links: dashboard.socialMediaLinks,
-                                ),
-                                SizedBox(height: Screen.getVerticalSize(25)),
-                                Utils.defaultBottomSpace(),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ),
-            ),
 
-            // ── 2. Locked Top Rounded Corners Overlay ──
-            // Becomes visible only when the white card has scrolled up to the AppBar.
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: AnimatedBuilder(
-                animation: _scrollController,
-                builder: (context, child) {
-                  final offset = _scrollController.hasClients
-                      ? _scrollController.offset
-                      : 0.0;
-                  final threshold = _isRailHeightMeasured
-                      ? _railHeight
-                      : 9999.0;
+                  // ── 2. Locked Top Rounded Corners Overlay ──
+                  // Becomes visible only when the white card has scrolled up to the AppBar.
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: AnimatedBuilder(
+                      animation: _scrollController,
+                      builder: (context, child) {
+                        final offset = _scrollController.hasClients
+                            ? _scrollController.offset
+                            : 0.0;
+                        final threshold = _isRailHeightMeasured
+                            ? _railHeight
+                            : 9999.0;
 
-                  if (offset >= threshold) {
-                    return Container(
-                      height:
-                          40, // Tall enough to draw the full radius seamlessly
-                      decoration: BoxDecoration(
-                        color: AppColors.white,
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(AppSizes.radiusXXL),
-                          topRight: Radius.circular(AppSizes.radiusXXL),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.15),
-                            blurRadius: 12,
-                            offset: const Offset(0, -2),
+                        if (offset >= threshold) {
+                          return Container(
+                            height:
+                                40, // Tall enough to draw the full radius seamlessly
+                            decoration: BoxDecoration(
+                              color: AppColors.white,
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(AppSizes.radiusXXL),
+                                topRight: Radius.circular(AppSizes.radiusXXL),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.15,
+                                  ),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, -2),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+
+                  // ── 3. Pinned discover icons ──
+                  // The in-flow icon row scrolls normally; once it reaches the
+                  // AppBar this copy takes its place at the top, so the
+                  // icons stay put while the rest keeps scrolling under them.
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: AnimatedBuilder(
+                      animation: _scrollController,
+                      builder: (context, _) {
+                        // Keep the measurement fresh as layout settles.
+                        WidgetsBinding.instance.addPostFrameCallback(
+                          (_) => _measureIcons(),
+                        );
+                        // The pinned row has less top padding, so pin that much
+                        // later: the icons then stay exactly where they were.
+                        if (!_isIconsPinned) return const SizedBox.shrink();
+                        // A floating pill like the bottom navbar: detached from
+                        // the AppBar, every corner curved, smaller icons. Frosted
+                        // glass with gradient rim, brand inner shadow and a
+                        // floating shadow.
+                        const pill = BorderRadius.all(Radius.circular(60));
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(6, 10, 6, 0),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: pill,
+                              boxShadow: AppDecorations.floatingShadow(),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: pill,
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(
+                                  sigmaX: 12,
+                                  sigmaY: 12,
+                                ),
+                                child: Stack(
+                                  children: [
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: AppColors.white.withValues(
+                                          alpha: AppColors.isDark ? 0.55 : 0.45,
+                                        ),
+                                        borderRadius: pill,
+                                        border: GradientBorder(
+                                          gradient:
+                                              AppDecorations.rimGradient(),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: const DiscoverIconsRow(
+                                        top: 6,
+                                        bottom: 6,
+                                        iconSize: 80,
+                                      ),
+                                    ),
+                                    Positioned.fill(
+                                      child: IgnorePointer(
+                                        child: CustomPaint(
+                                          painter: InnerShadowPainter(
+                                            color: AppColors.primary.withValues(
+                                              alpha: AppColors.isDark
+                                                  ? 0.05
+                                                  : 0.08,
+                                            ),
+                                            blurRadius: 10,
+                                            offset: const Offset(-2, 3),
+                                            borderRadius: pill,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
-                        ],
-                      ),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// The slim header: just "Welcome to {brand}".
+  Widget _buildCollapsedHeader() {
+    return SizedBox.expand(
+      child: Center(
+        child: RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: 'Welcome to ',
+                style: AppTypography.bodyTextMedium.copyWith(
+                  color: Colors.white70,
+                  fontSize: Screen.getFontSizeCapped(13),
+                ),
+              ),
+              TextSpan(
+                text: currentBranding.appName,
+                style: AppTypography.h6SemiBold.copyWith(
+                  color: AppColors.alwaysWhite,
+                  fontSize: Screen.getFontSizeCapped(14),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

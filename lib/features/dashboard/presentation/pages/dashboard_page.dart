@@ -61,7 +61,7 @@ class _DashboardPageState extends State<DashboardPage> {
       route: 'chats',
     ),
     NavItem(
-      label: 'Courses',
+      label: 'Enrolled',
       icon: AppImages.courseUnselectedIcon,
       activeIcon: AppImages.courseSelectedIcon,
       route: 'courses',

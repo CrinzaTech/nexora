@@ -1,3 +1,4 @@
+import 'package:nexora/features/home_live/presentation/pages/live_events_page.dart';
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/widgets/splash_screen.dart';
 import 'package:nexora/features/auth/presentation/pages/login_page.dart';
@@ -589,6 +590,11 @@ class AppRouter {
           }
           return CertificatePreviewPage(certificate: certificate);
         },
+      ),
+      GoRoute(
+        path: AppRoutes.liveEvents,
+        name: 'live-events',
+        builder: (context, state) => const LiveEventsPage(),
       ),
       GoRoute(
         path: AppRoutes.webinars,

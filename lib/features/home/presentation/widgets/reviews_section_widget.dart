@@ -1,3 +1,4 @@
+import 'package:nexora/core/widgets/readable_text.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_theme.dart';
 import 'package:nexora/core/widgets/custom_network_image.dart';
@@ -32,7 +33,7 @@ class ReviewsSectionWidget extends StatelessWidget {
       children: [
         Padding(
           padding: Screen.getPadding(horizontal: 20),
-          child: Text(
+          child: ReadableText(
             "What Other Learners Say",
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
