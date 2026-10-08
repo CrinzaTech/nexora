@@ -504,22 +504,32 @@ class _HomePageState extends State<HomePage>
                                     children: [
                                       const SizedBox(height: 16),
                                       BannerSection(banners: dashboard.banner),
-                                      KeyedSubtree(
-                                        key: _iconsKey,
-                                        // Hidden once the pinned copy is showing,
-                                        // so the two never overlap while the
-                                        // scrolling one slides away beneath.
-                                        child: AnimatedBuilder(
-                                          animation: _scrollController,
-                                          builder: (context, child) => Opacity(
-                                            opacity: _isIconsPinned ? 0 : 1,
-                                            child: child,
+                                      if (currentBranding.showDiscoverTab)
+                                        KeyedSubtree(
+                                          key: _iconsKey,
+                                          // Hidden once the pinned copy is showing,
+                                          // so the two never overlap while the
+                                          // scrolling one slides away beneath.
+                                          child: AnimatedBuilder(
+                                            animation: _scrollController,
+                                            builder: (context, child) =>
+                                                Opacity(
+                                                  opacity: _isIconsPinned
+                                                      ? 0
+                                                      : 1,
+                                                  child: child,
+                                                ),
+                                            child: const DiscoverIconsRow(),
                                           ),
-                                          child: const DiscoverIconsRow(),
                                         ),
-                                      ),
                                       SizedBox(
-                                        height: Screen.getVerticalSize(25),
+                                        // Tighter under the discover row, which
+                                        // already carries its own bottom padding.
+                                        height: Screen.getVerticalSize(
+                                          currentBranding.showDiscoverTab
+                                              ? 0
+                                              : 25,
+                                        ),
                                       ),
                                       FeaturedCoursesWidget(
                                         title: 'New Courses',
@@ -541,7 +551,15 @@ class _HomePageState extends State<HomePage>
                                             .toList(),
                                       ),
                                       SizedBox(
-                                        height: Screen.getVerticalSize(25),
+                                        // With no New Courses rail this is the
+                                        // only gap under the discover row, which
+                                        // already has its own bottom padding.
+                                        height: Screen.getVerticalSize(
+                                          currentBranding.showDiscoverTab &&
+                                                  dashboard.newCourses.isEmpty
+                                              ? 0
+                                              : 25,
+                                        ),
                                       ),
                                       CategorySection(
                                         tiles: dashboard.educatorTiles,
@@ -641,84 +659,88 @@ class _HomePageState extends State<HomePage>
                   // The in-flow icon row scrolls normally; once it reaches the
                   // AppBar this copy takes its place at the top, so the
                   // icons stay put while the rest keeps scrolling under them.
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: AnimatedBuilder(
-                      animation: _scrollController,
-                      builder: (context, _) {
-                        // Keep the measurement fresh as layout settles.
-                        WidgetsBinding.instance.addPostFrameCallback(
-                          (_) => _measureIcons(),
-                        );
-                        // The pinned row has less top padding, so pin that much
-                        // later: the icons then stay exactly where they were.
-                        if (!_isIconsPinned) return const SizedBox.shrink();
-                        // A floating pill like the bottom navbar: detached from
-                        // the AppBar, every corner curved, smaller icons. Frosted
-                        // glass with gradient rim, brand inner shadow and a
-                        // floating shadow.
-                        const pill = BorderRadius.all(Radius.circular(60));
-                        return Padding(
-                          padding: const EdgeInsets.fromLTRB(6, 10, 6, 0),
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: pill,
-                              boxShadow: AppDecorations.floatingShadow(),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: pill,
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(
-                                  sigmaX: 12,
-                                  sigmaY: 12,
-                                ),
-                                child: Stack(
-                                  children: [
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: AppColors.white.withValues(
-                                          alpha: AppColors.isDark ? 0.55 : 0.45,
+                  if (currentBranding.showDiscoverTab)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: AnimatedBuilder(
+                        animation: _scrollController,
+                        builder: (context, _) {
+                          // Keep the measurement fresh as layout settles.
+                          WidgetsBinding.instance.addPostFrameCallback(
+                            (_) => _measureIcons(),
+                          );
+                          // The pinned row has less top padding, so pin that much
+                          // later: the icons then stay exactly where they were.
+                          if (!_isIconsPinned) return const SizedBox.shrink();
+                          // A floating pill like the bottom navbar: detached from
+                          // the AppBar, every corner curved, smaller icons. Frosted
+                          // glass with gradient rim, brand inner shadow and a
+                          // floating shadow.
+                          const pill = BorderRadius.all(Radius.circular(60));
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(6, 10, 6, 0),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                borderRadius: pill,
+                                boxShadow: AppDecorations.floatingShadow(),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: pill,
+                                child: BackdropFilter(
+                                  filter: ImageFilter.blur(
+                                    sigmaX: 12,
+                                    sigmaY: 12,
+                                  ),
+                                  child: Stack(
+                                    children: [
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: AppColors.white.withValues(
+                                            alpha: AppColors.isDark
+                                                ? 0.55
+                                                : 0.45,
+                                          ),
+                                          borderRadius: pill,
+                                          border: GradientBorder(
+                                            gradient:
+                                                AppDecorations.rimGradient(),
+                                            width: 1,
+                                          ),
                                         ),
-                                        borderRadius: pill,
-                                        border: GradientBorder(
-                                          gradient:
-                                              AppDecorations.rimGradient(),
-                                          width: 1,
+                                        child: const DiscoverIconsRow(
+                                          top: 6,
+                                          bottom: 6,
+                                          iconSize: 80,
                                         ),
                                       ),
-                                      child: const DiscoverIconsRow(
-                                        top: 6,
-                                        bottom: 6,
-                                        iconSize: 80,
-                                      ),
-                                    ),
-                                    Positioned.fill(
-                                      child: IgnorePointer(
-                                        child: CustomPaint(
-                                          painter: InnerShadowPainter(
-                                            color: AppColors.primary.withValues(
-                                              alpha: AppColors.isDark
-                                                  ? 0.05
-                                                  : 0.08,
+                                      Positioned.fill(
+                                        child: IgnorePointer(
+                                          child: CustomPaint(
+                                            painter: InnerShadowPainter(
+                                              color: AppColors.primary
+                                                  .withValues(
+                                                    alpha: AppColors.isDark
+                                                        ? 0.05
+                                                        : 0.08,
+                                                  ),
+                                              blurRadius: 10,
+                                              offset: const Offset(-2, 3),
+                                              borderRadius: pill,
                                             ),
-                                            blurRadius: 10,
-                                            offset: const Offset(-2, 3),
-                                            borderRadius: pill,
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:nexora/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
@@ -26,7 +28,8 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> {
+class _DashboardPageState extends State<DashboardPage>
+    with SingleTickerProviderStateMixin {
   late final PageController _pageController;
   late final List<Widget> _pages;
   // Held here (not inside the page list) so [_onNavSelected] can fire a
@@ -45,6 +48,30 @@ class _DashboardPageState extends State<DashboardPage> {
   late final WebinarsCubit _webinarsCubit;
   int _currentIndex = 0;
   DateTime? _lastBackPressTime;
+
+  // The navbar hides when the learner scrolls down and returns when they
+  // scroll up — a timed animation of its own, started after a short delay,
+  // not tied to the scroll position. 0 = shown, 1 = hidden.
+  late final AnimationController _navHidden;
+
+  /// How far the bar travels to be off-screen: its height plus the safe
+  /// area under it.
+  static const double _navTravel = 140;
+
+  /// A beat after the scroll direction changes before the bar starts to
+  /// move, then a slow glide, so it eases off and on instead of snapping.
+  static const Duration _navDelay = Duration(milliseconds: 400);
+  static const Duration _navSettleDuration = Duration(milliseconds: 600);
+  Timer? _navSettleTimer;
+
+  /// Where the bar is heading, so a steady scroll doesn't restart the
+  /// animation on every notification.
+  bool _navTargetHidden = false;
+
+  /// Scroll travelled in the current direction. The bar only flips after a
+  /// deliberate stretch, so a small wobble doesn't trigger it.
+  double _scrollRun = 0;
+  static const double _scrollToggleDistance = 24;
 
   // Navigation items for the bottom navbar
   final List<NavItem> _navItems = const [
@@ -77,6 +104,7 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
+    _navHidden = AnimationController(vsync: this, duration: _navSettleDuration);
     _currentIndex = widget.initialIndex.clamp(0, 3);
     _pageController = PageController(initialPage: _currentIndex);
     _homeCubit = sl<HomeCubit>();
@@ -111,6 +139,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   void dispose() {
+    _navSettleTimer?.cancel();
+    _navHidden.dispose();
     _pageController.dispose();
     _homeCubit.close();
     _continueCubit.close();
@@ -119,11 +149,57 @@ class _DashboardPageState extends State<DashboardPage> {
     super.dispose();
   }
 
+  void _setNavHidden(bool hidden, {bool immediate = false}) {
+    if (_navTargetHidden == hidden) return;
+    _navTargetHidden = hidden;
+    _navSettleTimer?.cancel();
+    void run() {
+      if (!mounted) return;
+      _navHidden.animateTo(
+        hidden ? 1 : 0,
+        duration: _navSettleDuration,
+        curve: Curves.easeInOutCubic,
+      );
+    }
+
+    if (immediate) {
+      run();
+    } else {
+      _navSettleTimer = Timer(_navDelay, run);
+    }
+  }
+
+  bool _onPageScroll(ScrollNotification n) {
+    // Only the pages' own vertical scrolling counts — not the banner /
+    // rails sliding sideways.
+    if (n is! ScrollUpdateNotification || n.metrics.axis != Axis.vertical) {
+      return false;
+    }
+    if (n.metrics.pixels <= 0) {
+      // At (or pulled past) the top the bar is always out.
+      _scrollRun = 0;
+      _setNavHidden(false, immediate: true);
+      return false;
+    }
+    final delta = n.scrollDelta ?? 0;
+    if (delta == 0) return false;
+    // A change of direction starts a fresh run.
+    if ((delta > 0) != (_scrollRun > 0)) _scrollRun = 0;
+    _scrollRun += delta;
+    if (_scrollRun > _scrollToggleDistance) {
+      _setNavHidden(true);
+    } else if (_scrollRun < -_scrollToggleDistance) {
+      _setNavHidden(false);
+    }
+    return false;
+  }
+
   /// Handle navigation item tap
   void _onNavSelected(String route) {
     final index = _navItems.indexWhere((item) => item.route == route);
     if (index != -1 && index != _currentIndex) {
       _pageController.jumpToPage(index);
+      _setNavHidden(false, immediate: true);
       setState(() => _currentIndex = index);
       // Silent refresh on re-entering Home so dashboard data
       // (learner reviews) and the Continue Learning rail stay fresh
@@ -163,6 +239,9 @@ class _DashboardPageState extends State<DashboardPage> {
         backgroundColor: AppColors.grey50,
         body: _PageViewWithNavBar(
           pageController: _pageController,
+          navHidden: _navHidden,
+          navTravel: _navTravel,
+          onScroll: _onPageScroll,
           bottomNavBar: FloatingNavbar(
             items: _navItems,
             activeRoute: _navItems[_currentIndex].route,
@@ -178,11 +257,17 @@ class _DashboardPageState extends State<DashboardPage> {
 /// PageView with floating navbar overlay
 class _PageViewWithNavBar extends StatelessWidget {
   final PageController pageController;
+  final Animation<double> navHidden;
+  final double navTravel;
+  final bool Function(ScrollNotification) onScroll;
   final Widget bottomNavBar;
   final List<Widget> children;
 
   const _PageViewWithNavBar({
     required this.pageController,
+    required this.navHidden,
+    required this.navTravel,
+    required this.onScroll,
     required this.bottomNavBar,
     required this.children,
   });
@@ -191,10 +276,13 @@ class _PageViewWithNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        PageView(
-          physics: const NeverScrollableScrollPhysics(),
-          controller: pageController,
-          children: children,
+        NotificationListener<ScrollNotification>(
+          onNotification: onScroll,
+          child: PageView(
+            physics: const NeverScrollableScrollPhysics(),
+            controller: pageController,
+            children: children,
+          ),
         ),
 
         /// Floating Navbar
@@ -202,7 +290,18 @@ class _PageViewWithNavBar extends StatelessWidget {
           left: Screen.getHorizontalSize(20),
           right: Screen.getHorizontalSize(20),
           bottom: Screen.getVerticalSize(0),
-          child: SafeArea(child: bottomNavBar),
+          child: AnimatedBuilder(
+            animation: navHidden,
+            builder: (context, child) => IgnorePointer(
+              // Not tappable once it is more than half gone.
+              ignoring: navHidden.value > 0.5,
+              child: Transform.translate(
+                offset: Offset(0, navHidden.value * navTravel),
+                child: Opacity(opacity: 1 - navHidden.value, child: child),
+              ),
+            ),
+            child: SafeArea(child: bottomNavBar),
+          ),
         ),
       ],
     );

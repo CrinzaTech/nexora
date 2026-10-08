@@ -357,6 +357,17 @@ class BrandingConfig {
   /// [pngBg] is true.
   final bool pngBgDark;
 
+  // ── Home ───────────────────────────────────────────────────────────
+
+  /// Show the Discover tab on Home: the row of quick-access icons (Live
+  /// Events, Free Courses, Store & More, News) under the banner, and the
+  /// floating copy that pins under the header as the page scrolls.
+  ///
+  /// true  → the row and the pinned bar are shown (default).
+  /// false → both are hidden; the page runs straight from the banner into
+  ///         the sections below it.
+  final bool showDiscoverTab;
+
   // ── Payment ────────────────────────────────────────────────────────
 
   /// Collect course payments over WhatsApp instead of Razorpay.
@@ -422,6 +433,8 @@ class BrandingConfig {
     this.tileBannerSquare = false,
     this.pngBg = false,
     this.pngBgDark = false,
+    // Home
+    this.showDiscoverTab = true,
     // Payment
     this.isPaymentRequestOnWhatsapp = false,
   });
@@ -505,6 +518,11 @@ const crinestaBranding = BrandingConfig(
   
   pngBg: true,
   pngBgDark: false,
+
+  // ── Home ────────────────────────────────────────────────────────
+  // true → show the Discover tab (icon row under the banner + the pinned
+  // bar); false → hide it. See the field doc on BrandingConfig.
+  showDiscoverTab: true,
 
   // ── Payment ─────────────────────────────────────────────────────
   // true → course checkout goes to the org's WhatsApp instead of

@@ -29,7 +29,7 @@ class DiscoverIconsRow extends StatelessWidget {
   });
 
   static const double _side = 12;
-  static const double _bottom = 12;
+  static const double _bottom = 10;
   static const double _itemGap = 4;
   static const double _shadowInset = 5;
 
