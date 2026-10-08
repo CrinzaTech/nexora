@@ -1,7 +1,12 @@
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/widgets/custom_snackbar.dart';
+import 'dart:math' as math;
+
+import 'package:nexora/features/home_live/presentation/bloc/home_live_cubit.dart';
+import 'package:nexora/features/webinar/presentation/bloc/webinars_cubit.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 /// Row of four quick-access icons shown right under the home banner.
@@ -40,12 +45,41 @@ class DiscoverIconsRow extends StatelessWidget {
     return topPadding + (cell - _itemGap * 2) + _bottom;
   }
 
+  /// The red ripple behind the Live Events icon: on while there is any live
+  /// class or webinar on the way (scheduled or running), quicker and
+  /// stronger while one is on air right now. Null when there is nothing.
+  Widget? _liveRipple(BuildContext context) {
+    final (classes, classesLive) = context
+        .watch<HomeLiveCubit>()
+        .state
+        .maybeWhen(
+          loaded: (sessions, liveCount, _, __, ___, ____) =>
+              (sessions.length, liveCount),
+          orElse: () => (0, 0),
+        );
+    final (webinars, webinarsLive) = context
+        .watch<WebinarsCubit>()
+        .state
+        .maybeWhen(
+          loaded: (items, liveCount, _, __, ___, ____) =>
+              (items.length, liveCount),
+          orElse: () => (0, 0),
+        );
+    if (classes + webinars == 0) return null;
+    return _RedRipple(live: classesLive + webinarsLive > 0);
+  }
+
   Widget _tile(BuildContext context, _DiscoverItem item) {
     // A soft drop shadow under the round artwork, drawn as a circle a hair
     // inside the image so it hugs the disc rather than its square canvas.
+    final ripple = item.pulse ? _liveRipple(context) : null;
     final image = Stack(
       fit: StackFit.expand,
+      // The ripple spreads past the icon's own box.
+      clipBehavior: Clip.none,
       children: [
+        // Behind the artwork, so the rings spread out from under it.
+        if (ripple != null) Positioned.fill(child: ripple),
         Padding(
           padding: const EdgeInsets.all(_shadowInset),
           child: DecoratedBox(
@@ -100,6 +134,7 @@ class DiscoverIconsRow extends StatelessWidget {
       _DiscoverItem(
         asset: 'assets/icons/discover/live.png',
         label: 'Live Events',
+        pulse: true,
         onTap: () => context.push(AppRoutes.liveEvents),
       ),
       _DiscoverItem(
@@ -151,9 +186,112 @@ class _DiscoverItem {
   final String label;
   final VoidCallback onTap;
 
+  /// Shows the live ripple behind the icon when something is on the way.
+  final bool pulse;
+
   const _DiscoverItem({
     required this.asset,
     required this.label,
     required this.onTap,
+    this.pulse = false,
   });
+}
+
+/// Two red rings that swell out from behind the icon and fade, one half a
+/// cycle behind the other — a pulse that says "something is happening in
+/// here". [live] (on air now) makes it faster and stronger than the calm
+/// pulse for something merely scheduled.
+class _RedRipple extends StatefulWidget {
+  final bool live;
+
+  const _RedRipple({required this.live});
+
+  @override
+  State<_RedRipple> createState() => _RedRippleState();
+}
+
+class _RedRippleState extends State<_RedRipple>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  Duration get _period => Duration(milliseconds: widget.live ? 1400 : 2400);
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: _period)..repeat();
+  }
+
+  @override
+  void didUpdateWidget(_RedRipple old) {
+    super.didUpdateWidget(old);
+    if (old.live != widget.live) {
+      _ctrl.duration = _period;
+      _ctrl.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _RipplePainter(
+            progress: _ctrl,
+            // A deeper red than the plain error colour, so the rings hold
+            // up against the white icon and page.
+            color: const Color(0xFFD50000),
+            strength: widget.live ? 1.0 : 0.85,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RipplePainter extends CustomPainter {
+  final Animation<double> progress;
+  final Color color;
+  final double strength;
+
+  _RipplePainter({
+    required this.progress,
+    required this.color,
+    required this.strength,
+  }) : super(repaint: progress);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final centre = size.center(Offset.zero);
+    final base = size.shortestSide / 2;
+    for (var ring = 0; ring < 2; ring++) {
+      final t = (progress.value + ring * 0.5) % 1.0;
+      final eased = Curves.easeOut.transform(t);
+      final radius = base * (0.78 + 0.5 * eased);
+      final fade = math.pow(1 - t, 1.0).toDouble() * strength;
+      canvas.drawCircle(
+        centre,
+        radius,
+        Paint()..color = color.withValues(alpha: 0.5 * fade),
+      );
+      canvas.drawCircle(
+        centre,
+        radius,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5
+          ..color = color.withValues(alpha: fade),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RipplePainter old) =>
+      old.color != color || old.strength != strength;
 }
