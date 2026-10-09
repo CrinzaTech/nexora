@@ -907,11 +907,18 @@ class CoursePricing {
         double.infinity,
       );
 
+  /// GST rate to show and charge. When the learner pays the tax
+  /// (exclusive), the educator's configured slab is used exactly as the
+  /// backend sends it — 0% is a real choice, not a missing value. When the
+  /// educator absorbs it (inclusive), GST is always 18%.
+  double get effectiveTaxRate =>
+      isGstPaidByStudent ? taxAppliedPercentage : 18.0;
+
   /// Tax rupee value derived from the post-coupon subtotal × the
   /// percentage. Computed on the client because the backend only
   /// returns the percentage.
   double get taxAmount {
-    final rate = taxAppliedPercentage > 0 ? taxAppliedPercentage : 18.0;
+    final rate = effectiveTaxRate;
     if (isGstPaidByStudent) {
       return _taxableSubtotal * (rate / 100);
     } else {

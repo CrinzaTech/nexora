@@ -558,8 +558,8 @@ class _OrderSummaryCard extends StatelessWidget {
             SizedBox(height: Screen.getVerticalSize(12)),
             _SummaryRow(
               label: pricing.isGstPaidByStudent
-                  ? 'GST (${Utils.formatPrice(pricing.taxAppliedPercentage > 0 ? pricing.taxAppliedPercentage : 18.0)}%) Excl.'
-                  : 'GST (${Utils.formatPrice(pricing.taxAppliedPercentage > 0 ? pricing.taxAppliedPercentage : 18.0)}%) Incl.',
+                  ? 'GST (${Utils.formatPrice(pricing.effectiveTaxRate)}%) Excl.'
+                  : 'GST (${Utils.formatPrice(pricing.effectiveTaxRate)}%) Incl.',
               value: '₹ ${Utils.formatPrice(pricing.taxAmount)}',
             ),
           ],
