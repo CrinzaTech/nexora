@@ -1,4 +1,5 @@
 import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/core/config/payment_policy.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_sizes.dart';
@@ -812,17 +813,25 @@ class _CompletedCard extends StatelessWidget {
     final expired = course.isAccessExpired;
     // Tone bundle drives both the access-status colour and the bottom
     // CTA's neumorphism palette in one place.
+    // iOS can't sell (see PaymentPolicy): no "Renew", and no access
+    // dates — both describe a purchase. The tap still just opens the
+    // course page, which on iOS offers nothing to buy.
+    final canSell = PaymentPolicy.allowsPurchases;
     final palette = expired
         ? (
-            text: course.accessUntil == null
+            text: !canSell
+                ? 'Not available now'
+                : course.accessUntil == null
                 ? 'Access expired'
                 : 'Expired on ${df.format(course.accessUntil!)}',
             color: AppColors.error,
-            label: 'Renew Course',
+            label: canSell ? 'Renew Course' : 'View',
             buttonTone: CustomActionButtonTone.error,
           )
         : (
-            text: course.accessUntil == null
+            text: !canSell
+                ? 'Completed'
+                : course.accessUntil == null
                 ? 'Lifetime access'
                 : 'Access until ${df.format(course.accessUntil!)}',
             color: AppColors.success,

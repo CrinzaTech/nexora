@@ -32,7 +32,6 @@ import 'package:nexora/features/profile/data/models/user_profile_model.dart';
 import 'package:nexora/features/profile/presentation/bloc/profile_cubit.dart';
 import 'package:nexora/core/theme/app_decorations.dart';
 import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
-import 'package:nexora/core/wallpaper/wallpaper_cubit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -197,13 +196,10 @@ class _HomePageState extends State<HomePage>
     Screen().adaptDeviceScreenSize(context);
     // Read here, in build proper, so changing the background from the
     // Profile tab rebuilds Home even though it stays mounted.
-    // True only for a student's own photo. The bundled Theme background is
-    // a pink-lavender gradient rather than a picture, and showing it
-    // through a translucent card tinted the banner and content pink — so
-    // with Theme (or None) the card stays solid white.
-    final withWallpaper = context.select<WallpaperCubit, bool>(
-      (cubit) => cubit.mode == WallpaperMode.custom,
-    );
+    // True whenever a background (Theme or the student's own photo) is on, so
+    // the content card turns see-through and the image shows. Only None
+    // leaves it solid white.
+    final withWallpaper = hasWallpaper(context);
 
     return BlocBuilder<HomeCubit, HomeState>(
       builder: (context, state) {

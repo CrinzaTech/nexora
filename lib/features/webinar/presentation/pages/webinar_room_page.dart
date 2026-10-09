@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:nexora/core/utils/platform_guards.dart';
 import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/core/config/payment_policy.dart';
 import 'package:nexora/core/config/live_playback.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_colors.dart';
@@ -898,7 +899,11 @@ class _WebinarRoomViewState extends State<_WebinarRoomView>
 
       case WebinarPhase.error:
         return _StageError(
-          message: state.errorMessage ?? 'Something went wrong.',
+          // The server's "payment required" sentence would point at a
+          // purchase, which iOS can't offer (see PaymentPolicy).
+          message: state.paymentRequired && !PaymentPolicy.allowsPurchases
+              ? PaymentPolicy.unavailableMessage
+              : state.errorMessage ?? 'Something went wrong.',
           canRetry: state.canRetry,
           paymentRequired: state.paymentRequired,
         );
@@ -1264,7 +1269,9 @@ class _StageError extends StatelessWidget {
                   width: Screen.getHorizontalSize(180),
                   child: CustomActionButton(
                     isFormFilled: true,
-                    name: 'Back to payment',
+                    name: PaymentPolicy.allowsPurchases
+                        ? 'Back to payment'
+                        : 'Go back',
                     shouldAnimate: false,
                     // Not a retry: A3 will refuse identically until the
                     // payment verifies, and the screen that can take it

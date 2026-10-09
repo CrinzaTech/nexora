@@ -396,7 +396,10 @@ class _CourseDetailBody extends StatelessWidget {
                 // the learner came for) a long way down the screen.
                 // Wrap, not Row, so a narrow phone drops the expiry to a
                 // second line instead of overflowing.
-                if (course.isPurchased)
+                // iOS shows neither — "Purchased" is exactly what App
+                // Review flags (see PaymentPolicy); the else branch below
+                // renders nothing there either.
+                if (course.isPurchased && PaymentPolicy.allowsPurchases)
                   Wrap(
                     spacing: Screen.getHorizontalSize(12),
                     runSpacing: Screen.getVerticalSize(6),
@@ -565,9 +568,9 @@ class _ExpiryDetailsLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final raw = course.expiryDetails?.trim();
     if (raw == null || raw.isEmpty) return const SizedBox.shrink();
-    // Before purchase this line describes what a plan would grant —
-    // sales copy, which iOS doesn't show (see PaymentPolicy).
-    if (!course.isPurchased && !PaymentPolicy.allowsPurchases) {
+    // Plan length before purchase, time left after — both read as a
+    // sale on iOS, which shows neither (see PaymentPolicy).
+    if (!PaymentPolicy.allowsPurchases) {
       return const SizedBox.shrink();
     }
     return Padding(

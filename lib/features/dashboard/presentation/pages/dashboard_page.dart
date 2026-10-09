@@ -1,10 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/services.dart';
 import 'package:nexora/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/core/config/payment_policy.dart';
 import 'package:nexora/core/services/app_link_service.dart';
 import 'package:nexora/features/courses/presentation/bloc/continue_courses_cubit.dart';
 import 'package:nexora/features/home_live/presentation/bloc/home_live_cubit.dart';
@@ -58,11 +57,11 @@ class _DashboardPageState extends State<DashboardPage>
   /// area under it.
   static const double _navTravel = 140;
 
-  /// A beat after the scroll direction changes before the bar starts to
-  /// move, then a slow glide, so it eases off and on instead of snapping.
-  static const Duration _navDelay = Duration(milliseconds: 400);
-  static const Duration _navSettleDuration = Duration(milliseconds: 600);
-  Timer? _navSettleTimer;
+  /// The bar starts moving the moment the scroll direction is clear — no
+  /// wait — and glides for exactly [_navSettleDuration]. That is fixed: the
+  /// bar takes the same time to hide or show however fast the page is being
+  /// scrolled, because the animation never reads the scroll speed.
+  static const Duration _navSettleDuration = Duration(milliseconds: 350);
 
   /// Where the bar is heading, so a steady scroll doesn't restart the
   /// animation on every notification.
@@ -71,29 +70,31 @@ class _DashboardPageState extends State<DashboardPage>
   /// Scroll travelled in the current direction. The bar only flips after a
   /// deliberate stretch, so a small wobble doesn't trigger it.
   double _scrollRun = 0;
-  static const double _scrollToggleDistance = 24;
+  static const double _scrollToggleDistance = 6;
 
   // Navigation items for the bottom navbar
-  final List<NavItem> _navItems = const [
-    NavItem(
+  final List<NavItem> _navItems = [
+    const NavItem(
       label: 'Home',
       icon: AppImages.homeUnselectedIcon,
       activeIcon: AppImages.homeSelectedIcon,
       route: 'home',
     ),
-    NavItem(
+    const NavItem(
       label: 'Chats',
       icon: AppImages.chatUnselectedIcon,
       activeIcon: AppImages.chatSelectedIcon,
       route: 'chats',
     ),
     NavItem(
-      label: 'Enrolled',
+      // "Enrolled" implies a sign-up/purchase step iOS doesn't offer
+      // (see PaymentPolicy).
+      label: PaymentPolicy.allowsPurchases ? 'Enrolled' : 'Courses',
       icon: AppImages.courseUnselectedIcon,
       activeIcon: AppImages.courseSelectedIcon,
       route: 'courses',
     ),
-    NavItem(
+    const NavItem(
       label: 'Profile',
       icon: AppImages.profileUnselectedIcon,
       activeIcon: AppImages.profileSelectedIcon,
@@ -139,7 +140,6 @@ class _DashboardPageState extends State<DashboardPage>
 
   @override
   void dispose() {
-    _navSettleTimer?.cancel();
     _navHidden.dispose();
     _pageController.dispose();
     _homeCubit.close();
@@ -149,24 +149,15 @@ class _DashboardPageState extends State<DashboardPage>
     super.dispose();
   }
 
-  void _setNavHidden(bool hidden, {bool immediate = false}) {
+  void _setNavHidden(bool hidden) {
     if (_navTargetHidden == hidden) return;
     _navTargetHidden = hidden;
-    _navSettleTimer?.cancel();
-    void run() {
-      if (!mounted) return;
-      _navHidden.animateTo(
-        hidden ? 1 : 0,
-        duration: _navSettleDuration,
-        curve: Curves.easeInOutCubic,
-      );
-    }
-
-    if (immediate) {
-      run();
-    } else {
-      _navSettleTimer = Timer(_navDelay, run);
-    }
+    if (!mounted) return;
+    _navHidden.animateTo(
+      hidden ? 1 : 0,
+      duration: _navSettleDuration,
+      curve: Curves.easeInOutCubic,
+    );
   }
 
   bool _onPageScroll(ScrollNotification n) {
@@ -178,9 +169,13 @@ class _DashboardPageState extends State<DashboardPage>
     if (n.metrics.pixels <= 0) {
       // At (or pulled past) the top the bar is always out.
       _scrollRun = 0;
-      _setNavHidden(false, immediate: true);
+      _setNavHidden(false);
       return false;
     }
+    // Past the end of the content (the iOS bounce at the bottom) the
+    // scroll springs back the other way. That isn't the learner scrolling
+    // up, so it must not bring the bar back.
+    if (n.metrics.outOfRange) return false;
     final delta = n.scrollDelta ?? 0;
     if (delta == 0) return false;
     // A change of direction starts a fresh run.
@@ -199,7 +194,7 @@ class _DashboardPageState extends State<DashboardPage>
     final index = _navItems.indexWhere((item) => item.route == route);
     if (index != -1 && index != _currentIndex) {
       _pageController.jumpToPage(index);
-      _setNavHidden(false, immediate: true);
+      _setNavHidden(false);
       setState(() => _currentIndex = index);
       // Silent refresh on re-entering Home so dashboard data
       // (learner reviews) and the Continue Learning rail stay fresh

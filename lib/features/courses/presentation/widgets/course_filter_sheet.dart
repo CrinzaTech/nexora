@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/core/config/payment_policy.dart';
 import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
@@ -369,30 +370,34 @@ class _CourseFilterSheetState extends State<CourseFilterSheet> {
           // ── Course Type section (dynamic) ──
           // Single-select: tapping a chip selects it; tapping it again clears
           // the filter. No chip selected = "All" (no type filter applied).
-          _FilterSectionDynamic(
-            label: 'COURSE TYPE',
-            options: typeOptions,
-            selectedId: _draft.typeId,
-            onSelected: (option) {
-              setState(() {
-                if (option.id == _draft.typeId) {
-                  // Deselect — back to "All"
-                  _draft = CourseFilters(
-                    categoryId: _draft.categoryId,
-                    categoryName: _draft.categoryName,
-                    level: _draft.level,
-                    sortBy: _draft.sortBy,
-                  );
-                } else {
-                  _draft = _draft.copyWith(
-                    typeId: option.id,
-                    typeName: option.label,
-                  );
-                }
-              });
-            },
-          ),
-          SizedBox(height: Screen.getVerticalSize(20)),
+          // Paid / Free is a pricing axis — not offered on iOS,
+          // which can't sell (see PaymentPolicy).
+          if (PaymentPolicy.allowsPurchases) ...[
+            _FilterSectionDynamic(
+              label: 'COURSE TYPE',
+              options: typeOptions,
+              selectedId: _draft.typeId,
+              onSelected: (option) {
+                setState(() {
+                  if (option.id == _draft.typeId) {
+                    // Deselect — back to "All"
+                    _draft = CourseFilters(
+                      categoryId: _draft.categoryId,
+                      categoryName: _draft.categoryName,
+                      level: _draft.level,
+                      sortBy: _draft.sortBy,
+                    );
+                  } else {
+                    _draft = _draft.copyWith(
+                      typeId: option.id,
+                      typeName: option.label,
+                    );
+                  }
+                });
+              },
+            ),
+            SizedBox(height: Screen.getVerticalSize(20)),
+          ],
 
           // ── Level section (static) ──
           // _FilterSection(

@@ -5,6 +5,7 @@ import 'package:nexora/features/profile/presentation/widgets/wallpaper_tile.dart
 import 'package:nexora/features/profile/presentation/widgets/delete_account_dialog.dart';
 
 import 'package:nexora/core/config/di/dependency_injection.dart';
+import 'package:nexora/core/config/payment_policy.dart';
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/services/content_completion_service.dart';
 import 'package:nexora/core/services/org_code_service.dart';
@@ -609,7 +610,12 @@ class _ProfilePageState extends State<ProfilePage>
                                     horizontal: 15,
                                   ),
                                   child: Text(
-                                    "Payments & Billing",
+                                    // iOS keeps the section (bookings,
+                                    // certificates) but not the billing
+                                    // name for it (see PaymentPolicy).
+                                    PaymentPolicy.allowsPurchases
+                                        ? "Payments & Billing"
+                                        : "My Activity",
                                     style: AppTypography.bodyTextMedium
                                         .copyWith(
                                           fontWeight: FontWeight.w500,
@@ -620,6 +626,7 @@ class _ProfilePageState extends State<ProfilePage>
                                         ),
                                   ),
                                 ),
+                                if (PaymentPolicy.allowsPurchases)
                                 CustomProfileListTileWidget(
                                   title: "Transaction History",
                                   leadingIcon: AppImages.historyIcon,
@@ -799,6 +806,7 @@ class _ProfilePageState extends State<ProfilePage>
                                   onTap: _openTermsAndConditions,
                                 ),
                                 // Refund Policy — calls API with refundPolicy=true
+                                if (PaymentPolicy.allowsPurchases)
                                 CustomProfileListTileWidget(
                                   title: "Refund Policy",
                                   leadingIcon: AppImages.documentIcon,

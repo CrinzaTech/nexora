@@ -27,6 +27,9 @@ class ContinueLearningSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // An abandoned-checkout nudge ("Continue your purchase") — nothing
+    // to continue on iOS, which can't sell (see PaymentPolicy).
+    if (!PaymentPolicy.allowsPurchases) return const SizedBox.shrink();
     if (cubit != null) {
       return BlocProvider.value(
         value: cubit!,
