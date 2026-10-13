@@ -4,6 +4,7 @@ import 'package:nexora/core/widgets/custom_snackbar.dart';
 import 'dart:math' as math;
 
 import 'package:nexora/features/home_live/presentation/bloc/home_live_cubit.dart';
+import 'package:nexora/features/store/presentation/bloc/store_cart_cubit.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinars_cubit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -130,6 +131,9 @@ class DiscoverIconsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final storeAvailable = context.select<StoreCartCubit, bool>(
+      (c) => c.state.storeAvailable,
+    );
     final items = <_DiscoverItem>[
       _DiscoverItem(
         asset: 'assets/icons/discover/live.png',
@@ -146,16 +150,13 @@ class DiscoverIconsRow extends StatelessWidget {
           message: 'Coming soon',
         ),
       ),
-      _DiscoverItem(
-        asset: 'assets/icons/discover/store.png',
-        label: 'Store & More',
-        // No store screen yet.
-        onTap: () => CustomSnackbar.info(
-          context,
-          title: 'Store & More',
-          message: 'Coming soon',
+      // Hidden once the Store API says this org has it switched off.
+      if (storeAvailable)
+        _DiscoverItem(
+          asset: 'assets/icons/discover/store.png',
+          label: 'Store & More',
+          onTap: () => context.push(AppRoutes.store),
         ),
-      ),
       _DiscoverItem(
         asset: 'assets/icons/discover/news.png',
         label: 'News',

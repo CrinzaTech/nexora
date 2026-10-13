@@ -1032,12 +1032,16 @@ class _ApiClient implements ApiClient {
   @override
   Future<Map<String, dynamic>> getTransactionHistory(
     String? paymentStatus,
-    String? filter,
-  ) async {
+    String? filter, {
+    String? itemType,
+    int? pageSize,
+  }) async {
     final _extra = <String, dynamic>{};
     final queryParameters = <String, dynamic>{
       r'PaymentStatus': paymentStatus,
       r'Filter': filter,
+      r'ItemType': itemType,
+      r'pageSize': pageSize,
     };
     queryParameters.removeWhere((k, v) => v == null);
     final _headers = <String, dynamic>{};

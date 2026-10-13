@@ -58,6 +58,37 @@ enum TransactionPaymentStatus {
   }
 }
 
+/// What the list shows: everything, course payments, or store orders.
+/// `all` → don't send the `ItemType` query param.
+enum TransactionKindFilter {
+  all,
+  courses,
+  products;
+
+  String get label {
+    switch (this) {
+      case TransactionKindFilter.all:
+        return 'Everything';
+      case TransactionKindFilter.courses:
+        return 'Courses';
+      case TransactionKindFilter.products:
+        return 'Products';
+    }
+  }
+
+  /// Wire value sent as the `ItemType` query param. `null` for [all].
+  String? get apiValue {
+    switch (this) {
+      case TransactionKindFilter.all:
+        return null;
+      case TransactionKindFilter.courses:
+        return 'COURSE';
+      case TransactionKindFilter.products:
+        return 'PRODUCT';
+    }
+  }
+}
+
 /// Time-window filter for `GET /transaction-history`.
 ///
 /// `none` → don't send the query param.

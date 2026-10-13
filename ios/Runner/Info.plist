@@ -33,8 +33,6 @@
 		</array>
 		<key>CFBundleVersion</key>
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
-		<!-- app_links handles shared course links; stop Flutter from also
-	     pushing the raw /<org>/course/... path into go_router. -->
 		<key>FlutterDeepLinkingEnabled</key>
 		<false/>
 		<key>ITSAppUsesNonExemptEncryption</key>
@@ -47,13 +45,13 @@
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
 		<key>NSCameraUsageDescription</key>
-		<string>We need access to your camera to take a profile picture.</string>
+		<string>We need access to your camera to take a profile picture or a photo for your app background.</string>
 		<key>NSLocationWhenInUseUsageDescription</key>
-		<string>Crinza does not use your location. This entry is required because a third-party permissions component bundled with the app references the location API. The app never requests or collects location data.</string>
+		<string>Your location is used only when you tap “Use my current location” in the store, to fill in your delivery address.</string>
 		<key>NSMicrophoneUsageDescription</key>
 		<string>We need access to your microphone so you can speak during a live class when the host invites you.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>We need access to your photo library to set your profile picture.</string>
+		<string>We need access to your photo library to set your profile picture or app background.</string>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>

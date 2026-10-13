@@ -7,8 +7,10 @@ import 'package:nexora/features/transaction/data/models/transaction_model.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-/// Single transaction row — TXN id pill + status badge on top, course
-/// name + buyer below, payment method • date footer.
+/// Single transaction row: reference pill + status badge on top, what was
+/// bought + buyer below, payment method • date and the amount in the
+/// footer. A store order shows its order number, a bag icon, and its
+/// invoice number (or when the invoice will come).
 class TransactionHistoryCard extends StatelessWidget {
   final TransactionModel transaction;
   final VoidCallback? onTap;
@@ -28,6 +30,17 @@ class TransactionHistoryCard extends StatelessWidget {
         ? DateFormat('d MMM yyyy').format(transaction.createdAt!)
         : '-';
     final method = transaction.paymentMethod ?? '-';
+    final isProduct = transaction.isProduct;
+    final reference = isProduct
+        ? 'Order ${transaction.orderNo ?? ''}'
+        : (transaction.razorpayOrderId?.replaceFirst('order_', '') ?? '');
+    final invoiceLine = !isProduct
+        ? null
+        : transaction.invoiceNo != null
+        ? 'Invoice ${transaction.invoiceNo}'
+        : transaction.status == TransactionStatus.completed
+        ? 'Invoice issued when it ships · receipt available'
+        : null;
 
     return InkWell(
       onTap: onTap,
@@ -67,8 +80,7 @@ class TransactionHistoryCard extends StatelessWidget {
                       color: AppColors.primary.withValues(alpha: 0.15),
                     ),
                     child: Text(
-                      transaction.razorpayOrderId?.replaceFirst('order_', '') ??
-                          '',
+                      reference,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.bodyTextSmallMedium.copyWith(
@@ -82,11 +94,26 @@ class TransactionHistoryCard extends StatelessWidget {
               ],
             ),
             SizedBox(height: Screen.getVerticalSize(8)),
-            Text(
-              transaction.courseName ?? 'Course',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTypography.bodyTextLargeMedium,
+            Row(
+              children: [
+                if (isProduct) ...[
+                  Icon(
+                    Icons.shopping_bag_outlined,
+                    size: Screen.getFontSize(18),
+                    color: AppColors.primary,
+                  ),
+                  SizedBox(width: Screen.getHorizontalSize(6)),
+                ],
+                Expanded(
+                  child: Text(
+                    transaction.courseName ??
+                        (isProduct ? 'Store order' : 'Course'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodyTextLargeMedium,
+                  ),
+                ),
+              ],
             ),
             if (transaction.userName != null &&
                 transaction.userName!.isNotEmpty) ...[
@@ -114,8 +141,39 @@ class TransactionHistoryCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (transaction.amount != null)
+                  Text(
+                    '₹${Utils.formatPrice(transaction.amount!)}',
+                    style: AppTypography.bodyTextMedium.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
               ],
             ),
+            if (invoiceLine != null) ...[
+              SizedBox(height: Screen.getVerticalSize(6)),
+              Row(
+                children: [
+                  Icon(
+                    Icons.receipt_long_outlined,
+                    size: Screen.getFontSize(15),
+                    color: AppColors.mutedTextPrimary,
+                  ),
+                  SizedBox(width: Screen.getHorizontalSize(5)),
+                  Expanded(
+                    child: Text(
+                      invoiceLine,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.bodyTextSmallMedium.copyWith(
+                        color: AppColors.mutedTextPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

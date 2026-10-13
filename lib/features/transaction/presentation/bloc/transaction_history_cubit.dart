@@ -25,9 +25,18 @@ class TransactionHistoryCubit extends SafeCubit<TransactionHistoryState> {
   /// same query.
   TransactionPaymentStatus _paymentStatus = TransactionPaymentStatus.all;
   TransactionTimeFilter _timeFilter = TransactionTimeFilter.none;
+  TransactionKindFilter _kind = TransactionKindFilter.all;
 
   TransactionPaymentStatus get paymentStatus => _paymentStatus;
   TransactionTimeFilter get timeFilter => _timeFilter;
+  TransactionKindFilter get kind => _kind;
+
+  /// Courses only, products (store orders) only, or both.
+  Future<void> setKind(TransactionKindFilter value) {
+    if (value == _kind) return Future.value();
+    _kind = value;
+    return _fetch(showLoading: true);
+  }
 
   Future<void> load() => _fetch(showLoading: true);
 
@@ -52,6 +61,7 @@ class TransactionHistoryCubit extends SafeCubit<TransactionHistoryState> {
     final result = await getTransactionHistoryUseCase(
       paymentStatus: _paymentStatus.apiValue,
       filter: _timeFilter.apiValue,
+      itemType: _kind.apiValue,
     );
     result.fold(
       (failure) => emit(TransactionHistoryState.error(failure.message)),

@@ -132,6 +132,11 @@ class RoomState {
   }
 }
 
+/// Delivery state of a chat message as this device sees it. Everything that
+/// came from the server is [sent]; only rows this device is still posting
+/// (negative local id) can be [sending] or [failed].
+enum ChatDelivery { sent, sending, failed }
+
 /// One chat message, from either hub `chatMessage` push or the REST
 /// backfill (`GET .../chat`). Both wire shapes share these fields.
 class LiveChatMessage {
@@ -154,6 +159,11 @@ class LiveChatMessage {
   /// cubit keeps the live copy in its poll map; this is the seed.
   final LivePoll? poll;
 
+  /// See [ChatDelivery]. Shown on the student's own bubble so a slow send
+  /// reads as "sending…" rather than "nothing happened" (which is what made
+  /// students tap send again and again).
+  final ChatDelivery delivery;
+
   const LiveChatMessage({
     required this.id,
     required this.senderId,
@@ -164,9 +174,27 @@ class LiveChatMessage {
     this.kind = 'text',
     this.pollId,
     this.poll,
+    this.delivery = ChatDelivery.sent,
   });
 
   bool get isPoll => kind.toLowerCase() == 'poll' || poll != null;
+
+  /// A row this device created while posting; replaced by the server's copy
+  /// when it echoes back.
+  bool get isLocal => id < 0;
+
+  LiveChatMessage withDelivery(ChatDelivery value) => LiveChatMessage(
+        id: id,
+        senderId: senderId,
+        senderRole: senderRole,
+        senderName: senderName,
+        body: body,
+        createdAt: createdAt,
+        kind: kind,
+        pollId: pollId,
+        poll: poll,
+        delivery: value,
+      );
 
   /// True for any non-student sender. The backend role for the teacher
   /// may be spelled `educator`, `teacher`, `host`, `instructor`,

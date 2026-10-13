@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:signalr_netcore/iretry_policy.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 
 import 'package:nexora/features/courses/data/models/live_class_models.dart';
@@ -147,6 +148,54 @@ class HubReconnectedEvent extends LiveClassHubEvent {
   const HubReconnectedEvent();
 }
 
+/// The connection dropped and SignalR is retrying — chat and hand-raise are
+/// unavailable until [HubReconnectedEvent].
+class HubReconnectingEvent extends LiveClassHubEvent {
+  const HubReconnectingEvent();
+}
+
+/// The connection is gone for good (stopped by the server, or the token was
+/// refused). The cubit opens a new one with a fresh token.
+class HubClosedEvent extends LiveClassHubEvent {
+  const HubClosedEvent();
+}
+
+/// A chat / hand-raise invoke got no answer in [kHubInvokeTimeout]. The socket
+/// is almost certainly dead even if SignalR has not noticed yet (it takes up
+/// to 30s to): the caller should report "not sent" and reconnect.
+class HubTimeoutException implements Exception {
+  final String method;
+  const HubTimeoutException(this.method);
+  @override
+  String toString() => 'HubTimeoutException($method)';
+}
+
+/// The hub was not connected, so the invoke was not attempted.
+class HubNotConnectedException implements Exception {
+  final String method;
+  const HubNotConnectedException(this.method);
+  @override
+  String toString() => 'HubNotConnectedException($method)';
+}
+
+/// A healthy invoke round-trips in ~150ms (measured with 200 students on the
+/// room). Eight seconds is far past slow-but-alive.
+const Duration kHubInvokeTimeout = Duration(seconds: 8);
+
+/// Retries forever: 0s, 2s, 5s, 10s, then every 15s. SignalR's default gives
+/// up after four tries (~42s), after which chat and hand-raise stayed dead
+/// for the rest of the class — a common outcome on a mobile network.
+class _KeepTryingPolicy implements IRetryPolicy {
+  const _KeepTryingPolicy();
+  static const _delays = [0, 2000, 5000, 10000];
+
+  @override
+  int? nextRetryDelayInMilliseconds(RetryContext retryContext) {
+    final n = retryContext.previousRetryCount;
+    return n < _delays.length ? _delays[n] : 15000;
+  }
+}
+
 /// Wraps a single [HubConnection] to the StreamApi class hub. One
 /// instance per live-class page (created/disposed with the page). The
 /// StreamApi JWT is passed in — this service never mints it.
@@ -199,7 +248,7 @@ class LiveClassHubService {
             accessTokenFactory: () async => _accessToken,
           ),
         )
-        .withAutomaticReconnect()
+        .withAutomaticReconnect(reconnectPolicy: const _KeepTryingPolicy())
         .build();
 
     // Server → client wiring. signalr_netcore decodes payloads as
@@ -248,9 +297,16 @@ class LiveClassHubService {
       await _joinRoom();
       _emit(const HubReconnectedEvent());
     });
-    connection.onreconnecting(({error}) =>
-        debugPrint('$_kTag onreconnecting error=$error'));
-    connection.onclose(({error}) => debugPrint('$_kTag onclose error=$error'));
+    connection.onreconnecting(({error}) {
+      debugPrint('$_kTag onreconnecting error=$error');
+      _emit(const HubReconnectingEvent());
+    });
+    connection.onclose(({error}) {
+      debugPrint('$_kTag onclose error=$error');
+      // dispose() clears _connection before stopping, so a deliberate close
+      // is not reported as a lost connection.
+      if (identical(_connection, connection)) _emit(const HubClosedEvent());
+    });
 
     _connection = connection;
     debugPrint('$_kTag connecting → $_hubUrl');
@@ -288,29 +344,48 @@ class LiveClassHubService {
 
   // ── Client → server invokes ──────────────────────────────────────
 
-  Future<void> sendChat(String body) => _invoke('SendChat', [body]);
+  /// Throws [HubNotConnectedException] / [HubTimeoutException] instead of
+  /// failing silently, so the caller can show "not sent" and offer a retry.
+  Future<void> sendChat(String body) =>
+      _invoke('SendChat', [body], mustDeliver: true);
 
   /// Vote on a poll. Single-choice: exactly one id; multiple: every ticked
   /// id in this one call (there is no second submission).
   Future<void> submitVote(int pollId, List<int> optionIds) =>
       _invoke('SubmitVote', [pollId, optionIds]);
-  Future<void> raiseHand() => _invoke('RaiseHand', const []);
+  Future<void> raiseHand() =>
+      _invoke('RaiseHand', const [], mustDeliver: true);
   Future<void> lowerHand() => _invoke('LowerHand', const []);
   Future<void> stopSpeaking() => _invoke('StopSpeaking', const []);
   Future<void> micActivated() => _invoke('MicActivated', const []);
 
   /// Every hub method is room-scoped: roomId is prepended to [extraArgs]
-  /// so callers only pass the trailing args. No-op when the room isn't
-  /// joined yet or the socket is down.
-  Future<void> _invoke(String method, List<Object> extraArgs) async {
+  /// so callers only pass the trailing args.
+  ///
+  /// [mustDeliver] is for the actions a student is waiting on (chat,
+  /// hand-raise): those throw [HubNotConnectedException] when the socket is
+  /// down and [HubTimeoutException] when no answer comes back. Everything else
+  /// keeps the old behaviour — skipped when down — but can no longer hang
+  /// forever on a dead socket.
+  Future<void> _invoke(
+    String method,
+    List<Object> extraArgs, {
+    bool mustDeliver = false,
+  }) async {
     final room = _roomId;
     final c = _connection;
     if (room == null || c == null || c.state != HubConnectionState.Connected) {
       debugPrint('$_kTag $method SKIPPED — state=${c?.state} room=$room');
+      if (mustDeliver) throw HubNotConnectedException(method);
       return;
     }
     try {
-      await c.invoke(method, args: [room, ...extraArgs]);
+      await c
+          .invoke(method, args: [room, ...extraArgs])
+          .timeout(kHubInvokeTimeout);
+    } on TimeoutException {
+      debugPrint('$_kTag $method TIMED OUT after ${kHubInvokeTimeout.inSeconds}s');
+      if (mustDeliver) throw HubTimeoutException(method);
     } catch (e) {
       debugPrint('$_kTag $method FAILED: $e');
       rethrow;

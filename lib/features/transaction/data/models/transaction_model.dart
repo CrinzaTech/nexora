@@ -49,18 +49,53 @@ enum TransactionStatus {
   }
 }
 
+/// What a transaction paid for.
+enum TransactionItemType {
+  /// A course or webinar payment. Its document is the course receipt.
+  course,
+
+  /// A store order. Its document is the order's invoice (or a payment
+  /// receipt until it ships), fetched by order number.
+  product;
+
+  static TransactionItemType fromString(String? raw) =>
+      raw?.trim().toUpperCase() == 'PRODUCT'
+      ? TransactionItemType.product
+      : TransactionItemType.course;
+}
+
 /// A single transaction record returned by `GET /api/v1/course/transaction-history`.
+///
+/// The endpoint lists course payments and store orders together, newest
+/// first; [itemType] tells them apart.
 ///
 /// All fields are nullable-safe — partial responses (e.g. an in-flight
 /// payment without a Razorpay order id yet) won't crash parsing.
 class TransactionModel {
-  /// Backend transaction row id (numeric).
+  /// Course transaction id: the receipt key. Null for store orders,
+  /// which are opened by [orderNo].
   final int? transactionId;
+
+  final TransactionItemType itemType;
+
+  /// Store order number (store orders only).
+  final String? orderNo;
+
+  /// Invoice number once a store order has shipped; null before that
+  /// (its document is then a payment receipt) and for courses.
+  final String? invoiceNo;
+
+  /// Products in a store order; 1 for a course.
+  final int itemCount;
+
+  /// Amount paid, in rupees.
+  final double? amount;
 
   /// Buyer display name.
   final String? userName;
 
-  /// Course this transaction was for.
+  /// What was bought: the course / webinar, or the order's first product
+  /// ("… + 2 more items").
   final String? courseName;
 
   /// Status of the transaction.
@@ -78,6 +113,11 @@ class TransactionModel {
 
   const TransactionModel({
     this.transactionId,
+    this.itemType = TransactionItemType.course,
+    this.orderNo,
+    this.invoiceNo,
+    this.itemCount = 1,
+    this.amount,
     this.userName,
     this.courseName,
     this.status = TransactionStatus.unknown,
@@ -96,6 +136,11 @@ class TransactionModel {
 
     return TransactionModel(
       transactionId: (json['transactionId'] as num?)?.toInt(),
+      itemType: TransactionItemType.fromString(json['itemType']?.toString()),
+      orderNo: json['orderNo']?.toString(),
+      invoiceNo: json['invoiceNo']?.toString(),
+      itemCount: (json['itemCount'] as num?)?.toInt() ?? 1,
+      amount: (json['amount'] as num?)?.toDouble(),
       userName: json['userName']?.toString(),
       courseName: json['courseName']?.toString(),
       status: TransactionStatus.fromString(json['paymentStatus']?.toString()),
@@ -104,4 +149,13 @@ class TransactionModel {
       createdAt: parseDate(json['createdAt']),
     );
   }
+
+  bool get isProduct => itemType == TransactionItemType.product;
+
+  /// Whether tapping the row can open a document: a course receipt by
+  /// transaction id, or a store order's invoice / receipt by order number.
+  /// A failed store payment has nothing to show.
+  bool get hasDocument => isProduct
+      ? (orderNo != null && status != TransactionStatus.failed)
+      : transactionId != null;
 }

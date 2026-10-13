@@ -163,6 +163,46 @@ class AppRoutes {
   /// Live Events — live classes and webinars in two tabs.
   static const String liveEvents = '/live-events';
 
+  // ============================================
+  // STORE — physical products (STORE_API.md)
+  // ============================================
+  /// Store home: rails, categories and the full product grid. Opened from
+  /// the Discover row's Store icon.
+  static const String store = '/store';
+
+  /// A product grid. Optional `categoryId`, `title`, `sort` (API wire
+  /// value) and `search=1` (opens with the search box focused).
+  static const String storeProducts = '/store/products';
+
+  /// Product page — requires `id` (the 12-character public product id).
+  static const String storeProduct = '/store/product';
+
+  /// Every approved review of a product — `id`, optional `title`.
+  static const String storeReviews = '/store/product/reviews';
+
+  static const String storeCart = '/store/cart';
+
+  /// Checkout. No params checks out the cart; `productId` + `qty` is
+  /// Buy Now, which leaves the cart untouched.
+  static const String storeCheckout = '/store/checkout';
+
+  /// Address book. `select=1` turns a tap into "deliver here" and pops
+  /// with the chosen `StoreAddress`; `selectedId` ticks the current one.
+  static const String storeAddresses = '/store/addresses';
+
+  /// Add / edit an address. Takes the `StoreAddress` to edit as `extra:`;
+  /// none adds. Pops with the saved address.
+  static const String storeAddressForm = '/store/addresses/form';
+
+  /// After paying: `orderNo`, `kind` (`paid` · `pending` · `refunding`)
+  /// and, for the last two, the server's `message`.
+  static const String storeOrderResult = '/store/order-result';
+
+  static const String storeOrders = '/store/orders';
+
+  /// Order detail — requires `orderNo`.
+  static const String storeOrder = '/store/orders/detail';
+
   /// All webinars — the full list behind Home's "View All".
   static const String webinars = '/webinars';
 

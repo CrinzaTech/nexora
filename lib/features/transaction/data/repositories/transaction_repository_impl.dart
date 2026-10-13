@@ -21,11 +21,16 @@ class TransactionRepositoryImpl implements TransactionRepository {
   Future<Either<Failure, List<TransactionModel>>> getHistory({
     String? paymentStatus,
     String? filter,
+    String? itemType,
   }) async {
     try {
       final json = await _apiClient.getTransactionHistory(
         paymentStatus,
         filter,
+        itemType: itemType,
+        // The screen has no paging; the API's default of 10 would hide
+        // older course payments behind a few store orders.
+        pageSize: _pageSize,
       );
       final data = json['data'] as List<dynamic>? ?? const [];
       final list = data
@@ -40,6 +45,8 @@ class TransactionRepositoryImpl implements TransactionRepository {
     }
   }
 
+  static const int _pageSize = 50;
+
   @override
   Future<Either<Failure, ReceiptModel>> downloadReceipt(
     int transactionId,
@@ -53,16 +60,43 @@ class TransactionRepositoryImpl implements TransactionRepository {
           headers: {'Accept': 'text/html'},
         ),
       );
-      final html = utf8.decode(response.data!);
-      final filename =
-          _extractFilename(response.headers.value('content-disposition')) ??
-          'Receipt_$transactionId.html';
-      return Right(ReceiptModel(html: html, filename: filename));
+      return Right(_document(response, 'Receipt_$transactionId.html'));
     } on DioException catch (e) {
       return Left(mapDioExceptionToFailure(_decodeErrorBody(e)));
     } catch (e) {
       return Left(Failure.unknown(message: e.toString()));
     }
+  }
+
+  @override
+  Future<Either<Failure, ReceiptModel>> downloadStoreInvoice(
+    String orderNo,
+  ) async {
+    try {
+      final response = await _dio.get<List<int>>(
+        ApiEndpoints.storeInvoice.replaceFirst(
+          '{orderNo}',
+          Uri.encodeComponent(orderNo),
+        ),
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {'Accept': 'text/html'},
+        ),
+      );
+      return Right(_document(response, 'Invoice_$orderNo.html'));
+    } on DioException catch (e) {
+      return Left(mapDioExceptionToFailure(_decodeErrorBody(e)));
+    } catch (e) {
+      return Left(Failure.unknown(message: e.toString()));
+    }
+  }
+
+  ReceiptModel _document(Response<List<int>> response, String fallbackName) {
+    final html = utf8.decode(response.data!);
+    final filename =
+        _extractFilename(response.headers.value('content-disposition')) ??
+        fallbackName;
+    return ReceiptModel(html: html, filename: filename);
   }
 
   /// The error body arrives as raw bytes too (we requested

@@ -3,8 +3,15 @@
         android:label="Minerva Academy"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- android:name is fully qualified on purpose. A leading "." would be
+             resolved against android.namespace in build.gradle.kts, and the
+             white-label rename scripts rewrote that namespace without moving
+             MainActivity.kt — which shipped a build whose manifest pointed at a
+             class that did not exist (ClassNotFoundException at launch, on every
+             device). Spelled out in full, this cannot drift from the Kotlin
+             package declaration. -->
         <activity
-            android:name=".MainActivity"
+            android:name="co.nex.ora.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
@@ -89,6 +96,10 @@
          INTERNET is needed for the WebRTC/LiveKit audio connection.
          No camera permission — students never publish video. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Store address form: "Use my current location". Requested only on
+         that tap; coarse alone still fills city, state and pincode. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- audio_service background playback (live-class audio in background). -->

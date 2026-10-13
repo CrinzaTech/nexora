@@ -458,4 +458,54 @@ class ApiEndpoints {
   // ============================================================
   static const String createOrder = '/api/v1/payments/create-order-v2';
   static const String verifyPayment = '/api/v1/payments/verify-payment';
+
+  // ============================================================
+  // STORE — physical products sold by the learner's own org. See
+  // STORE_API.md. Every endpoint is behind the normal account token;
+  // a 403 "The store is not available." means the org has the Store
+  // switched off, and the entry point is hidden.
+  //
+  // `{productId}` is the 12-character public id, never a DB number.
+  // ============================================================
+  static const String storeHome = '/api/v1/store/home';
+  static const String storeCategories = '/api/v1/store/categories';
+
+  /// ?categoryId=&q=&sort=&minPrice=&maxPrice=&pageNo=&pageSize= (max 50)
+  static const String storeProducts = '/api/v1/store/products';
+  static const String storeProduct = '/api/v1/store/products/{productId}';
+  static const String storeProductReviews =
+      '/api/v1/store/products/{productId}/reviews';
+
+  static const String storeStates = '/api/v1/store/states';
+  static const String storeAddresses = '/api/v1/store/addresses';
+  static const String storeAddress = '/api/v1/store/addresses/{id}';
+  static const String storeAddressDefault =
+      '/api/v1/store/addresses/{id}/default';
+
+  /// GET the cart, DELETE to clear it.
+  static const String storeCart = '/api/v1/store/cart';
+
+  /// PUT `{ "qty": n }` **sets** the quantity (0 removes); DELETE removes.
+  static const String storeCartItem = '/api/v1/store/cart/items/{productId}';
+  static const String storeCartCount = '/api/v1/store/cart/count';
+
+  static const String storeQuote = '/api/v1/store/checkout/quote';
+
+  /// GET my orders (?group=&pageNo=&pageSize=), POST to place one.
+  static const String storeOrders = '/api/v1/store/orders';
+  static const String storeOrder = '/api/v1/store/orders/{orderNo}';
+
+  /// Standalone HTML document, like [receiptDownload]: the tax invoice /
+  /// bill of supply once the order has shipped, a payment receipt before
+  /// (and after a cancellation, showing the refund). 404 for a failed
+  /// payment or someone else's order.
+  static const String storeInvoice = '/api/v1/store/orders/{orderNo}/invoice';
+  static const String storeVerifyPayment =
+      '/api/v1/store/orders/{orderNo}/verify-payment';
+  static const String storeCancelOrder =
+      '/api/v1/store/orders/{orderNo}/cancel';
+  static const String storeOrderReceived =
+      '/api/v1/store/orders/{orderNo}/received';
+  static const String storeReviewItem =
+      '/api/v1/store/orders/{orderNo}/items/{itemId}/review';
 }

@@ -142,6 +142,20 @@ import 'package:nexora/features/workshop_pass/domain/usecases/get_workshop_pass_
 import 'package:nexora/features/workshop_pass/presentation/bloc/workshop_pass_cubit.dart';
 import 'package:nexora/features/workshop_pass/domain/usecases/get_my_webinars_usecase.dart';
 import 'package:nexora/features/workshop_pass/presentation/bloc/my_webinars_cubit.dart';
+import 'package:nexora/features/store/data/repositories/store_repository_impl.dart';
+import 'package:nexora/features/store/data/services/store_location_service.dart';
+import 'package:nexora/features/store/domain/repositories/store_repository.dart';
+import 'package:nexora/features/store/domain/usecases/store_address_usecases.dart';
+import 'package:nexora/features/store/domain/usecases/store_cart_usecases.dart';
+import 'package:nexora/features/store/domain/usecases/store_catalog_usecases.dart';
+import 'package:nexora/features/store/domain/usecases/store_checkout_usecases.dart';
+import 'package:nexora/features/store/domain/usecases/store_order_usecases.dart';
+import 'package:nexora/features/store/presentation/bloc/store_address_form_cubit.dart';
+import 'package:nexora/features/store/presentation/bloc/store_addresses_cubit.dart';
+import 'package:nexora/features/store/presentation/bloc/store_cart_cubit.dart';
+import 'package:nexora/features/store/presentation/bloc/store_home_cubit.dart';
+import 'package:nexora/features/store/presentation/bloc/store_product_detail_cubit.dart';
+import 'package:nexora/features/store/presentation/bloc/store_products_cubit.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinar_detail_cubit.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinar_room_cubit.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinars_cubit.dart';
@@ -176,9 +190,7 @@ Future<void> setupLocator() async {
   // Custom app background — singleton for the same reason: the profile
   // picker writes it, Home / Profile / chat rooms read it. Loaded before
   // runApp alongside the theme.
-  sl.registerLazySingleton<WallpaperCubit>(
-    () => WallpaperCubit(secureStorage),
-  );
+  sl.registerLazySingleton<WallpaperCubit>(() => WallpaperCubit(secureStorage));
 
   // ============================================
   // FEATURES - HOME
@@ -498,6 +510,7 @@ Future<void> setupLocator() async {
     () => TransactionHistoryCubit(getTransactionHistoryUseCase: sl()),
   );
   sl.registerLazySingleton(() => DownloadReceiptUseCase(sl()));
+  sl.registerLazySingleton(() => DownloadStoreInvoiceUseCase(sl()));
 
   // ============================================
   // FEATURES - CERTIFICATES
@@ -597,6 +610,74 @@ Future<void> setupLocator() async {
   // longer holding the slug from the purchase that issued it.
   sl.registerLazySingleton(() => GetMyWebinarsUseCase(sl()));
   sl.registerFactory(() => MyWebinarsCubit(getMyWebinarsUseCase: sl()));
+
+  // ============================================
+  // FEATURES - STORE
+  // ============================================
+  // Physical products sold by the learner's own org (STORE_API.md).
+  // Raw Dio rather than ApiClient: 24 endpoints sharing one envelope read
+  // better through one helper than as hand-maintained `.g.dart` stubs.
+  sl.registerLazySingleton<StoreRepository>(
+    () => StoreRepositoryImpl(sl<Dio>()),
+  );
+
+  sl.registerLazySingleton(() => StoreLocationService());
+  sl.registerLazySingleton(() => GetStoreHomeUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoreProductsUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoreProductUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoreReviewsUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoreStatesUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoreAddressesUseCase(sl()));
+  sl.registerLazySingleton(() => SaveStoreAddressUseCase(sl()));
+  sl.registerLazySingleton(() => DeleteStoreAddressUseCase(sl()));
+  sl.registerLazySingleton(() => MakeDefaultStoreAddressUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoreCartUseCase(sl()));
+  sl.registerLazySingleton(() => SetStoreCartQtyUseCase(sl()));
+  sl.registerLazySingleton(() => RemoveFromStoreCartUseCase(sl()));
+  sl.registerLazySingleton(() => ClearStoreCartUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoreCartCountUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoreQuoteUseCase(sl()));
+  sl.registerLazySingleton(() => PlaceStoreOrderUseCase(sl()));
+  sl.registerLazySingleton(() => VerifyStorePaymentUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoreOrdersUseCase(sl()));
+  sl.registerLazySingleton(() => GetStoreOrderUseCase(sl()));
+  sl.registerLazySingleton(() => CancelStoreOrderUseCase(sl()));
+  sl.registerLazySingleton(() => ConfirmStoreOrderReceivedUseCase(sl()));
+  sl.registerLazySingleton(() => ReviewStoreItemUseCase(sl()));
+
+  // Singleton: the cart badge on every Store screen and the Discover row
+  // read one count, and it carries the "store is off for this org" flag
+  // that hides the Discover entry point. Provided above MaterialApp.
+  sl.registerLazySingleton(
+    () => StoreCartCubit(
+      getCartUseCase: sl(),
+      setQtyUseCase: sl(),
+      removeUseCase: sl(),
+      clearUseCase: sl(),
+      getCountUseCase: sl(),
+    ),
+  );
+  // One per open screen. Checkout, reviews, orders and order detail take
+  // a per-screen argument and are built where they are opened.
+  sl.registerFactory(
+    () => StoreHomeCubit(getHomeUseCase: sl(), cartCubit: sl()),
+  );
+  sl.registerFactory(() => StoreProductsCubit(getProductsUseCase: sl()));
+  sl.registerFactory(() => StoreProductDetailCubit(getProductUseCase: sl()));
+  sl.registerFactory(
+    () => StoreAddressesCubit(
+      getAddressesUseCase: sl(),
+      deleteAddressUseCase: sl(),
+      makeDefaultUseCase: sl(),
+    ),
+  );
+  sl.registerFactory(
+    () => StoreAddressFormCubit(
+      getStatesUseCase: sl(),
+      saveAddressUseCase: sl(),
+      locationService: sl(),
+    ),
+  );
 
   // ============================================
   // EXTERNAL

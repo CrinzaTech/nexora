@@ -399,11 +399,41 @@ class _LiveClassChatPanelState extends State<LiveClassChatPanel> {
                       )
                     : null,
               ),
-              child: Text(msg.body, style: AppTypography.bodyTextMedium),
+              child: Opacity(
+                opacity: msg.delivery == ChatDelivery.sending ? 0.6 : 1,
+                child: Text(msg.body, style: AppTypography.bodyTextMedium),
+              ),
             ),
+          ),
+          if (isMine && msg.delivery != ChatDelivery.sent) _deliveryStatus(msg),
+        ],
+      ),
+    );
+  }
+
+  /// Under my own bubble until the server confirms it. A failed one retries
+  /// on tap, so the student never has to retype it.
+  Widget _deliveryStatus(LiveChatMessage msg) {
+    final failed = msg.delivery == ChatDelivery.failed;
+    final color = failed ? AppColors.error : AppColors.mutedTextPrimary;
+    final status = Padding(
+      padding: EdgeInsets.only(top: Screen.getVerticalSize(2)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(failed ? Icons.error_outline : Icons.schedule, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            failed ? 'Not sent · Tap to retry' : 'Sending…',
+            style: AppTypography.labelSmall.copyWith(color: color),
           ),
         ],
       ),
+    );
+    if (!failed) return status;
+    return InkWell(
+      onTap: () => context.read<LiveClassCubit>().retryChat(msg),
+      child: status,
     );
   }
 

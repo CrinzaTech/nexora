@@ -1,3 +1,4 @@
+import 'package:nexora/features/store/presentation/bloc/store_cart_cubit.dart';
 import 'package:flutter/services.dart';
 import 'package:nexora/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
@@ -112,6 +113,9 @@ class _DashboardPageState extends State<DashboardPage>
     _continueCubit = sl<ContinueCoursesCubit>()..load();
     _homeLiveCubit = sl<HomeLiveCubit>()..load();
     _webinarsCubit = sl<WebinarsCubit>()..load();
+    // Badge count, and the answer to "is the Store on for this org?" —
+    // a 403 hides the Discover row's Store icon.
+    sl<StoreCartCubit>().refreshCount();
 
     // Cache pages once to avoid recreating BlocProviders on every build.
     // Both cubits are owned here (provided via .value) so [_onNavSelected]

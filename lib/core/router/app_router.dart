@@ -51,6 +51,20 @@ import 'package:nexora/features/courses/data/models/course_filter_models.dart';
 import 'package:nexora/features/catalog/presentation/pages/category_list_page.dart';
 import 'package:nexora/features/courses/presentation/pages/document_viewer_page.dart';
 import 'package:nexora/features/workshop_pass/presentation/pages/my_bookings_page.dart';
+import 'package:nexora/features/store/data/models/store_address_model.dart';
+import 'package:nexora/features/store/data/models/store_checkout_model.dart';
+import 'package:nexora/features/store/data/models/store_product_model.dart';
+import 'package:nexora/features/store/presentation/pages/store_address_form_page.dart';
+import 'package:nexora/features/store/presentation/pages/store_addresses_page.dart';
+import 'package:nexora/features/store/presentation/pages/store_cart_page.dart';
+import 'package:nexora/features/store/presentation/pages/store_checkout_page.dart';
+import 'package:nexora/features/store/presentation/pages/store_home_page.dart';
+import 'package:nexora/features/store/presentation/pages/store_order_detail_page.dart';
+import 'package:nexora/features/store/presentation/pages/store_order_result_page.dart';
+import 'package:nexora/features/store/presentation/pages/store_orders_page.dart';
+import 'package:nexora/features/store/presentation/pages/store_product_detail_page.dart';
+import 'package:nexora/features/store/presentation/pages/store_products_page.dart';
+import 'package:nexora/features/store/presentation/pages/store_reviews_page.dart';
 import 'app_routes.dart';
 
 /// App router configuration using go_router
@@ -595,6 +609,116 @@ class AppRouter {
         path: AppRoutes.liveEvents,
         name: 'live-events',
         builder: (context, state) => const LiveEventsPage(),
+      ),
+      // ── Store ──────────────────────────────────────────────────────
+      // `name: 'store'` is load-bearing: "Continue shopping" pops back to
+      // the route with that name.
+      GoRoute(
+        path: AppRoutes.store,
+        name: 'store',
+        builder: (context, state) => const StoreHomePage(),
+      ),
+      GoRoute(
+        path: AppRoutes.storeProducts,
+        name: 'store-products',
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return StoreProductsPage(
+            title: q['title'] ?? 'All products',
+            categoryId: int.tryParse(q['categoryId'] ?? ''),
+            sort: StoreSort.fromWire(q['sort']),
+            searchMode: q['search'] == '1',
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.storeProduct,
+        name: 'store-product',
+        builder: (context, state) {
+          final id = state.uri.queryParameters['id'] ?? '';
+          // A product link without an id has nothing to show.
+          if (id.isEmpty) return const StoreHomePage();
+          return StoreProductDetailPage(productId: id);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.storeReviews,
+        name: 'store-reviews',
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          final id = q['id'] ?? '';
+          if (id.isEmpty) return const StoreHomePage();
+          return StoreReviewsPage(productId: id, title: q['title']);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.storeCart,
+        name: 'store-cart',
+        builder: (context, state) => const StoreCartPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.storeCheckout,
+        name: 'store-checkout',
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          final productId = q['productId'];
+          final qty = int.tryParse(q['qty'] ?? '') ?? 1;
+          return StoreCheckoutPage(
+            source: productId == null || productId.isEmpty
+                ? const StoreCheckoutSource.cart()
+                : StoreCheckoutSource.buyNow(
+                    productId: productId,
+                    qty: qty < 1 ? 1 : qty,
+                  ),
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.storeAddresses,
+        name: 'store-addresses',
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return StoreAddressesPage(
+            selectMode: q['select'] == '1',
+            selectedId: int.tryParse(q['selectedId'] ?? ''),
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.storeAddressForm,
+        name: 'store-address-form',
+        builder: (context, state) {
+          final extra = state.extra;
+          return StoreAddressFormPage(
+            address: extra is StoreAddress ? extra : null,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.storeOrderResult,
+        name: 'store-order-result',
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return StoreOrderResultPage(
+            kind: StoreOrderResultKind.fromWire(q['kind']),
+            orderNo: q['orderNo'] ?? '',
+            message: q['message'],
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.storeOrders,
+        name: 'store-orders',
+        builder: (context, state) => const StoreOrdersPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.storeOrder,
+        name: 'store-order',
+        builder: (context, state) {
+          final orderNo = state.uri.queryParameters['orderNo'] ?? '';
+          if (orderNo.isEmpty) return const StoreOrdersPage();
+          return StoreOrderDetailPage(orderNo: orderNo);
+        },
       ),
       GoRoute(
         path: AppRoutes.webinars,

@@ -15,7 +15,12 @@ class GetTransactionHistoryUseCase {
   Future<Either<Failure, List<TransactionModel>>> call({
     String? paymentStatus,
     String? filter,
+    String? itemType,
   }) {
-    return repository.getHistory(paymentStatus: paymentStatus, filter: filter);
+    return repository.getHistory(
+      paymentStatus: paymentStatus,
+      filter: filter,
+      itemType: itemType,
+    );
   }
 }

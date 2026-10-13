@@ -23,6 +23,7 @@ import 'core/session/session_service.dart';
 import 'core/storage/secure_storage.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/bloc/theme_cubit.dart';
+import 'features/store/presentation/bloc/store_cart_cubit.dart';
 import 'core/wallpaper/wallpaper_cubit.dart';
 import 'core/theme/branding_config.dart';
 import 'features/profile/presentation/bloc/profile_cubit.dart';
@@ -442,6 +443,9 @@ class _CrinzaAppState extends State<CrinzaApp> with WidgetsBindingObserver {
           // and a mode change rebuilds the whole app, not one subtree.
           BlocProvider<ThemeCubit>.value(value: sl<ThemeCubit>()),
           BlocProvider<WallpaperCubit>.value(value: sl<WallpaperCubit>()),
+          // Store cart + badge, shared by every Store screen and the
+          // Discover row (which hides the Store icon when it's off).
+          BlocProvider<StoreCartCubit>.value(value: sl<StoreCartCubit>()),
         ],
         child: BlocBuilder<ThemeCubit, ThemeMode>(
           builder: (context, themeMode) {

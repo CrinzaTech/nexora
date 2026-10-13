@@ -391,14 +391,19 @@ abstract class ApiClient {
   // GET /api/v1/course/transaction-history
   //   ?PaymentStatus=SUCCESS|FAILED|PENDING (optional)
   //   &Filter=LAST_WEEK|THIS_MONTH|LAST_MONTH (optional)
-  // Both query params are dropped from the URL when null so the
-  // backend serves the unfiltered list by default.
+  //   &ItemType=COURSE|PRODUCT (optional; omitted = both)
+  //   &pageSize=N (optional; the API defaults to 10)
+  // Null query params are dropped from the URL so the backend serves
+  // the unfiltered list by default. Course payments and store orders
+  // come back in one list, newest first.
   // ============================================================
   @GET(ApiEndpoints.transactionHistory)
   Future<Map<String, dynamic>> getTransactionHistory(
     @Query('PaymentStatus') String? paymentStatus,
-    @Query('Filter') String? filter,
-  );
+    @Query('Filter') String? filter, {
+    @Query('ItemType') String? itemType,
+    @Query('pageSize') int? pageSize,
+  });
 
   // ============================================================
   // COURSES — Get Course Categories & Types (filter options)

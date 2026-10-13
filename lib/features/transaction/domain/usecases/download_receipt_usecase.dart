@@ -13,3 +13,14 @@ class DownloadReceiptUseCase {
     return repository.downloadReceipt(transactionId);
   }
 }
+
+/// A store order's invoice (or payment receipt before it ships).
+class DownloadStoreInvoiceUseCase {
+  final TransactionRepository repository;
+
+  DownloadStoreInvoiceUseCase(this.repository);
+
+  Future<Either<Failure, ReceiptModel>> call(String orderNo) {
+    return repository.downloadStoreInvoice(orderNo);
+  }
+}

@@ -46,6 +46,12 @@ class LiveClassCubit extends SafeCubit<LiveClassState> {
   LiveClassHubService? _hub;
   StreamSubscription<LiveClassHubEvent>? _hubSub;
 
+  /// Ids for chat rows this device is posting; negative so they can never
+  /// collide with a server id.
+  int _localChatSeq = 0;
+  bool _raisingHand = false;
+  bool _hubReconnecting = false;
+
   /// Safety net for the `connecting → speaking` transition. The mic track
   /// is already published and `MicActivated` acknowledged by the time it
   /// starts; if the server's `nowSpeaking` echo never lands (not sent to
@@ -139,7 +145,9 @@ class LiveClassCubit extends SafeCubit<LiveClassState> {
     await Future.wait([_loadPlayback(), _loadInitialChat(), _loadPolls()]);
   }
 
-  Future<void> _connectHub(String token) async {
+  /// [quiet] suppresses the failure notice — the background reconnect loop
+  /// retries on its own and should not toast on every attempt.
+  Future<void> _connectHub(String token, {bool quiet = false}) async {
     await _teardownHub();
     final hub = LiveClassHubService(accessToken: token);
     _hub = hub;
@@ -152,8 +160,9 @@ class LiveClassCubit extends SafeCubit<LiveClassState> {
       // it visible instead of silently no-op'ing every send/raise.
       emit(state.copyWith(
         hubConnected: false,
-        transientNotice:
-            "Couldn't connect to live chat. Check your connection.",
+        transientNotice: quiet
+            ? state.transientNotice
+            : "Couldn't connect to live chat. Check your connection.",
       ));
       // Loud log with the exact URL so a misconfigured host is obvious.
       // ignore: avoid_print
@@ -166,6 +175,41 @@ class LiveClassCubit extends SafeCubit<LiveClassState> {
     _hubSub = null;
     await _hub?.dispose();
     _hub = null;
+  }
+
+  bool get _classIsOver =>
+      state.phase == LiveViewPhase.ended ||
+      state.phase == LiveViewPhase.cancelled;
+
+  /// Re-open the hub with a fresh token, retrying with backoff until it
+  /// connects or the class is over. [force] replaces a connection that still
+  /// claims to be connected — used after a send timed out, which means the
+  /// socket is dead even though SignalR has not noticed yet.
+  Future<void> _reconnectHub({bool force = false}) async {
+    if (_hubReconnecting || isClosed || _classIsOver) return;
+    if (!force && (_hub?.isConnected ?? false)) return;
+    _hubReconnecting = true;
+    emit(state.copyWith(hubConnected: false));
+    try {
+      const delaysSeconds = [0, 2, 5, 10, 15];
+      for (var attempt = 0; !isClosed && !_classIsOver; attempt++) {
+        final wait = delaysSeconds[attempt < delaysSeconds.length
+            ? attempt
+            : delaysSeconds.length - 1];
+        if (wait > 0) await Future<void>.delayed(Duration(seconds: wait));
+        if (isClosed || _classIsOver) return;
+        final token = (await getStreamTokenUseCase()).fold((_) => null, (t) => t);
+        if (token == null) continue;
+        await _connectHub(token, quiet: true);
+        if (_hub?.isConnected ?? false) {
+          // Whatever was said while we were away.
+          await _loadInitialChat();
+          return;
+        }
+      }
+    } finally {
+      _hubReconnecting = false;
+    }
   }
 
   // ── Playback ─────────────────────────────────────────────────────
@@ -655,8 +699,18 @@ class LiveClassCubit extends SafeCubit<LiveClassState> {
       (messages) {
         // ignore: avoid_print
         print('[ClassChat] history fetched count=${messages.length}');
+        // Keep my unconfirmed rows on top — a history reload after a
+        // reconnect must not wipe a "not sent, tap to retry" message. A
+        // pending row whose text the server already has is dropped: it
+        // arrived after all.
+        final me = myId;
+        final locals = state.messages.where((m) {
+          if (!m.isLocal) return false;
+          if (m.delivery == ChatDelivery.failed) return true;
+          return !messages.any((h) => h.senderId == me && h.body == m.body);
+        }).toList();
         emit(state.copyWith(
-          messages: _sortNewestFirst(messages),
+          messages: [...locals, ..._sortNewestFirst(messages)],
           chatHasMore: messages.length >= 30,
         ));
         _absorbPolls(messages);
@@ -667,7 +721,8 @@ class LiveClassCubit extends SafeCubit<LiveClassState> {
   /// Page backwards from the oldest message currently held.
   Future<void> loadMoreChat() async {
     if (state.chatLoadingMore || !state.chatHasMore) return;
-    final oldest = state.messages.isEmpty ? null : state.messages.last.id;
+    final serverRows = state.messages.where((m) => !m.isLocal);
+    final oldest = serverRows.isEmpty ? null : serverRows.last.id;
     emit(state.copyWith(chatLoadingMore: true));
     final result =
         await getLiveClassChatUseCase(_roomId, beforeId: oldest, limit: 30);
@@ -774,25 +829,81 @@ class LiveClassCubit extends SafeCubit<LiveClassState> {
     }
   }
 
+  /// The message shows immediately as "sending…", becomes a normal message
+  /// when the server echoes it, and turns into "not sent · tap to retry" if
+  /// it cannot be delivered. Students used to see nothing until the echo and
+  /// re-tapped send, posting the same text three times.
   Future<void> sendChat(String body) async {
     final trimmed = body.trim();
     if (trimmed.isEmpty || state.flags.chatBlocked) return;
-    if (!(_hub?.isConnected ?? false)) {
-      emit(state.copyWith(
-        hubConnected: false,
-        transientNotice: 'Not connected to live chat. Message not sent.',
-      ));
-      return;
-    }
     // ~1000 char cap (server also enforces).
     final capped = trimmed.length > 1000 ? trimmed.substring(0, 1000) : trimmed;
+    final me = myId;
+    if (me == null) {
+      // Without my id the echo can't be matched to a local row; send plainly.
+      await _postChat(capped, null);
+      return;
+    }
+    // The same text already on its way: an impatient second tap.
+    if (state.messages.any((m) =>
+        m.delivery == ChatDelivery.sending && m.body == capped)) {
+      return;
+    }
+    final local = LiveChatMessage(
+      id: -(++_localChatSeq),
+      senderId: me,
+      senderRole: 'student',
+      senderName: '',
+      body: capped,
+      createdAt: DateTime.now(),
+      delivery: ChatDelivery.sending,
+    );
+    emit(state.copyWith(messages: [local, ...state.messages]));
+    await _postChat(capped, local.id);
+  }
+
+  /// Tap on a "not sent" bubble.
+  Future<void> retryChat(LiveChatMessage message) async {
+    if (!message.isLocal || message.delivery != ChatDelivery.failed) return;
+    _setLocalDelivery(message.id, ChatDelivery.sending);
+    await _postChat(message.body, message.id);
+  }
+
+  Future<void> _postChat(String body, int? localId) async {
     try {
-      await _hub?.sendChat(capped);
+      final hub = _hub;
+      if (hub == null) throw const HubNotConnectedException('SendChat');
+      await hub.sendChat(body);
+      // Saved on the server. The echo normally replaced the row already;
+      // if it has not arrived, stop showing "sending…" anyway.
+      if (localId != null) _setLocalDelivery(localId, ChatDelivery.sent);
+    } on HubNotConnectedException {
+      if (localId != null) _setLocalDelivery(localId, ChatDelivery.failed);
+      emit(state.copyWith(
+        hubConnected: false,
+        transientNotice: 'Not connected to live chat. Tap the message to retry.',
+      ));
+      unawaited(_reconnectHub());
+    } on HubTimeoutException {
+      if (localId != null) _setLocalDelivery(localId, ChatDelivery.failed);
+      emit(state.copyWith(
+        transientNotice: 'Connection is slow — message not sent. Tap it to retry.',
+      ));
+      unawaited(_reconnectHub(force: true));
     } catch (e) {
-      emit(state.copyWith(transientNotice: 'Message could not be sent.'));
+      if (localId != null) _setLocalDelivery(localId, ChatDelivery.failed);
+      emit(state.copyWith(transientNotice: 'Message could not be sent. Tap it to retry.'));
       // ignore: avoid_print
       print('[ClassHub] SendChat error → $e');
     }
+  }
+
+  void _setLocalDelivery(int localId, ChatDelivery delivery) {
+    final i = state.messages.indexWhere((m) => m.id == localId);
+    if (i < 0) return;
+    final list = [...state.messages];
+    list[i] = list[i].withDelivery(delivery);
+    emit(state.copyWith(messages: list));
   }
 
   /// Newest-first ordering used everywhere (recent on top).
@@ -813,21 +924,34 @@ class LiveClassCubit extends SafeCubit<LiveClassState> {
 
   Future<void> raiseHand() async {
     if (state.flags.handBlocked) return;
-    if (!(_hub?.isConnected ?? false)) {
+    // A second tap while the first is in flight would only queue the same
+    // request again.
+    if (_raisingHand) return;
+    _raisingHand = true;
+    try {
+      final hub = _hub;
+      if (hub == null) throw const HubNotConnectedException('RaiseHand');
+      await hub.raiseHand();
+      // Optimistic; server confirms with queuePosition (also when I was
+      // already in the queue).
+      emit(state.copyWith(handPhase: HandPhase.queued));
+    } on HubNotConnectedException {
       emit(state.copyWith(
         hubConnected: false,
-        transientNotice: 'Not connected to the class. Try again in a moment.',
+        transientNotice: 'Reconnecting to the class — try again in a moment.',
       ));
-      return;
-    }
-    try {
-      await _hub?.raiseHand();
-      // Optimistic; server confirms with queuePosition.
-      emit(state.copyWith(handPhase: HandPhase.queued));
+      unawaited(_reconnectHub());
+    } on HubTimeoutException {
+      emit(state.copyWith(
+        transientNotice: "Connection is slow — your hand wasn't raised. Try again in a moment.",
+      ));
+      unawaited(_reconnectHub(force: true));
     } catch (e) {
       emit(state.copyWith(transientNotice: "Couldn't raise your hand."));
       // ignore: avoid_print
       print('[ClassHub] RaiseHand error → $e');
+    } finally {
+      _raisingHand = false;
     }
   }
 
@@ -941,6 +1065,18 @@ class LiveClassCubit extends SafeCubit<LiveClassState> {
     switch (event) {
       case RoomStateEvent(:final state):
         _applyRoomState(state);
+        break;
+
+      case HubReconnectingEvent():
+        emit(state.copyWith(hubConnected: false));
+        break;
+
+      case HubClosedEvent():
+        // SignalR's own retries now never give up, so a close means the
+        // server ended the connection or refused the token: start over
+        // with a fresh token.
+        emit(state.copyWith(hubConnected: false));
+        unawaited(_reconnectHub());
         break;
 
       case HubReconnectedEvent():
@@ -1149,6 +1285,20 @@ class LiveClassCubit extends SafeCubit<LiveClassState> {
     );
     if (hiddenByPrivate) return;
     if (message.poll != null) _upsertPoll(message.poll!);
+    // My own message coming back: swap it in for the local "sending…" row
+    // (same place in the list), rather than showing it twice.
+    if (myId != null && message.senderId == myId && !message.isEducator) {
+      final i = state.messages.indexWhere((m) =>
+          m.isLocal &&
+          m.delivery != ChatDelivery.failed &&
+          m.body == message.body);
+      if (i >= 0) {
+        final list = [...state.messages];
+        list[i] = message;
+        emit(state.copyWith(messages: list));
+        return;
+      }
+    }
     // De-dupe by id ONLY when the id is real (>0). If the backend omits
     // an id (parses to 0), never treat every 0-id message as the same
     // one — that would collapse all messages into a single row.
