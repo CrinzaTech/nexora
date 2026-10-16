@@ -95,6 +95,9 @@ class AppRoutes {
   /// Course list by category route
   static const String courseList = '/courses/category';
 
+  /// Discover → Free Content (the org's single Free Content page)
+  static const String freeContent = '/courses/free-content';
+
   /// Course search route — accepts optional `searchQuery` and `isPaid`
   /// query params to seed the search field on open.
   static const String courseSearch = '/courses/search';
@@ -162,6 +165,14 @@ class AppRoutes {
 
   /// Live Events — live classes and webinars in two tabs.
   static const String liveEvents = '/live-events';
+
+  /// News & Updates panel — every live post the educator wrote, newest
+  /// first. Opened from the Discover row's News icon.
+  static const String news = '/news';
+
+  /// One post — requires `newsId`. The panel also passes the post as
+  /// `extra:` so it shows without a fetch; a news push carries the id only.
+  static const String newsDetail = '/news/detail';
 
   // ============================================
   // STORE — physical products (STORE_API.md)

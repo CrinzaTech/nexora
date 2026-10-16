@@ -28,7 +28,7 @@ import 'package:url_launcher/url_launcher.dart';
 /// ```
 ///
 /// `notificationType` is the enum NAME (`None` / `Course` / `Category` /
-/// `ExternalLink`), never the integer — [NotificationType.fromWire]
+/// `ExternalLink` / `News`), never the integer — [NotificationType.fromWire]
 /// collapses anything it doesn't recognise to [NotificationType.none],
 /// which opens the app but navigates nowhere. A `dispatch type=none`
 /// log line means the payload is wrong, not the app.
@@ -116,6 +116,15 @@ class NotificationRouter {
         final uri = Uri.tryParse(ref);
         if (uri == null) return;
         await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      case NotificationType.news:
+        // `newsId` mirrors `referenceValue`; read either. The detail page
+        // fetches the post, marks it read, and says so if it has gone.
+        final newsId =
+            int.tryParse((data['newsId'] ?? '').toString().trim()) ??
+            int.tryParse(ref);
+        if (newsId == null) return;
+        AppRouter.router.push('${AppRoutes.newsDetail}?newsId=$newsId');
         return;
       case NotificationType.none:
         return;

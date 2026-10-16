@@ -137,7 +137,8 @@ abstract class ExamRepository {
     int top,
   });
 
-  /// Practice drill: the whole paper, freshly shuffled on every call.
+  /// Practice drill: the whole paper, freshly shuffled on every call when the
+  /// educator has shuffle turned on for the exam.
   /// Keyed by exam, not attempt — a drill has no attempt (`attemptId` is 0,
   /// never send it anywhere) and no deadline.
   Future<Either<Failure, ExamPaperResponse>> getPracticePaper({

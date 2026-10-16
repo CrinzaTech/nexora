@@ -22,6 +22,7 @@
 /// | `course`       | course id (int as string)          |
 /// | `category`     | category id (int as string)        |
 /// | `externalLink` | a full URL to open                 |
+/// | `news`         | news post id (int as string)       |
 /// | `none`         | unused                             |
 library;
 
@@ -32,7 +33,11 @@ enum NotificationType {
   none,
   course,
   category,
-  externalLink;
+  externalLink,
+
+  /// A News & Updates post going live. Push-only — the backend never writes
+  /// these to `/api/v1/notifications`, so the in-app list won't hold one.
+  news;
 
   /// Wire-format string the backend sends. Centralised so the parser
   /// and any future "build a notification for testing" code share one
@@ -47,6 +52,8 @@ enum NotificationType {
         return 'category';
       case NotificationType.externalLink:
         return 'externalLink';
+      case NotificationType.news:
+        return 'news';
     }
   }
 
@@ -63,6 +70,8 @@ enum NotificationType {
         return NotificationType.category;
       case 'externallink':
         return NotificationType.externalLink;
+      case 'news':
+        return NotificationType.news;
       case 'none':
       case '':
       default:

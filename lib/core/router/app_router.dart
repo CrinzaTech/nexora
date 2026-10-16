@@ -13,6 +13,11 @@ import 'package:nexora/features/webinar/presentation/bloc/webinars_cubit.dart';
 import 'package:nexora/features/home/presentation/pages/home_page.dart';
 import 'package:nexora/features/notification/presentation/bloc/notification_cubit.dart';
 import 'package:nexora/features/notification/presentation/pages/notification_page.dart';
+import 'package:nexora/features/news/data/models/news_item_model.dart';
+import 'package:nexora/features/news/presentation/bloc/news_detail_cubit.dart';
+import 'package:nexora/features/news/presentation/bloc/news_list_cubit.dart';
+import 'package:nexora/features/news/presentation/pages/news_detail_page.dart';
+import 'package:nexora/features/news/presentation/pages/news_page.dart';
 import 'package:nexora/features/courses/presentation/pages/course_detail_page.dart';
 import 'package:nexora/features/courses/presentation/pages/search_page.dart';
 import 'package:nexora/features/chats/presentation/pages/chat_room_page.dart';
@@ -239,6 +244,15 @@ class AppRouter {
             title: title,
           );
         },
+      ),
+      GoRoute(
+        path: AppRoutes.freeContent,
+        name: 'free-content',
+        builder: (context, state) => const CourseDetailPage(
+          courseId: 0,
+          courseTitle: 'Free Content',
+          freeContent: true,
+        ),
       ),
       GoRoute(
         path: AppRoutes.courseSearch,
@@ -609,6 +623,30 @@ class AppRouter {
         path: AppRoutes.liveEvents,
         name: 'live-events',
         builder: (context, state) => const LiveEventsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.news,
+        name: 'news',
+        builder: (context, state) => BlocProvider(
+          create: (context) => sl<NewsListCubit>(),
+          child: const NewsUpdatesPage(),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.newsDetail,
+        name: 'news-detail',
+        builder: (context, state) {
+          final extra = state.extra;
+          final initial = extra is NewsItem ? extra : null;
+          final newsId =
+              int.tryParse(state.uri.queryParameters['newsId'] ?? '') ??
+              initial?.newsId;
+          return BlocProvider(
+            create: (context) =>
+                sl<NewsDetailCubit>()..load(newsId, initial: initial),
+            child: const NewsDetailPage(),
+          );
+        },
       ),
       // ── Store ──────────────────────────────────────────────────────
       // `name: 'store'` is load-bearing: "Continue shopping" pops back to

@@ -134,6 +134,8 @@ class ApiEndpoints {
 
   static const String courseSearch = '/api/v1/course/search';
   static const String courseCatalog = '/api/v1/course/catalog';
+  // Discover → Free Content: items every learner opens without buying.
+  static const String freeContent = '/api/v1/course/free-content';
   // pricing-v2 takes the course id AND a specific tier id as query params
   // (no path segment). The PriceId picks one entry from the detail's
   // `pricing.pricing[]` array. Query keys are PascalCase on the wire
@@ -304,6 +306,37 @@ class ApiEndpoints {
   static const String notifications = '/api/v1/notifications';
   static const String notificationReadStatus =
       '/api/v1/notifications/{notificationId}/read-status';
+
+  // ============================================================
+  // NEWS & UPDATES — posts an educator writes in the web admin
+  // ============================================================
+  // Audience and expiry are applied on the server; the app shows what it
+  // is given and never filters.
+
+  /// Badge count + the posts to pop up on Home (at most 5, usually none).
+  /// GET /api/v1/news/home
+  static const String newsHome = '/api/v1/news/home';
+
+  /// The panel, newest first. `pageSize` is clamped to 50.
+  /// GET /api/v1/news?pageNo=&pageSize=
+  static const String news = '/api/v1/news';
+
+  /// One post — the push / deep-link target. 404 with a readable
+  /// `message` once it has expired, been deleted or isn't for this learner.
+  /// GET /api/v1/news/{newsId}
+  static const String newsDetail = '/api/v1/news/{newsId}';
+
+  /// Body: `{ "newsIds": [..] }` — every id the popup dialog showed.
+  /// Idempotent, and does **not** mark anything read.
+  /// POST /api/v1/news/popup-shown
+  static const String newsPopupShown = '/api/v1/news/popup-shown';
+
+  /// Also counts as the popup having been shown.
+  /// PUT /api/v1/news/{newsId}/read
+  static const String newsRead = '/api/v1/news/{newsId}/read';
+
+  /// PUT /api/v1/news/read-all
+  static const String newsReadAll = '/api/v1/news/read-all';
 
   // ============================================================
   // CHAT GROUPS

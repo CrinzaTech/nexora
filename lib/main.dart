@@ -24,6 +24,7 @@ import 'core/storage/secure_storage.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/bloc/theme_cubit.dart';
 import 'features/store/presentation/bloc/store_cart_cubit.dart';
+import 'features/news/presentation/bloc/news_home_cubit.dart';
 import 'core/wallpaper/wallpaper_cubit.dart';
 import 'core/theme/branding_config.dart';
 import 'features/profile/presentation/bloc/profile_cubit.dart';
@@ -446,6 +447,9 @@ class _CrinzaAppState extends State<CrinzaApp> with WidgetsBindingObserver {
           // Store cart + badge, shared by every Store screen and the
           // Discover row (which hides the Store icon when it's off).
           BlocProvider<StoreCartCubit>.value(value: sl<StoreCartCubit>()),
+          // News badge + Home popup, shared by the Discover row, the
+          // News & Updates panel and the push detail page.
+          BlocProvider<NewsHomeCubit>.value(value: sl<NewsHomeCubit>()),
         ],
         child: BlocBuilder<ThemeCubit, ThemeMode>(
           builder: (context, themeMode) {

@@ -4,7 +4,7 @@ import 'package:nexora/core/error/failures.dart';
 import 'package:nexora/features/exam/data/models/exam_models.dart';
 import 'package:nexora/features/exam/domain/repositories/exam_repository.dart';
 
-/// Practice drill: fetch the whole paper, reshuffled on every call.
+/// Practice drill: fetch the whole paper (re-dealt per call when the exam shuffles).
 class GetPracticePaperUseCase {
   final ExamRepository repository;
 

@@ -1,9 +1,9 @@
 import 'package:nexora/core/router/app_routes.dart';
 import 'package:nexora/core/theme/app_colors.dart';
-import 'package:nexora/core/widgets/custom_snackbar.dart';
 import 'dart:math' as math;
 
 import 'package:nexora/features/home_live/presentation/bloc/home_live_cubit.dart';
+import 'package:nexora/features/news/presentation/bloc/news_home_cubit.dart';
 import 'package:nexora/features/store/presentation/bloc/store_cart_cubit.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinars_cubit.dart';
 import 'package:flutter/material.dart';
@@ -99,6 +99,12 @@ class DiscoverIconsRow extends StatelessWidget {
           ),
         ),
         Image.asset(item.asset, semanticLabel: item.label, fit: BoxFit.contain),
+        if (item.badge > 0)
+          Positioned(
+            top: _shadowInset - 2,
+            right: _shadowInset - 2,
+            child: _CountBadge(count: item.badge),
+          ),
       ],
     );
     final tappable = GestureDetector(
@@ -134,6 +140,9 @@ class DiscoverIconsRow extends StatelessWidget {
     final storeAvailable = context.select<StoreCartCubit, bool>(
       (c) => c.state.storeAvailable,
     );
+    final newsUnread = context.select<NewsHomeCubit, int>(
+      (c) => c.state.unreadCount,
+    );
     final items = <_DiscoverItem>[
       _DiscoverItem(
         asset: 'assets/icons/discover/live.png',
@@ -143,12 +152,8 @@ class DiscoverIconsRow extends StatelessWidget {
       ),
       _DiscoverItem(
         asset: 'assets/icons/discover/free.png',
-        label: 'Free Courses',
-        onTap: () => CustomSnackbar.info(
-          context,
-          title: 'Free Courses',
-          message: 'Coming soon',
-        ),
+        label: 'Free Content',
+        onTap: () => context.push(AppRoutes.freeContent),
       ),
       // Hidden once the Store API says this org has it switched off.
       if (storeAvailable)
@@ -160,8 +165,8 @@ class DiscoverIconsRow extends StatelessWidget {
       _DiscoverItem(
         asset: 'assets/icons/discover/news.png',
         label: 'News',
-        onTap: () =>
-            CustomSnackbar.info(context, title: 'News', message: 'Coming soon'),
+        badge: newsUnread,
+        onTap: () => context.push(AppRoutes.news),
       ),
     ];
 
@@ -190,12 +195,49 @@ class _DiscoverItem {
   /// Shows the live ripple behind the icon when something is on the way.
   final bool pulse;
 
+  /// Unread count in a red pill on the icon's corner; hidden at 0.
+  final int badge;
+
   const _DiscoverItem({
     required this.asset,
     required this.label,
     required this.onTap,
     this.pulse = false,
+    this.badge = 0,
   });
+}
+
+/// Red unread pill: the count, `9+` above 9. Ringed in the page colour so
+/// it stays legible where it overlaps the artwork.
+class _CountBadge extends StatelessWidget {
+  final int count;
+
+  const _CountBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 5),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.error,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.white, width: 1.5),
+        ),
+        child: Text(
+          count > 9 ? '9+' : '$count',
+          style: const TextStyle(
+            color: AppColors.alwaysWhite,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            height: 1.1,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Two red rings that swell out from behind the icon and fade, one half a

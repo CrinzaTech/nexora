@@ -694,7 +694,7 @@ abstract class ApiClient {
   // ============================================================
   // EXAM — Practice paper (quizMode on, retryMode off)
   // GET /api/v1/exam/{examId}/practice?phoneNumber=
-  // Whole paper, reshuffled on every call. attemptId is 0 and there is no
+  // Whole paper; re-dealt on every call when the exam shuffles. attemptId is 0 and there is no
   // deadline — nothing about a drill is recorded.
   // ============================================================
   @GET(ApiEndpoints.examPractice)

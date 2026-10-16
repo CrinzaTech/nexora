@@ -1,4 +1,6 @@
 import 'package:nexora/features/store/presentation/bloc/store_cart_cubit.dart';
+import 'package:nexora/features/news/presentation/bloc/news_home_cubit.dart';
+import 'package:nexora/features/news/presentation/widgets/news_popup_dialog.dart';
 import 'package:flutter/services.dart';
 import 'package:nexora/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
@@ -29,7 +31,7 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final PageController _pageController;
   late final List<Widget> _pages;
   // Held here (not inside the page list) so [_onNavSelected] can fire a
@@ -46,6 +48,12 @@ class _DashboardPageState extends State<DashboardPage>
   // to pick up a webinar that went live while the learner was on another
   // tab, and HomePage's keep-alive means its initState never re-runs.
   late final WebinarsCubit _webinarsCubit;
+  // App-wide singleton (the Discover badge reads it too); refreshed here on
+  // start, on every return to Home and on app resume, and the source of
+  // the Home popup.
+  late final NewsHomeCubit _newsCubit;
+  bool _newsPopupOpen = false;
+  bool _newsWaitingForHome = false;
   int _currentIndex = 0;
   DateTime? _lastBackPressTime;
 
@@ -116,6 +124,8 @@ class _DashboardPageState extends State<DashboardPage>
     // Badge count, and the answer to "is the Store on for this org?" —
     // a 403 hides the Discover row's Store icon.
     sl<StoreCartCubit>().refreshCount();
+    _newsCubit = sl<NewsHomeCubit>();
+    WidgetsBinding.instance.addObserver(this);
 
     // Cache pages once to avoid recreating BlocProviders on every build.
     // Both cubits are owned here (provided via .value) so [_onNavSelected]
@@ -137,13 +147,72 @@ class _DashboardPageState extends State<DashboardPage>
 
     // A shared course link that arrived before there was a dashboard to
     // push onto — cold start, signed out, or a fresh install — opens now.
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => AppLinkService.consumePending(),
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppLinkService.consumePending();
+      _refreshNews();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshNews();
+  }
+
+  /// `GET /news/home`, then the popup if it has posts for it. Silent: a
+  /// failure changes nothing on screen.
+  Future<void> _refreshNews() async {
+    await _newsCubit.refresh();
+    _maybeShowNewsPopup();
+  }
+
+  /// Shows the News popup only when nothing would be interrupted: Home is
+  /// the tab on screen, no route or modal sits above the dashboard, and
+  /// Home's own content has rendered — never over its loading skeleton.
+  /// Otherwise the posts wait in the cubit for the next try (tab return,
+  /// resume), since they are only consumed once the dialog opens.
+  void _maybeShowNewsPopup() {
+    if (!mounted || _newsPopupOpen || _currentIndex != 0) return;
+    if (_newsCubit.state.popups.isEmpty) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
+
+    final homeReady = _homeCubit.state.maybeWhen(
+      loaded: (_) => true,
+      orElse: () => false,
     );
+    if (!homeReady) {
+      if (_newsWaitingForHome) return;
+      _newsWaitingForHome = true;
+      _homeCubit.stream
+          .firstWhere(
+            (s) => s.maybeWhen(loaded: (_) => true, orElse: () => false),
+          )
+          .then((_) {
+            _newsWaitingForHome = false;
+            // One frame so the content is actually painted underneath.
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => _maybeShowNewsPopup(),
+            );
+          })
+          // The cubit closed (dashboard gone) before Home loaded.
+          .catchError((_) {
+            _newsWaitingForHome = false;
+          });
+      return;
+    }
+
+    final items = _newsCubit.takePopups();
+    if (items.isEmpty) return;
+    _newsPopupOpen = true;
+    NewsPopupDialog.show(
+      context,
+      items: items,
+      cubit: _newsCubit,
+    ).whenComplete(() => _newsPopupOpen = false);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _navHidden.dispose();
     _pageController.dispose();
     _homeCubit.close();
@@ -208,6 +277,7 @@ class _DashboardPageState extends State<DashboardPage>
         _continueCubit.silentRefresh();
         _homeLiveCubit.silentRefresh();
         _webinarsCubit.silentRefresh();
+        _refreshNews();
       }
     }
   }

@@ -3,6 +3,8 @@ import 'package:dio/dio.dart';
 
 import 'package:nexora/core/error/failures.dart';
 import 'package:nexora/core/network/api_client.dart';
+import 'package:nexora/core/network/api_endpoints.dart';
+import 'package:nexora/features/courses/domain/usecases/get_free_content_usecase.dart';
 import 'package:nexora/core/network/network_exception_mapper.dart';
 import 'package:nexora/features/courses/data/models/course_filter_models.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
@@ -14,9 +16,35 @@ class CourseRepositoryImpl implements CourseRepository {
   final ApiClient _apiClient;
   final FreeCourseRegistry _freeCourseRegistry;
 
-  CourseRepositoryImpl(this._apiClient, this._freeCourseRegistry);
+  /// Plain Dio for endpoints not on the generated [ApiClient] (same
+  /// pattern as TransactionRepositoryImpl / NewsRepositoryImpl).
+  final Dio _dio;
 
+  CourseRepositoryImpl(this._apiClient, this._freeCourseRegistry, this._dio);
 
+  @override
+  Future<Either<Failure, Course>> getFreeContent() async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        ApiEndpoints.freeContent,
+      );
+      final data = res.data?['data'];
+      if (data is! Map<String, dynamic>) {
+        return const Left(Failure.server(message: kNoFreeContentMessage));
+      }
+      return Right(Course.fromJson(data));
+    } on DioException catch (e) {
+      // 404 "Course details not found." = no Free Content yet, or a draft.
+      if (e.response?.statusCode == 404) {
+        return const Left(
+          Failure.server(message: kNoFreeContentMessage, statusCode: 404),
+        );
+      }
+      return Left(mapDioExceptionToFailure(e));
+    } catch (e) {
+      return Left(Failure.unknown(message: e.toString()));
+    }
+  }
 
   @override
   Future<Either<Failure, Course>> getCourseDetail(int courseId) async {
@@ -37,8 +65,6 @@ class CourseRepositoryImpl implements CourseRepository {
       return Left(Failure.unknown(message: e.toString()));
     }
   }
-
-
 
   @override
   Future<Either<Failure, List<CourseReview>>> getCourseReviews(
@@ -159,8 +185,6 @@ class CourseRepositoryImpl implements CourseRepository {
     }
   }
 
-
-
   @override
   Future<Either<Failure, LivePlayback>> getLiveClassPlayback(
     String roomId,
@@ -260,7 +284,8 @@ class CourseRepositoryImpl implements CourseRepository {
       if (data is List) {
         list = data;
       } else if (data is Map<String, dynamic>) {
-        final nested = data['items'] ??
+        final nested =
+            data['items'] ??
             data['messages'] ??
             data['chats'] ??
             data['history'] ??
@@ -292,7 +317,11 @@ class CourseRepositoryImpl implements CourseRepository {
     String? couponCode,
   }) async {
     try {
-      final json = await _apiClient.getCoursePricing(courseId, priceId, couponCode);
+      final json = await _apiClient.getCoursePricing(
+        courseId,
+        priceId,
+        couponCode,
+      );
       final data = json['data'];
       if (data is! Map<String, dynamic>) {
         return Left(

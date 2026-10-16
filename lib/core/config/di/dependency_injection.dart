@@ -42,6 +42,7 @@ import 'package:nexora/features/courses/domain/usecases/save_continue_course_use
 import 'package:nexora/features/courses/domain/usecases/save_course_review_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/search_courses_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/get_course_catalog_usecase.dart';
+import 'package:nexora/features/courses/domain/usecases/get_free_content_usecase.dart';
 import 'package:nexora/features/courses/presentation/bloc/continue_courses_cubit.dart';
 import 'package:nexora/features/courses/presentation/bloc/my_courses_cubit.dart';
 import 'package:nexora/features/courses/presentation/bloc/course_pricing_cubit.dart';
@@ -108,6 +109,12 @@ import 'package:nexora/features/notification/domain/repositories/notification_re
 import 'package:nexora/features/notification/domain/usecases/get_notifications_usecase.dart';
 import 'package:nexora/features/notification/domain/usecases/mark_notification_read_usecase.dart';
 import 'package:nexora/features/notification/presentation/bloc/notification_cubit.dart';
+import 'package:nexora/features/news/data/repositories/news_repository_impl.dart';
+import 'package:nexora/features/news/domain/repositories/news_repository.dart';
+import 'package:nexora/features/news/domain/usecases/news_usecases.dart';
+import 'package:nexora/features/news/presentation/bloc/news_detail_cubit.dart';
+import 'package:nexora/features/news/presentation/bloc/news_home_cubit.dart';
+import 'package:nexora/features/news/presentation/bloc/news_list_cubit.dart';
 import 'package:nexora/features/profile/data/repositories/profile_repository_impl.dart';
 import 'package:nexora/features/profile/domain/repositories/profile_repository.dart';
 import 'package:nexora/features/profile/domain/usecases/delete_account_usecase.dart';
@@ -215,7 +222,7 @@ Future<void> setupLocator() async {
   // [FreeCourseRegistry]).
   sl.registerLazySingleton(() => FreeCourseRegistry(sl<ApiClient>()));
   sl.registerLazySingleton<CourseRepository>(
-    () => CourseRepositoryImpl(sl<ApiClient>(), sl<FreeCourseRegistry>()),
+    () => CourseRepositoryImpl(sl<ApiClient>(), sl<FreeCourseRegistry>(), sl<Dio>()),
   );
 
   // Use Cases
@@ -245,6 +252,7 @@ Future<void> setupLocator() async {
   sl.registerFactory(() => LiveClassAudioService());
   sl.registerLazySingleton(() => SearchCoursesUseCase(sl()));
   sl.registerLazySingleton(() => GetCourseCatalogUseCase(sl()));
+  sl.registerLazySingleton(() => GetFreeContentUseCase(sl()));
   sl.registerLazySingleton(() => GetCoursePricingUseCase(sl()));
   sl.registerLazySingleton(() => GetCourseCategoriesUseCase(sl()));
 
@@ -260,6 +268,7 @@ Future<void> setupLocator() async {
     () => CourseDetailCubit(
       getCourseDetailUseCase: sl(),
       saveContinueCourseUseCase: sl(),
+      getFreeContentUseCase: sl(),
     ),
   );
   sl.registerFactory(
@@ -452,6 +461,38 @@ Future<void> setupLocator() async {
   // Cubit
   sl.registerFactory(
     () => NotificationCubit(getNotifications: sl(), markNotificationRead: sl()),
+  );
+
+  // ============================================
+  // FEATURES - NEWS & UPDATES
+  // ============================================
+  // Raw Dio, like the Store: six endpoints of one envelope don't earn
+  // hand-written `.g.dart` stubs.
+  sl.registerLazySingleton<NewsRepository>(() => NewsRepositoryImpl(sl<Dio>()));
+
+  sl.registerLazySingleton(() => GetNewsHomeUseCase(sl()));
+  sl.registerLazySingleton(() => GetNewsPageUseCase(sl()));
+  sl.registerLazySingleton(() => GetNewsDetailUseCase(sl()));
+  sl.registerLazySingleton(() => MarkNewsPopupShownUseCase(sl()));
+  sl.registerLazySingleton(() => MarkNewsReadUseCase(sl()));
+  sl.registerLazySingleton(() => MarkAllNewsReadUseCase(sl()));
+
+  // Singleton: the Discover badge, the panel and the push detail page all
+  // read and lower one unread count, and the "popup once per session" flag
+  // has to outlive any one screen. Provided above MaterialApp.
+  sl.registerLazySingleton(
+    () => NewsHomeCubit(
+      getNewsHomeUseCase: sl(),
+      markPopupShownUseCase: sl(),
+      markReadUseCase: sl(),
+      markAllReadUseCase: sl(),
+    ),
+  );
+  sl.registerFactory(
+    () => NewsListCubit(getNewsPageUseCase: sl(), homeCubit: sl()),
+  );
+  sl.registerFactory(
+    () => NewsDetailCubit(getNewsDetailUseCase: sl(), homeCubit: sl()),
   );
 
   // ============================================

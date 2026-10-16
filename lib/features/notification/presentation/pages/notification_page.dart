@@ -335,6 +335,13 @@ class _NotificationCard extends StatelessWidget {
         if (ref.isEmpty) return;
         _openExternal(context, ref);
         return;
+      case NotificationType.news:
+        // News pushes aren't written to this list, but route the same way
+        // the push does should one ever appear.
+        final newsId = int.tryParse(ref);
+        if (newsId == null) return;
+        context.push('${AppRoutes.newsDetail}?newsId=$newsId');
+        return;
       case NotificationType.none:
         return;
     }

@@ -3,6 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/domain/usecases/get_course_detail_usecase.dart';
+import 'package:nexora/features/courses/domain/usecases/get_free_content_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/save_continue_course_usecase.dart';
 
 part 'course_detail_state.dart';
@@ -11,6 +12,7 @@ part 'course_detail_cubit.freezed.dart';
 class CourseDetailCubit extends SafeCubit<CourseDetailState> {
   final GetCourseDetailUseCase getCourseDetailUseCase;
   final SaveContinueCourseUseCase saveContinueCourseUseCase;
+  final GetFreeContentUseCase getFreeContentUseCase;
 
   /// Tracked so [enroll] knows which course to mark without callers having
   /// to thread `courseId` through twice.
@@ -23,7 +25,21 @@ class CourseDetailCubit extends SafeCubit<CourseDetailState> {
   CourseDetailCubit({
     required this.getCourseDetailUseCase,
     required this.saveContinueCourseUseCase,
+    required this.getFreeContentUseCase,
   }) : super(const CourseDetailState.initial());
+
+  /// Discover → Free Content. Nothing to buy, so unlike [load] it doesn't
+  /// register a "continue / one step away" entry.
+  Future<void> loadFreeContent() async {
+    emit(const CourseDetailState.loading());
+    final result = await getFreeContentUseCase();
+    result.fold((failure) => emit(CourseDetailState.error(failure.message)), (
+      course,
+    ) {
+      _lastLoadedCourseId = course.courseId;
+      emit(CourseDetailState.loaded(course));
+    });
+  }
 
   Future<void> load(int courseId) async {
     _lastLoadedCourseId = courseId;

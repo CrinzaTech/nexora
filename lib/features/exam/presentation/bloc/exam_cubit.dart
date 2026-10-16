@@ -796,7 +796,7 @@ class ExamCubit extends SafeCubit<ExamState> {
   // The whole paper is fetched once and paged here. Each pick is checked
   // on the spot and the right answer shown, right or wrong. No attempt, no
   // timer, no submit, no result — leaving halfway simply ends the run, and
-  // starting again reshuffles.
+  // starting again fetches a fresh paper (re-dealt if the exam shuffles).
   //
   // Because the paper is held locally the student can move freely: back,
   // forward, or straight to any number from the review grid. Every
@@ -836,7 +836,7 @@ class ExamCubit extends SafeCubit<ExamState> {
     });
   }
 
-  /// Run it again — a fresh fetch, so the order is reshuffled.
+  /// Run it again — a fresh fetch, re-dealt if the exam shuffles.
   Future<void> restartPractice() async {
     final phone = await _phoneOrError();
     if (phone == null) return;

@@ -107,7 +107,11 @@ class ModuleCard extends StatelessWidget {
     // this folder. Hidden once the user has enrolled (coursePurchasedId
     // != 0) because every node is unlocked then and the count would be
     // meaningless.
-    final freeCount = module.isFolder && coursePurchasedId == 0
+    // Also hidden when every item in the folder is already open (Free
+    // Content, or a fully unlocked folder) — "free" only means something
+    // next to items that aren't.
+    final freeCount = module.isFolder && coursePurchasedId == 0 &&
+            module.freeContentCount < module.visibleContentCount
         ? module.freeContentCount
         : 0;
     return Container(

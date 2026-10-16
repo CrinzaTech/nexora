@@ -77,4 +77,7 @@ abstract class CourseRepository {
     int? courseStatusType,
     CatalogSortBy? sortBy,
   });
+
+  /// The org's Free Content — open to every learner without buying.
+  Future<Either<Failure, Course>> getFreeContent();
 }

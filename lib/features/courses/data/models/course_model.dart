@@ -428,6 +428,10 @@ class Course {
   /// re-derive it client-side.
   final String? expiryDetails;
 
+  /// Free Content from the admin's "Free Content" button: open to every
+  /// learner, never sold — no price, no Get access / Buy, nothing locked.
+  final bool isFreeContent;
+
   /// Tier list returned by v2 under `data.pricing.pricing[]`. Empty
   /// when the course has no buyable tier (typically a free course).
   /// Drives the buy-flow's "which priceId to charge?" decision and
@@ -447,9 +451,13 @@ class Course {
     this.isPurchased = false,
     this.isCourseFree = false,
     this.expiryDetails,
+    this.isFreeContent = false,
     this.pricing = const [],
     this.courseNodes,
   });
+
+  /// The learner can open the content: they bought it, or it's free content.
+  bool get hasAccess => isPurchased || isFreeContent;
 
   /// First tier returned by the backend — used as the default selection
   /// when the user hasn't picked one (today the UI assumes a single
@@ -488,6 +496,7 @@ class Course {
       isPurchased: json['isPurchased'] as bool? ?? false,
       isCourseFree: json['isCourseFree'] as bool? ?? false,
       expiryDetails: json['expiryDetails'] as String?,
+      isFreeContent: json['isFreeContent'] as bool? ?? false,
       pricing: (tierList as List<dynamic>)
           .whereType<Map<String, dynamic>>()
           .map(CoursePricingTier.fromJson)
@@ -737,6 +746,17 @@ class CourseContent {
       } else if (!child.isLocked) {
         count++;
       }
+    }
+    return count;
+  }
+
+  /// Visible leaf nodes inside this folder, counted recursively — the
+  /// denominator for [freeContentCount].
+  int get visibleContentCount {
+    var count = 0;
+    for (final child in children) {
+      if (!child.isVisible) continue;
+      count += child.isFolder ? child.visibleContentCount : 1;
     }
     return count;
   }

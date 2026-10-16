@@ -21,6 +21,7 @@ import 'package:nexora/features/profile/domain/support_channel.dart';
 import 'package:nexora/features/profile/domain/usecases/get_app_rating_url_usecase.dart';
 import 'package:nexora/features/profile/domain/usecases/get_org_info_usecase.dart';
 import 'package:nexora/features/profile/presentation/bloc/profile_cubit.dart';
+import 'package:nexora/features/news/presentation/bloc/news_home_cubit.dart';
 import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
 import 'package:nexora/core/wallpaper/wallpaper_cubit.dart';
 import 'package:flutter/material.dart';
@@ -389,6 +390,8 @@ class _ProfilePageState extends State<ProfilePage>
       // previous user's data on Home.
       context.read<ProfileCubit>().reset();
     }
+    // The next account gets its own badge and its own Home popup.
+    sl<NewsHomeCubit>().reset();
     final completions = sl<ContentCompletionService>();
     if (deleted) {
       // Nothing to drain into — the account is gone. See

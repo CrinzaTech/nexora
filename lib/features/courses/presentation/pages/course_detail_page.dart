@@ -15,6 +15,7 @@ import 'package:nexora/core/widgets/scrolling_title.dart';
 import 'package:nexora/core/widgets/star_rating.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/presentation/bloc/course_detail_cubit.dart';
+import 'package:nexora/features/courses/domain/usecases/get_free_content_usecase.dart';
 import 'package:nexora/features/courses/presentation/bloc/course_reviews_cubit.dart';
 import 'package:nexora/features/courses/presentation/course_share.dart';
 import 'package:nexora/core/router/app_routes.dart';
@@ -54,6 +55,11 @@ class CourseDetailPage extends StatelessWidget {
   final String? focusRoomId;
   final List<String> focusParentNodeIds;
 
+  /// Discover → Free Content: loads the org's Free Content instead of
+  /// [courseId] (pass 0). Its id is only known once it loads, so reviews
+  /// load after it.
+  final bool freeContent;
+
   const CourseDetailPage({
     super.key,
     required this.courseId,
@@ -62,23 +68,43 @@ class CourseDetailPage extends StatelessWidget {
     this.focusNodeId,
     this.focusRoomId,
     this.focusParentNodeIds = const [],
+    this.freeContent = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final view = _CourseDetailView(
+      courseId: courseId,
+      courseTitle: courseTitle,
+      initialTabIndex: initialTabIndex,
+      focusNodeId: focusNodeId,
+      focusRoomId: focusRoomId,
+      focusParentNodeIds: focusParentNodeIds,
+      freeContent: freeContent,
+    );
     return MultiBlocProvider(
       providers: [
-        BlocProvider(create: (_) => sl<CourseDetailCubit>()..load(courseId)),
-        BlocProvider(create: (_) => sl<CourseReviewsCubit>()..load(courseId)),
+        BlocProvider(
+          create: (_) => freeContent
+              ? (sl<CourseDetailCubit>()..loadFreeContent())
+              : (sl<CourseDetailCubit>()..load(courseId)),
+        ),
+        BlocProvider(
+          create: (_) => freeContent
+              ? sl<CourseReviewsCubit>()
+              : (sl<CourseReviewsCubit>()..load(courseId)),
+        ),
       ],
-      child: _CourseDetailView(
-        courseId: courseId,
-        courseTitle: courseTitle,
-        initialTabIndex: initialTabIndex,
-        focusNodeId: focusNodeId,
-        focusRoomId: focusRoomId,
-        focusParentNodeIds: focusParentNodeIds,
-      ),
+      child: !freeContent
+          ? view
+          : BlocListener<CourseDetailCubit, CourseDetailState>(
+              listener: (context, state) => state.maybeWhen(
+                loaded: (course) =>
+                    context.read<CourseReviewsCubit>().load(course.courseId),
+                orElse: () => null,
+              ),
+              child: view,
+            ),
     );
   }
 }
@@ -90,6 +116,7 @@ class _CourseDetailView extends StatefulWidget {
   final String? focusNodeId;
   final String? focusRoomId;
   final List<String> focusParentNodeIds;
+  final bool freeContent;
 
   const _CourseDetailView({
     required this.courseId,
@@ -98,6 +125,7 @@ class _CourseDetailView extends StatefulWidget {
     this.focusNodeId,
     this.focusRoomId,
     this.focusParentNodeIds = const [],
+    this.freeContent = false,
   });
 
   @override
@@ -153,13 +181,14 @@ class _CourseDetailViewState extends State<_CourseDetailView>
     final nodeId = widget.focusNodeId;
     if (nodeId == null || nodeId.isEmpty) return;
     _focusHandled = true;
-    if (!course.isPurchased) return;
+    if (!course.hasAccess) return;
     final nodes = course.courseNodes;
     final content = nodes?.content ?? const <CourseContent>[];
     if (content.isEmpty) return;
 
     final roomId = widget.focusRoomId;
-    final target = _findNode(content, (n) => n.nodeId == nodeId) ??
+    final target =
+        _findNode(content, (n) => n.nodeId == nodeId) ??
         (roomId == null || roomId.isEmpty
             ? null
             : _findNode(content, (n) => n.isLiveClass && n.url == roomId));
@@ -223,7 +252,11 @@ class _CourseDetailViewState extends State<_CourseDetailView>
         actions: [
           BlocBuilder<CourseDetailCubit, CourseDetailState>(
             builder: (context, state) => state.maybeWhen(
-              loaded: (course) => _ShareCourseButton(course: course),
+              // Free content has no shareable course link — the course
+              // endpoint can't see it (it's opened from Discover only).
+              loaded: (course) => course.isFreeContent
+                  ? const SizedBox.shrink()
+                  : _ShareCourseButton(course: course),
               orElse: () => const SizedBox.shrink(),
             ),
           ),
@@ -268,8 +301,12 @@ class _CourseDetailViewState extends State<_CourseDetailView>
               ),
               error: (message) => _ErrorView(
                 message: message,
-                onRetry: () =>
-                    context.read<CourseDetailCubit>().load(widget.courseId),
+                // Nothing published yet is not something that went wrong.
+                isEmptyState:
+                    widget.freeContent && message == kNoFreeContentMessage,
+                onRetry: () => widget.freeContent
+                    ? context.read<CourseDetailCubit>().loadFreeContent()
+                    : context.read<CourseDetailCubit>().load(widget.courseId),
               ),
               orElse: () => const _CourseDetailShimmer(),
             );
@@ -364,15 +401,17 @@ class _CourseDetailBody extends StatelessWidget {
     final rh = ResponsiveHelper.of(context);
     return NestedScrollView(
       headerSliverBuilder: (context, _) => [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: rh.isLargeScreen ? rh.horizontalPadding : Screen.getHorizontalSize(15),
-                vertical: Screen.getVerticalSize(10),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: rh.isLargeScreen
+                  ? rh.horizontalPadding
+                  : Screen.getHorizontalSize(15),
+              vertical: Screen.getVerticalSize(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 _CourseBanner(course: course),
                 SizedBox(height: Screen.getVerticalSize(14)),
                 ScrollingTitle(
@@ -380,7 +419,9 @@ class _CourseDetailBody extends StatelessWidget {
                   style: AppTypography.h5SemiBold.copyWith(
                     color: AppColors.textPrimary,
                     // Decrease the title size by 1.5x to balance the global scaling
-                    fontSize: rh.isLargeScreen ? (rh.cappedFontSize(20) / 1.5) : null,
+                    fontSize: rh.isLargeScreen
+                        ? (rh.cappedFontSize(20) / 1.5)
+                        : null,
                   ),
                 ),
                 SizedBox(height: Screen.getVerticalSize(4)),
@@ -399,7 +440,13 @@ class _CourseDetailBody extends StatelessWidget {
                 // iOS shows neither — "Purchased" is exactly what App
                 // Review flags (see PaymentPolicy); the else branch below
                 // renders nothing there either.
-                if (course.isPurchased && PaymentPolicy.allowsPurchases)
+                // Free content: no price, no expiry — just say it's free.
+                if (course.isFreeContent)
+                  const _PurchasedBadge(
+                    label: 'Free',
+                    icon: Icons.lock_open_rounded,
+                  )
+                else if (course.isPurchased && PaymentPolicy.allowsPurchases)
                   Wrap(
                     spacing: Screen.getHorizontalSize(12),
                     runSpacing: Screen.getVerticalSize(6),
@@ -429,7 +476,9 @@ class _CourseDetailBody extends StatelessWidget {
                 fontSize: rh.isLargeScreen ? rh.cappedFontSize(14) : null,
               ),
               unselectedLabelStyle: AppTypography.bodyTextMedium.copyWith(
-                fontSize: rh.isLargeScreen ? rh.cappedFontSize(13) : Screen.getFontSize(13),
+                fontSize: rh.isLargeScreen
+                    ? rh.cappedFontSize(13)
+                    : Screen.getFontSize(13),
               ),
               indicatorSize: TabBarIndicatorSize.tab,
               indicatorColor: AppColors.primary,
@@ -589,8 +638,8 @@ class _ExpiryDetailsLine extends StatelessWidget {
               raw,
               style: AppTypography.bodyTextMedium.copyWith(
                 color: AppColors.mutedTextPrimary,
-                fontSize: ResponsiveHelper.of(context).isLargeScreen 
-                    ? ResponsiveHelper.of(context).cappedFontSize(14) 
+                fontSize: ResponsiveHelper.of(context).isLargeScreen
+                    ? ResponsiveHelper.of(context).cappedFontSize(14)
                     : null,
               ),
             ),
@@ -602,7 +651,13 @@ class _ExpiryDetailsLine extends StatelessWidget {
 }
 
 class _PurchasedBadge extends StatelessWidget {
-  const _PurchasedBadge();
+  final String label;
+  final IconData icon;
+
+  const _PurchasedBadge({
+    this.label = 'Purchased',
+    this.icon = Icons.check_circle_rounded,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -623,13 +678,15 @@ class _PurchasedBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            Icons.check_circle_rounded,
-            size: rh.isLargeScreen ? Screen.getSize(15) * rh.fontScaleFactor : Screen.getSize(15),
+            icon,
+            size: rh.isLargeScreen
+                ? Screen.getSize(15) * rh.fontScaleFactor
+                : Screen.getSize(15),
             color: AppColors.successDark,
           ),
           SizedBox(width: Screen.getHorizontalSize(5)),
           Text(
-            'Purchased',
+            label,
             style: AppTypography.bodyTextSemiBold.copyWith(
               color: AppColors.successDark,
               fontSize: rh.isLargeScreen ? rh.cappedFontSize(14) : null,
@@ -665,7 +722,9 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
       // transparent fill would let tab content scroll visibly beneath it.
       color: Theme.of(context).scaffoldBackgroundColor,
       padding: EdgeInsets.symmetric(
-        horizontal: rh.isLargeScreen ? rh.horizontalPadding : Screen.getHorizontalSize(15),
+        horizontal: rh.isLargeScreen
+            ? rh.horizontalPadding
+            : Screen.getHorizontalSize(15),
       ),
       child: tabBar,
     );
@@ -686,8 +745,10 @@ class _AboutTab extends StatelessWidget {
     final description = course.description ?? '';
     return ListView(
       padding: EdgeInsets.symmetric(
-        horizontal: rh.isLargeScreen ? rh.horizontalPadding : Screen.getHorizontalSize(15),
-        vertical: Screen.getVerticalSize(20)
+        horizontal: rh.isLargeScreen
+            ? rh.horizontalPadding
+            : Screen.getHorizontalSize(15),
+        vertical: Screen.getVerticalSize(20),
       ),
       children: [
         Text(
@@ -723,7 +784,10 @@ class _AboutTab extends StatelessWidget {
 
   /// Maps the app's typography tokens onto flutter_markdown's stylesheet so
   /// rendered headings/lists/code feel native to the design system.
-  MarkdownStyleSheet _descriptionMarkdownStyle(BuildContext context, ResponsiveHelper rh) {
+  MarkdownStyleSheet _descriptionMarkdownStyle(
+    BuildContext context,
+    ResponsiveHelper rh,
+  ) {
     final body = AppTypography.bodyTextLargeMedium.copyWith(
       height: 1.5,
       fontWeight: FontWeight.w300,
@@ -829,8 +893,10 @@ class _CurriculumTabState extends State<_CurriculumTab> {
     }
     return ListView(
       padding: EdgeInsets.symmetric(
-        horizontal: rh.isLargeScreen ? rh.horizontalPadding : Screen.getHorizontalSize(15),
-        vertical: Screen.getVerticalSize(20)
+        horizontal: rh.isLargeScreen
+            ? rh.horizontalPadding
+            : Screen.getHorizontalSize(15),
+        vertical: Screen.getVerticalSize(20),
       ),
       children: [
         ...content.map((node) {
@@ -855,7 +921,14 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorView({required this.message, required this.onRetry});
+  /// A neutral icon instead of the red error one.
+  final bool isEmptyState;
+
+  const _ErrorView({
+    required this.message,
+    required this.onRetry,
+    this.isEmptyState = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -865,7 +938,13 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: AppColors.error),
+            isEmptyState
+                ? Icon(
+                    Icons.menu_book_rounded,
+                    size: 64,
+                    color: AppColors.mutedTextPrimary,
+                  )
+                : Icon(Icons.error_outline, size: 64, color: AppColors.error),
             SizedBox(height: Screen.getVerticalSize(12)),
             Text(
               message,
@@ -929,10 +1008,10 @@ class _ReviewsTab extends StatelessWidget {
             }
             return ListView.separated(
               padding: EdgeInsets.symmetric(
-                horizontal: ResponsiveHelper.of(context).isLargeScreen 
-                    ? ResponsiveHelper.of(context).horizontalPadding 
-                    : Screen.getHorizontalSize(15), 
-                vertical: Screen.getVerticalSize(20)
+                horizontal: ResponsiveHelper.of(context).isLargeScreen
+                    ? ResponsiveHelper.of(context).horizontalPadding
+                    : Screen.getHorizontalSize(15),
+                vertical: Screen.getVerticalSize(20),
               ),
               itemCount: reviews.length,
               separatorBuilder: (_, __) =>
@@ -960,6 +1039,8 @@ class _ReviewsTab extends StatelessWidget {
 /// - **Not purchased** (any tab) → `View Demo` + `Buy Now`.
 /// - **Purchased + Reviews tab**  → `Write a Review`.
 /// - **Purchased + other tab**    → bar is hidden entirely.
+/// Free content behaves as purchased: it is never sold, so it never shows
+/// Buy / Get Free Access — only `Write a Review` on the Reviews tab.
 class _CourseDetailBottomBar extends StatelessWidget {
   final Course course;
   final bool isOnReviewsTab;
@@ -971,16 +1052,17 @@ class _CourseDetailBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Purchased users only see the bar on the Reviews tab.
-    if (course.isPurchased && !isOnReviewsTab) return const SizedBox.shrink();
+    // Purchased users (and free content) only see the bar on the Reviews tab.
+    if (course.hasAccess && !isOnReviewsTab) return const SizedBox.shrink();
 
     // iOS can't sell (see PaymentPolicy): a paid, unpurchased course has
     // no action to offer here, so the bar goes. Free courses keep their
     // "Get Free Access" — nothing is being sold.
-    final isFree = course.isCourseFree ||
+    final isFree =
+        course.isCourseFree ||
         (course.pricing.isNotEmpty &&
             course.pricing.every((t) => t.calculatedFinalPrice <= 0));
-    if (!course.isPurchased && !isFree && !PaymentPolicy.allowsPurchases) {
+    if (!course.hasAccess && !isFree && !PaymentPolicy.allowsPurchases) {
       return const SizedBox.shrink();
     }
 
@@ -1001,10 +1083,12 @@ class _CourseDetailBottomBar extends StatelessWidget {
         top: false,
         child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: rh.isLargeScreen ? rh.horizontalPadding : Screen.getHorizontalSize(16), 
-            vertical: Screen.getVerticalSize(12)
+            horizontal: rh.isLargeScreen
+                ? rh.horizontalPadding
+                : Screen.getHorizontalSize(16),
+            vertical: Screen.getVerticalSize(12),
           ),
-          child: course.isPurchased
+          child: course.hasAccess
               ? _WriteReviewButton(courseId: course.courseId)
               : ViewDemoBuyNowRow(
                   courseId: course.courseId,
@@ -1201,8 +1285,10 @@ class _ReviewsShimmer extends StatelessWidget {
     final rh = ResponsiveHelper.of(context);
     return ListView.separated(
       padding: EdgeInsets.symmetric(
-        horizontal: rh.isLargeScreen ? rh.horizontalPadding : Screen.getHorizontalSize(15), 
-        vertical: Screen.getVerticalSize(20)
+        horizontal: rh.isLargeScreen
+            ? rh.horizontalPadding
+            : Screen.getHorizontalSize(15),
+        vertical: Screen.getVerticalSize(20),
       ),
       itemCount: 4,
       separatorBuilder: (_, __) => SizedBox(height: Screen.getVerticalSize(12)),
