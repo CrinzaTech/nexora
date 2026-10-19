@@ -203,6 +203,19 @@ class BrandingConfig {
   /// false → pastel / 55 % lightened tones.
   final bool tileDark;
 
+  /// Paint the tile labels in a brand gradient instead of flat
+  /// [AppColors.primary].
+  ///
+  /// The gradient runs [primary] → [secondary] left to right; dark mode
+  /// swaps in [primaryLight] → [secondaryLight], since the deep tones sink
+  /// into the dark canvas.
+  ///
+  /// Applies to every label drawn on the white card or on the page — the
+  /// side-by-side label, and the [tileText] label under an icon-only tile.
+  /// Text drawn *on* the [tileBgFill] gradient card is left alone: gradient
+  /// text over a gradient fill has nothing to read against.
+  final bool textGradient;
+
   // ── Tile Only-Icon Theme ─────────────────────────────────────────
   // The flags below are only meaningful when [tileBgFill] is false
   // (i.e. the white neumorphic card variant).
@@ -420,6 +433,7 @@ class BrandingConfig {
     this.tileBgFill = false,
     this.tileFullLength = false,
     this.tileDark = false,
+    this.textGradient = false,
     // Tile only-icon theme
     this.tileOnlyIcon = false,
     this.tile3x3 = false,
@@ -501,6 +515,7 @@ const crinestaBranding = BrandingConfig(
   tileBgFill: true,
   tileFullLength: false,
   tileDark: true,
+  textGradient: true,
   
   // ── Tile Only-Icon Theme ──────────────────────────────────
   // ───────

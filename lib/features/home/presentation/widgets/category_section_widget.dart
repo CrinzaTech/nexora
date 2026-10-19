@@ -16,8 +16,11 @@ import 'package:go_router/go_router.dart';
 /// Soft white halo behind tile labels drawn in [AppColors.primary] (white)
 /// on the dark canvas, so the text reads clearly. Kept wide and faint (no
 /// offset, low alpha) — a tight, strong glow thickens the letterforms and
-/// makes the labels look bolded. Null in light mode.
-List<Shadow>? _tileLabelGlow() => AppColors.isDark
+/// makes the labels look bolded. Null in light mode, and under
+/// Text_Gradient — the mask would paint the halo in the gradient too and
+/// smear it around the letters.
+List<Shadow>? _tileLabelGlow() =>
+    AppColors.isDark && !currentBranding.textGradient
     ? [
         Shadow(
           color: AppColors.alwaysWhite.withValues(alpha: 0.35),
@@ -25,6 +28,25 @@ List<Shadow>? _tileLabelGlow() => AppColors.isDark
         ),
       ]
     : null;
+
+/// Paints a tile label in the brand gradient when Text_Gradient is on, and
+/// returns it untouched otherwise.
+///
+/// The mask spans the label's own box, so the label must be sized to its
+/// text — inside an Expanded it would stretch the gradient across the empty
+/// space and leave short names wearing only the first colour.
+Widget _tileLabelPaint(Widget label) {
+  if (!currentBranding.textGradient) return label;
+  final colors = AppColors.isDark
+      ? [currentBranding.primaryLight, currentBranding.secondaryLight]
+      : [currentBranding.primary, currentBranding.secondary];
+  return ShaderMask(
+    blendMode: BlendMode.srcIn,
+    shaderCallback: (bounds) =>
+        LinearGradient(colors: colors).createShader(bounds),
+    child: label,
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tile palette helper — derives N premium gradients from the brand config.
@@ -1046,16 +1068,18 @@ class _DefaultCard extends StatelessWidget {
       // rounding can never push a Column past its cell.
       final Widget label = SizedBox(
         height: metrics.labelHeight,
-        child: Text(
-          tile.tileName,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          // The dark-mode glow is deliberately faint — see [_tileLabelGlow].
-          style: AppTypography.bodyTextLargeSemiBold.copyWith(
-            color: AppColors.primary,
-            fontSize: metrics.fontSize,
-            shadows: _tileLabelGlow(),
+        child: _tileLabelPaint(
+          Text(
+            tile.tileName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            // The dark-mode glow is deliberately faint — see [_tileLabelGlow].
+            style: AppTypography.bodyTextLargeSemiBold.copyWith(
+              color: AppColors.primary,
+              fontSize: metrics.fontSize,
+              shadows: _tileLabelGlow(),
+            ),
           ),
         ),
       );
@@ -1214,16 +1238,23 @@ class _DefaultCard extends StatelessWidget {
                   ),
                   SizedBox(width: Screen.getHorizontalSize(10)),
                   Expanded(
-                    child: Text(
-                      tile.tileName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.bodyTextLargeSemiBold.copyWith(
-                        color: AppColors.primary,
-                        fontSize: rh.isLargeScreen
-                            ? rh.cappedFontSize(isFull ? 18 : 16)
-                            : Screen.getFontSizeCapped(isFull ? 16 : 13),
-                        shadows: _tileLabelGlow(),
+                    // Align lets the label size to its text, so a
+                    // Text_Gradient mask spans the name rather than the row.
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _tileLabelPaint(
+                        Text(
+                          tile.tileName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.bodyTextLargeSemiBold.copyWith(
+                            color: AppColors.primary,
+                            fontSize: rh.isLargeScreen
+                                ? rh.cappedFontSize(isFull ? 18 : 16)
+                                : Screen.getFontSizeCapped(isFull ? 16 : 13),
+                            shadows: _tileLabelGlow(),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1693,18 +1724,20 @@ class _FilledCardState extends State<_FilledCard>
         SizedBox(height: metrics.gap),
         SizedBox(
           height: metrics.labelHeight,
-          child: Text(
-            widget.tile.tileName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            // The label sits on the page canvas now, not on the gradient, so
-            // the theme-aware token is the right call here — the reverse of
-            // the rule that applies to text drawn *on* the card.
-            style: AppTypography.bodyTextLargeSemiBold.copyWith(
-              color: AppColors.primary,
-              fontSize: metrics.fontSize,
-              shadows: _tileLabelGlow(),
+          child: _tileLabelPaint(
+            Text(
+              widget.tile.tileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              // The label sits on the page canvas now, not on the gradient,
+              // so the theme-aware token is the right call here — the reverse
+              // of the rule that applies to text drawn *on* the card.
+              style: AppTypography.bodyTextLargeSemiBold.copyWith(
+                color: AppColors.primary,
+                fontSize: metrics.fontSize,
+                shadows: _tileLabelGlow(),
+              ),
             ),
           ),
         ),

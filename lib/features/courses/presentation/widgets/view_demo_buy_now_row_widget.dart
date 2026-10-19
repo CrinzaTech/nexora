@@ -239,6 +239,17 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
     _razorpay.open(options);
   }
 
+  /// Pricing lookups failing. iOS gets the neutral line instead of the
+  /// server's wording, which talks about plans and pricing.
+  void _showPricingError(String message) {
+    final canSell = PaymentPolicy.allowsPurchases;
+    CustomSnackbar.error(
+      context,
+      title: canSell ? 'Pricing unavailable' : 'Not available',
+      message: canSell ? message : PaymentPolicy.unavailableMessage,
+    );
+  }
+
   /// Fetch the per-tier breakdown that the enrolment sheet renders.
   /// Pure forwarder — kept inline so the tiers-cubit listener and the
   /// plan-sheet `onProceed` callback share the same single call site.
@@ -343,11 +354,18 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
               loaded: (tiers) {
                 if (_planSheetOpen) return;
                 if (tiers.isEmpty) {
-                  CustomSnackbar.error(
-                    context,
-                    title: 'Pricing unavailable',
-                    message: 'This course has no buyable plan right now.',
+                  _showPricingError('This course has no buyable plan right now.');
+                  return;
+                }
+                // iOS only ever reaches here for a free course (see
+                // PaymentPolicy) — no plan picker, straight to the free
+                // tier.
+                if (!PaymentPolicy.allowsPurchases) {
+                  final free = tiers.firstWhere(
+                    (t) => t.calculatedFinalPrice <= 0,
+                    orElse: () => tiers.first,
                   );
+                  _loadPricing(free.coursePricingId);
                   return;
                 }
                 if (tiers.length == 1) {
@@ -356,11 +374,7 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
                   _openChoosePlanSheet(tiers);
                 }
               },
-              error: (message) => CustomSnackbar.error(
-                context,
-                title: 'Pricing unavailable',
-                message: message,
-              ),
+              error: _showPricingError,
               orElse: () {},
             );
           },
@@ -372,6 +386,22 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
             state.maybeWhen(
               loaded: (pricing) {
                 if (_enrolmentSheetOpen) return;
+                // iOS: no order summary, coupon or swipe-to-unlock —
+                // App Review reads all of it as checkout, even at ₹0.
+                // A free course is enrolled on the tap; anything that
+                // turns out chargeable is simply unavailable.
+                if (!PaymentPolicy.allowsPurchases) {
+                  context.read<CoursePricingCubit>().reset();
+                  if (pricing.totalPayable > 0) {
+                    _showPricingError(PaymentPolicy.unavailableMessage);
+                    return;
+                  }
+                  context.read<PaymentCubit>().createOrder(
+                    courseId: widget.courseId,
+                    priceId: pricing.coursePriceId,
+                  );
+                  return;
+                }
                 _enrolmentSheetOpen = true;
                 final paymentCubit = context.read<PaymentCubit>();
                 final pricingCubit = context.read<CoursePricingCubit>();
@@ -410,11 +440,7 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
                   pricingCubit.reset();
                 });
               },
-              error: (message) => CustomSnackbar.error(
-                context,
-                title: 'Pricing unavailable',
-                message: message,
-              ),
+              error: _showPricingError,
               orElse: () {},
             );
           },
@@ -433,14 +459,24 @@ class ViewDemoBuyNowRowInnerState extends State<ViewDemoBuyNowRowInner> {
                   // access, so this branch gets the full celebration.
                   // It sits on the root overlay, which is what lets it
                   // survive the course refetch `onPurchased` kicks off.
-                  CelebrationOverlay.show(
-                    context,
-                    emoji: '🎉',
-                    title: 'Congratulations!',
-                    message: 'Course Unlocked',
-                    quote: 'Your free access is ready. Jump in and '
-                        'start learning.',
-                  );
+                  if (PaymentPolicy.allowsPurchases) {
+                    CelebrationOverlay.show(
+                      context,
+                      emoji: '🎉',
+                      title: 'Congratulations!',
+                      message: 'Course Unlocked',
+                      quote: 'Your free access is ready. Jump in and '
+                          'start learning.',
+                    );
+                  } else {
+                    // iOS: access is the point, not a "you unlocked it"
+                    // moment that reads like a purchase.
+                    CustomSnackbar.success(
+                      context,
+                      title: 'Ready',
+                      message: 'This course is now in your courses.',
+                    );
+                  }
                   widget.onPurchased?.call();
                   return;
                 }

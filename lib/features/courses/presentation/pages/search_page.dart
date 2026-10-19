@@ -5,6 +5,7 @@ import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/features/courses/presentation/bloc/search_courses_cubit.dart';
 import 'package:nexora/features/courses/presentation/widgets/search_results_panel.dart';
 import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
+import 'package:nexora/core/widgets/scrolled_under_mixin.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -24,7 +25,8 @@ class SearchPage extends StatefulWidget {
   State<SearchPage> createState() => _SearchPageState();
 }
 
-class _SearchPageState extends State<SearchPage> {
+class _SearchPageState extends State<SearchPage>
+    with SingleTickerProviderStateMixin, ScrolledUnderMixin {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
   late final SearchCoursesCubit _cubit;
@@ -88,9 +90,13 @@ class _SearchPageState extends State<SearchPage> {
               ? Colors.transparent
               : AppColors.grey50,
           appBar: AppBar(
-            backgroundColor: AppColors.white,
-            surfaceTintColor: AppColors.white,
+            // See-through over the background photo until the results
+            // scroll, then solid white.
+            backgroundColor: topBarColor,
+            surfaceTintColor: Colors.transparent,
             elevation: 0,
+            scrolledUnderElevation: 0,
+            systemOverlayStyle: topBarOverlayStyle,
             titleSpacing: 0,
             // Slightly taller toolbar so the pill field has vertical
             // breathing room above and below — the default toolbarHeight
@@ -122,15 +128,26 @@ class _SearchPageState extends State<SearchPage> {
           body: Column(
             children: [
               Expanded(
-                child: BlocBuilder<SearchCoursesCubit, SearchCoursesState>(
-                  builder: (context, state) {
-                    return state.maybeWhen(
-                      idle: () => _IdleHint(),
-                      orElse: () => SearchResultsPanel(
-                        scrollController: _scrollController,
-                      ),
-                    );
-                  },
+                // Anything but a result list (idle, loading a new query,
+                // error) has nothing under the bar — back to see-through.
+                child: BlocListener<SearchCoursesCubit, SearchCoursesState>(
+                  listener: (_, state) => state.maybeWhen(
+                    loaded: (_, __, ___, ____, _____) => null,
+                    orElse: () => setScrolledUnder(false),
+                  ),
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: handleScrolledUnder,
+                    child: BlocBuilder<SearchCoursesCubit, SearchCoursesState>(
+                      builder: (context, state) {
+                        return state.maybeWhen(
+                          idle: () => _IdleHint(),
+                          orElse: () => SearchResultsPanel(
+                            scrollController: _scrollController,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ),
               ),
             ],

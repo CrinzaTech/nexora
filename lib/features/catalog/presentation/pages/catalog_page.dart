@@ -11,6 +11,7 @@ import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/utils/utils.dart';
 import 'package:nexora/core/widgets/inner_shadow_painter.dart';
 import 'package:nexora/core/widgets/rating_and_review_row_widget.dart';
+import 'package:nexora/core/widgets/scrolled_under_mixin.dart';
 import 'package:nexora/core/widgets/scrolling_title.dart';
 import 'package:nexora/features/courses/data/models/course_filter_models.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
@@ -95,7 +96,8 @@ class CatalogView extends StatefulWidget {
   State<CatalogView> createState() => _CatalogViewState();
 }
 
-class _CatalogViewState extends State<CatalogView> {
+class _CatalogViewState extends State<CatalogView>
+    with SingleTickerProviderStateMixin, ScrolledUnderMixin {
   int? _selectedCategoryId;
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
@@ -231,10 +233,14 @@ class _CatalogViewState extends State<CatalogView> {
                 controller: _scrollController,
                 headerSliverBuilder: (context, innerBoxIsScrolled) {
                   return [
+                    // See-through over the background photo until the list
+                    // scrolls up under it, then solid white.
                     SliverAppBar(
-                      backgroundColor: AppColors.white,
-                      surfaceTintColor: AppColors.white,
+                      backgroundColor: topBarColor,
+                      surfaceTintColor: Colors.transparent,
                       elevation: 0,
+                      scrolledUnderElevation: 0,
+                      systemOverlayStyle: topBarOverlayStyle,
                       pinned: true,
                       floating: true,
                       centerTitle: true,
@@ -261,7 +267,7 @@ class _CatalogViewState extends State<CatalogView> {
                           Screen.getVerticalSize(56),
                         ),
                         child: Container(
-                          color: AppColors.white,
+                          color: topBarColor,
                           padding: Screen.getPadding(
                             horizontal: 20,
                             top: 2,
@@ -350,6 +356,7 @@ class _CatalogViewState extends State<CatalogView> {
                 },
                 body: NotificationListener<ScrollNotification>(
                   onNotification: (ScrollNotification notification) {
+                    handleScrolledUnder(notification);
                     if (notification.metrics.pixels >=
                         notification.metrics.maxScrollExtent - 200) {
                       context.read<CourseListCubit>().loadNextPage();
@@ -416,13 +423,14 @@ class _CatalogViewState extends State<CatalogView> {
                 ),
               ),
             ),
-            // The status-bar area is white too, not the photo.
+            // The status-bar area follows the bar: photo at rest, white
+            // once the list has scrolled.
             Positioned(
               top: 0,
               left: 0,
               right: 0,
               height: MediaQuery.of(context).padding.top,
-              child: ColoredBox(color: AppColors.white),
+              child: ColoredBox(color: topBarColor),
             ),
           ],
         ),

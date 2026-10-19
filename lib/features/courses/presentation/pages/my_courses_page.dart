@@ -9,6 +9,7 @@ import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_action_button.dart';
 import 'package:nexora/core/widgets/custom_appbar_widget.dart';
 import 'package:nexora/core/widgets/custom_text_form_field.dart';
+import 'package:nexora/core/widgets/scrolled_under_mixin.dart';
 import 'package:nexora/features/certificate/presentation/certificate_download_action.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/presentation/bloc/my_courses_cubit.dart';
@@ -43,8 +44,15 @@ class MyCoursesPage extends StatefulWidget {
 }
 
 class _MyCoursesPageState extends State<MyCoursesPage>
-    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
+    with
+        AutomaticKeepAliveClientMixin,
+        TickerProviderStateMixin,
+        ScrolledUnderMixin {
   late final TabController _tabController;
+
+  /// Whether each tab's list is scrolled off its top. Kept per tab so
+  /// switching tabs shows the bar for the list now on screen.
+  final List<bool> _tabScrolled = [false, false];
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -59,12 +67,14 @@ class _MyCoursesPageState extends State<MyCoursesPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(vsync: this, length: 2);
+    _tabController = TabController(vsync: this, length: 2)
+      ..addListener(_onTabChanged);
     _searchController.addListener(_onQueryChanged);
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _searchController.removeListener(_onQueryChanged);
     _searchController.dispose();
@@ -78,6 +88,24 @@ class _MyCoursesPageState extends State<MyCoursesPage>
       setState(() => _query = next);
     }
   }
+
+  void _onTabChanged() => setScrolledUnder(_tabScrolled[_tabController.index]);
+
+  bool _onTabScroll(int tab, ScrollNotification notification) {
+    final past = scrolledPastTop(notification);
+    if (past != null) {
+      _tabScrolled[tab] = past;
+      if (tab == _tabController.index) setScrolledUnder(past);
+    }
+    return false;
+  }
+
+  /// One tab's list, reporting its scroll position for the top bar.
+  Widget _tabBody(int tab, Widget child) =>
+      NotificationListener<ScrollNotification>(
+        onNotification: (n) => _onTabScroll(tab, n),
+        child: child,
+      );
 
   void _toggleSearch() {
     setState(() {
@@ -110,9 +138,9 @@ class _MyCoursesPageState extends State<MyCoursesPage>
     // ignore: unused_local_variable
     final rh = ResponsiveHelper.of(context);
     final withWallpaper = hasWallpaper(context);
-    // The title row and tabs stay solid white, with or without a
-    // background; only the list below shows the photo.
-    final stripColor = AppColors.white;
+    // The status band, title row and tabs are see-through over the
+    // background photo until a list scrolls up under them, then solid.
+    final stripColor = topBarColor;
     return BlocProvider(
       create: (_) => sl<MyCoursesCubit>()..load(),
       // The photo is a background decoration, fixed behind the lists so it
@@ -134,7 +162,7 @@ class _MyCoursesPageState extends State<MyCoursesPage>
                 Container(
                   height: MediaQuery.paddingOf(context).top,
                   width: double.infinity,
-                  color: AppColors.white,
+                  color: stripColor,
                 ),
                 Expanded(
                   // The band above already covers the status bar. Drop the
@@ -166,6 +194,8 @@ class _MyCoursesPageState extends State<MyCoursesPage>
                               backgroundColor: stripColor,
                               surfaceTintColor: Colors.transparent,
                               elevation: 0,
+                              scrolledUnderElevation: 0,
+                              systemOverlayStyle: topBarOverlayStyle,
                               pinned: false,
                               floating: true,
                               snap: true,
@@ -323,8 +353,8 @@ class _MyCoursesPageState extends State<MyCoursesPage>
                         body: TabBarView(
                           controller: _tabController,
                           children: [
-                            _InProgressTab(query: _query),
-                            _CompletedTab(query: _query),
+                            _tabBody(0, _InProgressTab(query: _query)),
+                            _tabBody(1, _CompletedTab(query: _query)),
                           ],
                         ),
                       ),
@@ -369,7 +399,8 @@ class _MyCoursesTabHeader extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    // Opaque so list cards scrolling underneath stay hidden.
+    // Solid (via [color]) once the list has scrolled, so cards passing
+    // underneath stay hidden.
     return Container(color: color, height: extent, child: child);
   }
 

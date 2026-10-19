@@ -15,6 +15,7 @@ import 'package:nexora/features/chats/presentation/widgets/empty_state.dart';
 import 'package:nexora/features/chats/presentation/widgets/error_state.dart';
 import 'package:nexora/features/chats/presentation/widgets/no_search_results.dart';
 import 'package:nexora/core/wallpaper/wallpaper_backdrop.dart';
+import 'package:nexora/core/widgets/scrolled_under_mixin.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -31,7 +32,10 @@ class ChatsPage extends StatefulWidget {
 }
 
 class _ChatsPageState extends State<ChatsPage>
-    with AutomaticKeepAliveClientMixin {
+    with
+        AutomaticKeepAliveClientMixin,
+        SingleTickerProviderStateMixin,
+        ScrolledUnderMixin {
   /// Whether the local search field is currently displayed in place of
   /// the AppBar title. Toggled by the search icon action.
   bool _isSearching = false;
@@ -116,10 +120,12 @@ class _ChatsPageState extends State<ChatsPage>
           body: Builder(
             builder: (context) => Column(
               children: [
+                // Status-bar band and title bar are see-through over the
+                // background photo until the list scrolls, then solid.
                 Container(
                   height: MediaQuery.paddingOf(context).top,
                   width: double.infinity,
-                  color: AppColors.scaffoldLight,
+                  color: topBarColor,
                 ),
                 Expanded(
                   child: MediaQuery.removePadding(
@@ -132,9 +138,11 @@ class _ChatsPageState extends State<ChatsPage>
                         headerSliverBuilder: (context, innerBoxIsScrolled) {
                           return [
                             SliverAppBar(
-                              backgroundColor: AppColors.scaffoldLight,
+                              backgroundColor: topBarColor,
                               surfaceTintColor: Colors.transparent,
                               elevation: 0,
+                              scrolledUnderElevation: 0,
+                              systemOverlayStyle: topBarOverlayStyle,
                               pinned: true,
                               floating: true,
                               centerTitle: false,
@@ -170,7 +178,7 @@ class _ChatsPageState extends State<ChatsPage>
                                   _isSearching ? Screen.getVerticalSize(66) : 0,
                                 ),
                                 child: Container(
-                                  color: AppColors.scaffoldLight,
+                                  color: topBarColor,
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -199,60 +207,63 @@ class _ChatsPageState extends State<ChatsPage>
                             ),
                           ];
                         },
-                        body: BlocBuilder<ChatGroupsCubit, ChatGroupsState>(
-                          builder: (context, state) {
-                            return state.maybeWhen(
-                              loading: () => const ChatsListShimmer(),
-                              loaded: (groups) {
-                                final filtered = _filter(groups);
-                                if (groups.isEmpty) return const EmptyState();
-                                if (filtered.isEmpty) {
-                                  return NoSearchResults(query: _query);
-                                }
-                                final rh = ResponsiveHelper.of(context);
-                                return RefreshIndicator(
-                                  color: AppColors.primary,
-                                  onRefresh: context
-                                      .read<ChatGroupsCubit>()
-                                      .refresh,
-                                  child: Center(
-                                    child: ListView.separated(
-                                      physics:
-                                          const AlwaysScrollableScrollPhysics(
-                                            parent: BouncingScrollPhysics(),
-                                          ),
-                                      padding: Screen.getPadding(vertical: 8),
-                                      itemCount: filtered.length + 1,
-                                      // Cards, not rows: a gap between them replaces
-                                      // the old hairline dividers.
-                                      separatorBuilder: (_, index) =>
-                                          index == filtered.length - 1
-                                          ? const SizedBox.shrink()
-                                          : SizedBox(
-                                              height: Screen.getVerticalSize(
-                                                10,
-                                              ),
+                        body: NotificationListener<ScrollNotification>(
+                          onNotification: handleScrolledUnder,
+                          child: BlocBuilder<ChatGroupsCubit, ChatGroupsState>(
+                            builder: (context, state) {
+                              return state.maybeWhen(
+                                loading: () => const ChatsListShimmer(),
+                                loaded: (groups) {
+                                  final filtered = _filter(groups);
+                                  if (groups.isEmpty) return const EmptyState();
+                                  if (filtered.isEmpty) {
+                                    return NoSearchResults(query: _query);
+                                  }
+                                  final rh = ResponsiveHelper.of(context);
+                                  return RefreshIndicator(
+                                    color: AppColors.primary,
+                                    onRefresh: context
+                                        .read<ChatGroupsCubit>()
+                                        .refresh,
+                                    child: Center(
+                                      child: ListView.separated(
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(
+                                              parent: BouncingScrollPhysics(),
                                             ),
-                                      itemBuilder: (_, index) {
-                                        if (index == filtered.length) {
-                                          return Utils.defaultBottomSpace();
-                                        }
-                                        return ChatGroupTile(
-                                          group: filtered[index],
-                                        );
-                                      },
+                                        padding: Screen.getPadding(vertical: 8),
+                                        itemCount: filtered.length + 1,
+                                        // Cards, not rows: a gap between them replaces
+                                        // the old hairline dividers.
+                                        separatorBuilder: (_, index) =>
+                                            index == filtered.length - 1
+                                            ? const SizedBox.shrink()
+                                            : SizedBox(
+                                                height: Screen.getVerticalSize(
+                                                  10,
+                                                ),
+                                              ),
+                                        itemBuilder: (_, index) {
+                                          if (index == filtered.length) {
+                                            return Utils.defaultBottomSpace();
+                                          }
+                                          return ChatGroupTile(
+                                            group: filtered[index],
+                                          );
+                                        },
+                                      ),
                                     ),
-                                  ),
-                                );
-                              },
-                              error: (message) => ErrorState(
-                                message: message,
-                                onRetry: () =>
-                                    context.read<ChatGroupsCubit>().load(),
-                              ),
-                              orElse: () => const ChatsListShimmer(),
-                            );
-                          },
+                                  );
+                                },
+                                error: (message) => ErrorState(
+                                  message: message,
+                                  onRetry: () =>
+                                      context.read<ChatGroupsCubit>().load(),
+                                ),
+                                orElse: () => const ChatsListShimmer(),
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ),
