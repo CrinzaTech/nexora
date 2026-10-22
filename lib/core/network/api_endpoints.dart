@@ -301,6 +301,47 @@ class ApiEndpoints {
       '/api/v1/webinars/{slug}/verify-payment';
 
   // ============================================================
+  // COURSE BUNDLES — several courses sold at one price
+  // ============================================================
+  // Buying a bundle unlocks each course in it exactly as if it had been
+  // bought on its own. Every price is computed on the server; no
+  // endpoint here accepts an amount. See BUNDLE_API.md.
+
+  /// B1 — bundles on sale in the learner's organization.
+  /// GET /api/v1/bundles?pageNo=&pageSize=  (pageSize clamped to 50)
+  static const String bundles = '/api/v1/bundles';
+
+  /// B2 — courses, per-course outcome and the full price breakdown.
+  /// 404 for an unavailable bundle unless the learner already bought it.
+  /// GET /api/v1/bundles/{bundleId}
+  static const String bundleDetail = '/api/v1/bundles/{bundleId}';
+
+  /// B3 — bundles that contain a course, cheapest first.
+  /// GET /api/v1/bundles/by-course/{courseId}
+  static const String bundlesByCourse = '/api/v1/bundles/by-course/{courseId}';
+
+  /// P1 — create, or hand back, the Razorpay order. **No body.**
+  /// POST /api/v1/bundles/{bundleId}/order
+  static const String bundleOrder = '/api/v1/bundles/{bundleId}/order';
+
+  /// P2 — **the courses are unlocked here**, never by the Razorpay
+  /// callback on its own.
+  /// POST /api/v1/bundles/{bundleId}/verify-payment
+  static const String bundleVerifyPayment =
+      '/api/v1/bundles/{bundleId}/verify-payment';
+
+  /// X1 — Store products an educator linked to a course. Empty when none
+  /// are linked or the org has no Store.
+  /// GET /api/v1/course/{courseId}/related-products
+  static const String courseRelatedProducts =
+      '/api/v1/course/{courseId}/related-products';
+
+  /// X2 — published courses linked to a Store product.
+  /// GET /api/v1/store/products/{productId}/related-courses
+  static const String storeProductRelatedCourses =
+      '/api/v1/store/products/{productId}/related-courses';
+
+  // ============================================================
   // NOTIFICATIONS
   // ============================================================
   static const String notifications = '/api/v1/notifications';

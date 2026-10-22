@@ -214,6 +214,15 @@ class AppRoutes {
   /// Order detail — requires `orderNo`.
   static const String storeOrder = '/store/orders/detail';
 
+  // ============================================
+  // COURSE BUNDLES (BUNDLE_API.md)
+  // ============================================
+  /// Every bundle on sale — the list behind Home's "View All".
+  static const String bundles = '/bundles';
+
+  /// Bundle page and checkout — requires an `id` query param.
+  static const String bundleDetail = '/bundles/detail';
+
   /// All webinars — the full list behind Home's "View All".
   static const String webinars = '/webinars';
 

@@ -27,6 +27,8 @@ import 'package:nexora/features/home/presentation/widgets/featured_courses_widge
 import 'package:nexora/features/home/presentation/widgets/home_loading_skeleton.dart';
 import 'package:nexora/features/home/presentation/widgets/reviews_section_widget.dart';
 import 'package:nexora/features/home/presentation/widgets/social_media_section_widget.dart';
+import 'package:nexora/features/bundles/presentation/bloc/bundles_cubit.dart';
+import 'package:nexora/features/bundles/presentation/widgets/bundle_rails.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinars_cubit.dart';
 import 'package:nexora/features/profile/data/models/user_profile_model.dart';
 import 'package:nexora/features/profile/presentation/bloc/profile_cubit.dart';
@@ -293,6 +295,7 @@ class _HomePageState extends State<HomePage>
                       context.read<ContinueCoursesCubit>().silentRefresh(),
                       context.read<HomeLiveCubit>().silentRefresh(),
                       context.read<WebinarsCubit>().silentRefresh(),
+                      context.read<BundlesCubit>().silentRefresh(),
                     ]),
                     child: SingleChildScrollView(
                       controller: _scrollController,
@@ -560,6 +563,9 @@ class _HomePageState extends State<HomePage>
                                       CategorySection(
                                         tiles: dashboard.educatorTiles,
                                       ),
+                                      // Collapses to nothing (gap included)
+                                      // when there are no bundles, and on iOS.
+                                      const HomeBundlesSection(),
                                       SizedBox(
                                         height: Screen.getVerticalSize(25),
                                       ),

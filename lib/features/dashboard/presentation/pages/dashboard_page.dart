@@ -10,6 +10,7 @@ import 'package:nexora/core/config/payment_policy.dart';
 import 'package:nexora/core/services/app_link_service.dart';
 import 'package:nexora/features/courses/presentation/bloc/continue_courses_cubit.dart';
 import 'package:nexora/features/home_live/presentation/bloc/home_live_cubit.dart';
+import 'package:nexora/features/bundles/presentation/bloc/bundles_cubit.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinars_cubit.dart';
 import 'package:nexora/features/home/presentation/bloc/home_cubit.dart';
 import 'package:nexora/features/home/presentation/pages/home_page.dart';
@@ -48,6 +49,8 @@ class _DashboardPageState extends State<DashboardPage>
   // to pick up a webinar that went live while the learner was on another
   // tab, and HomePage's keep-alive means its initState never re-runs.
   late final WebinarsCubit _webinarsCubit;
+  // The Home "Course Bundles" rail — same reasoning as the webinars.
+  late final BundlesCubit _bundlesCubit;
   // App-wide singleton (the Discover badge reads it too); refreshed here on
   // start, on every return to Home and on app resume, and the source of
   // the Home popup.
@@ -121,6 +124,7 @@ class _DashboardPageState extends State<DashboardPage>
     _continueCubit = sl<ContinueCoursesCubit>()..load();
     _homeLiveCubit = sl<HomeLiveCubit>()..load();
     _webinarsCubit = sl<WebinarsCubit>()..load();
+    _bundlesCubit = sl<BundlesCubit>()..load();
     // Badge count, and the answer to "is the Store on for this org?" —
     // a 403 hides the Discover row's Store icon.
     sl<StoreCartCubit>().refreshCount();
@@ -137,6 +141,7 @@ class _DashboardPageState extends State<DashboardPage>
           BlocProvider.value(value: _continueCubit),
           BlocProvider.value(value: _homeLiveCubit),
           BlocProvider.value(value: _webinarsCubit),
+          BlocProvider.value(value: _bundlesCubit),
         ],
         child: const HomePage(key: ValueKey('home')),
       ),
@@ -219,6 +224,7 @@ class _DashboardPageState extends State<DashboardPage>
     _continueCubit.close();
     _homeLiveCubit.close();
     _webinarsCubit.close();
+    _bundlesCubit.close();
     super.dispose();
   }
 
@@ -277,6 +283,7 @@ class _DashboardPageState extends State<DashboardPage>
         _continueCubit.silentRefresh();
         _homeLiveCubit.silentRefresh();
         _webinarsCubit.silentRefresh();
+        _bundlesCubit.silentRefresh();
         _refreshNews();
       }
     }

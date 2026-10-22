@@ -5,6 +5,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 import 'package:nexora/core/config/di/dependency_injection.dart';
 import 'package:nexora/core/services/content_completion_service.dart';
+import 'package:nexora/core/services/course_access_events.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/domain/usecases/get_my_courses_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/rewatch_course_usecase.dart';
@@ -22,7 +23,13 @@ class MyCoursesCubit extends SafeCubit<MyCoursesState> {
   MyCoursesCubit({
     required this.getMyCoursesUseCase,
     required this.rewatchCourseUseCase,
-  }) : super(const MyCoursesState.initial());
+  }) : super(const MyCoursesState.initial()) {
+    // The tab is kept alive, so a bundle bought elsewhere would otherwise
+    // only appear after a pull-to-refresh.
+    _unlockSub = CourseAccessEvents.unlocked.listen((_) => silentRefresh());
+  }
+
+  StreamSubscription<void>? _unlockSub;
 
   Future<void> load() async {
     emit(const MyCoursesState.loading());
@@ -85,4 +92,10 @@ class MyCoursesCubit extends SafeCubit<MyCoursesState> {
   }
 
   void reset() => emit(const MyCoursesState.initial());
+
+  @override
+  Future<void> close() {
+    _unlockSub?.cancel();
+    return super.close();
+  }
 }

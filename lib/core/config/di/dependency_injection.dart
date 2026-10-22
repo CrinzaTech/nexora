@@ -167,6 +167,12 @@ import 'package:nexora/features/webinar/presentation/bloc/webinar_detail_cubit.d
 import 'package:nexora/features/webinar/presentation/bloc/webinar_room_cubit.dart';
 import 'package:nexora/features/webinar/presentation/bloc/webinars_cubit.dart';
 import 'package:nexora/features/transaction/presentation/bloc/transaction_history_cubit.dart';
+import 'package:nexora/features/bundles/data/repositories/bundle_repository_impl.dart';
+import 'package:nexora/features/bundles/domain/repositories/bundle_repository.dart';
+import 'package:nexora/features/bundles/domain/usecases/bundle_usecases.dart';
+import 'package:nexora/features/bundles/presentation/bloc/bundle_checkout_cubit.dart';
+import 'package:nexora/features/bundles/presentation/bloc/bundle_detail_cubit.dart';
+import 'package:nexora/features/bundles/presentation/bloc/bundles_cubit.dart';
 
 /// Global service locator instance
 final sl = GetIt.instance;
@@ -651,6 +657,33 @@ Future<void> setupLocator() async {
   // longer holding the slug from the purchase that issued it.
   sl.registerLazySingleton(() => GetMyWebinarsUseCase(sl()));
   sl.registerFactory(() => MyWebinarsCubit(getMyWebinarsUseCase: sl()));
+
+  // ============================================
+  // FEATURES - COURSE BUNDLES
+  // ============================================
+  // Several courses sold at one price, plus the related products /
+  // related courses rails (BUNDLE_API.md). Raw Dio, like the Store.
+  sl.registerLazySingleton<BundleRepository>(
+    () => BundleRepositoryImpl(sl<Dio>()),
+  );
+  sl.registerLazySingleton(() => GetBundlesUseCase(sl()));
+  sl.registerLazySingleton(() => GetBundleDetailUseCase(sl()));
+  sl.registerLazySingleton(() => GetBundlesForCourseUseCase(sl()));
+  sl.registerLazySingleton(() => CreateBundleOrderUseCase(sl()));
+  sl.registerLazySingleton(() => VerifyBundlePaymentUseCase(sl()));
+  sl.registerLazySingleton(() => GetCourseRelatedProductsUseCase(sl()));
+  sl.registerLazySingleton(() => GetProductRelatedCoursesUseCase(sl()));
+  // Factories: the Dashboard owns one BundlesCubit for the Home rail and
+  // the list page makes its own.
+  sl.registerFactory(() => BundlesCubit(getBundlesUseCase: sl()));
+  sl.registerFactory(() => BundleDetailCubit(getBundleDetailUseCase: sl()));
+  sl.registerFactory(
+    () => BundleCheckoutCubit(
+      createBundleOrderUseCase: sl(),
+      verifyBundlePaymentUseCase: sl(),
+      getBundleDetailUseCase: sl(),
+    ),
+  );
 
   // ============================================
   // FEATURES - STORE

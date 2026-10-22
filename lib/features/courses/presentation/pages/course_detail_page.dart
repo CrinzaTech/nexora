@@ -13,6 +13,8 @@ import 'package:nexora/core/widgets/custom_outlined_action_button.dart';
 import 'package:nexora/core/widgets/rating_and_review_row_widget.dart';
 import 'package:nexora/core/widgets/scrolling_title.dart';
 import 'package:nexora/core/widgets/star_rating.dart';
+import 'package:nexora/features/bundles/presentation/widgets/bundle_rails.dart';
+import 'package:nexora/features/bundles/presentation/widgets/related_rails.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
 import 'package:nexora/features/courses/presentation/bloc/course_detail_cubit.dart';
 import 'package:nexora/features/courses/domain/usecases/get_free_content_usecase.dart';
@@ -743,40 +745,60 @@ class _AboutTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final rh = ResponsiveHelper.of(context);
     final description = course.description ?? '';
+    final horizontal = rh.isLargeScreen
+        ? rh.horizontalPadding
+        : Screen.getHorizontalSize(15);
+    // Horizontal padding sits on the text, not the ListView, so the rails
+    // below can scroll edge to edge.
     return ListView(
-      padding: EdgeInsets.symmetric(
-        horizontal: rh.isLargeScreen
-            ? rh.horizontalPadding
-            : Screen.getHorizontalSize(15),
-        vertical: Screen.getVerticalSize(20),
-      ),
+      padding: EdgeInsets.symmetric(vertical: Screen.getVerticalSize(20)),
       children: [
-        Text(
-          "About this course",
-          style: AppTypography.h6SemiBold.copyWith(
-            color: AppColors.textPrimary,
-            fontSize: rh.isLargeScreen ? rh.cappedFontSize(18) : null,
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: horizontal),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "About this course",
+                style: AppTypography.h6SemiBold.copyWith(
+                  color: AppColors.textPrimary,
+                  fontSize: rh.isLargeScreen ? rh.cappedFontSize(18) : null,
+                ),
+              ),
+              SizedBox(height: Screen.getVerticalSize(10)),
+              if (description.isEmpty)
+                Text(
+                  "No description available.",
+                  style: AppTypography.bodyTextLargeMedium.copyWith(
+                    color: AppColors.mutedTextPrimary,
+                    fontSize: rh.isLargeScreen ? rh.cappedFontSize(16) : null,
+                  ),
+                )
+              else
+                MarkdownBody(
+                  data: description,
+                  // shrinkWrap so the description sizes itself inside the
+                  // parent ListView; selectable so users can copy snippets
+                  // out of the course outline.
+                  shrinkWrap: true,
+                  selectable: true,
+                  styleSheet: _descriptionMarkdownStyle(context, rh),
+                ),
+            ],
           ),
         ),
-        SizedBox(height: Screen.getVerticalSize(10)),
-        if (description.isEmpty)
-          Text(
-            "No description available.",
-            style: AppTypography.bodyTextLargeMedium.copyWith(
-              color: AppColors.mutedTextPrimary,
-              fontSize: rh.isLargeScreen ? rh.cappedFontSize(16) : null,
-            ),
-          )
-        else
-          MarkdownBody(
-            data: description,
-            // shrinkWrap so the description sizes itself inside the parent
-            // ListView; selectable so users can copy snippets out of the
-            // course outline.
-            shrinkWrap: true,
-            selectable: true,
-            styleSheet: _descriptionMarkdownStyle(context, rh),
+        // Cross-sell rails — each hides itself when it has nothing.
+        // Free Content is not a real course, so it has neither.
+        if (!course.isFreeContent) ...[
+          CourseBundlesRail(
+            courseId: course.courseId,
+            listPadding: EdgeInsets.symmetric(horizontal: horizontal),
+            // A bundle bought from here may include this course.
+            onCoursesUnlocked: () =>
+                context.read<CourseDetailCubit>().load(course.courseId),
           ),
+          CourseRelatedProductsRail(courseId: course.courseId),
+        ],
         SizedBox(height: Screen.getVerticalSize(80)),
       ],
     );

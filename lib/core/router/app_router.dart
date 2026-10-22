@@ -56,6 +56,9 @@ import 'package:nexora/features/courses/data/models/course_filter_models.dart';
 import 'package:nexora/features/catalog/presentation/pages/category_list_page.dart';
 import 'package:nexora/features/courses/presentation/pages/document_viewer_page.dart';
 import 'package:nexora/features/workshop_pass/presentation/pages/my_bookings_page.dart';
+import 'package:nexora/features/bundles/presentation/bloc/bundles_cubit.dart';
+import 'package:nexora/features/bundles/presentation/pages/bundle_detail_page.dart';
+import 'package:nexora/features/bundles/presentation/pages/bundles_page.dart';
 import 'package:nexora/features/store/data/models/store_address_model.dart';
 import 'package:nexora/features/store/data/models/store_checkout_model.dart';
 import 'package:nexora/features/store/data/models/store_product_model.dart';
@@ -218,6 +221,7 @@ class AppRouter {
             BlocProvider(create: (_) => sl<HomeCubit>()),
             BlocProvider(create: (_) => sl<ContinueCoursesCubit>()..load()),
             BlocProvider(create: (_) => sl<WebinarsCubit>()..load()),
+            BlocProvider(create: (_) => sl<BundlesCubit>()..load()),
             BlocProvider(create: (_) => sl<HomeLiveCubit>()..load()),
           ],
           child: const HomePage(),
@@ -756,6 +760,21 @@ class AppRouter {
           final orderNo = state.uri.queryParameters['orderNo'] ?? '';
           if (orderNo.isEmpty) return const StoreOrdersPage();
           return StoreOrderDetailPage(orderNo: orderNo);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.bundles,
+        name: 'bundles',
+        builder: (context, state) => const BundlesPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.bundleDetail,
+        name: 'bundle-detail',
+        builder: (context, state) {
+          final id = int.tryParse(state.uri.queryParameters['id'] ?? '');
+          // A bundle link without an id has nothing to show.
+          if (id == null) return const BundlesPage();
+          return BundleDetailPage(bundleId: id);
         },
       ),
       GoRoute(

@@ -9,6 +9,7 @@ import 'package:nexora/core/theme/app_colors.dart';
 import 'package:nexora/core/theme/app_sizes.dart';
 import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/core/widgets/custom_snackbar.dart';
+import 'package:nexora/features/bundles/presentation/widgets/related_rails.dart';
 import 'package:nexora/features/store/data/models/store_common_model.dart';
 import 'package:nexora/features/store/data/models/store_product_model.dart';
 import 'package:nexora/features/store/presentation/bloc/store_cart_cubit.dart';
@@ -199,6 +200,10 @@ class _ProductBodyState extends State<_ProductBody> {
                   ),
                 ),
               SliverToBoxAdapter(child: _specsPanel()),
+              // X2 — hides itself when no course is linked.
+              SliverToBoxAdapter(
+                child: ProductRelatedCoursesRail(productId: p.productId),
+              ),
               SliverToBoxAdapter(
                 key: _reviewsKey,
                 child: _reviewsPanel(context),
