@@ -607,6 +607,13 @@ class CourseContent {
   /// behave exactly as before, which is what makes the rollout safe.
   final String? liveStatus;
 
+  /// Live-class nodes only: whether the class recording can be watched
+  /// ("Available" / "Processing"). Omitted by the api when there is no
+  /// recording (never recorded, nothing captured, or already deleted) and
+  /// by older api builds — both read as "no recording". A cached hint:
+  /// the recording endpoint is the source of truth on tap.
+  final String? recordingStatus;
+
   /// Exam nodes only: the folder trail this node sits under inside the
   /// course, e.g. "Module 1 › Chapter 2". Stamped by the admin on every save
   /// and passed back when an attempt starts, purely so the educator's Stats
@@ -631,6 +638,7 @@ class CourseContent {
     this.children = const [],
     this.startDateTime,
     this.liveStatus,
+    this.recordingStatus,
     this.folderPath,
     this.examKind = ExamNodeKind.exam,
   });
@@ -686,6 +694,25 @@ class CourseContent {
   bool get isEnded =>
       _isClosedByServer ||
       (_liveEnd != null && !DateTime.now().isBefore(_liveEnd!));
+
+  // ── Live-class recording ───────────────────────────────────────────
+  // Only consulted once the class has ended by the logic above — it must
+  // never change the Upcoming / Live / Join behaviour. A cancelled class
+  // has nothing to watch. Case-insensitive; unknown values read as absent.
+
+  /// An ended class whose recording can be played now.
+  bool get hasRecording =>
+      isLiveClass &&
+      isEnded &&
+      !isCancelled &&
+      recordingStatus?.toLowerCase() == 'available';
+
+  /// An ended class whose recording is still being saved.
+  bool get isRecordingProcessing =>
+      isLiveClass &&
+      isEnded &&
+      !isCancelled &&
+      recordingStatus?.toLowerCase() == 'processing';
 
   // ── Scheduled release (non-live nodes) ─────────────────────────────
   // The admin can put a `startDateTime` on ANY node, not just a live
@@ -788,6 +815,7 @@ class CourseContent {
           ? null
           : DateTime.tryParse(startRaw.toString())?.toLocal(),
       liveStatus: json['liveStatus'] as String?,
+      recordingStatus: json['recordingStatus'] as String?,
       folderPath: json['folderPath'] as String?,
       examKind: ExamNodeKind.fromJson(json),
     );

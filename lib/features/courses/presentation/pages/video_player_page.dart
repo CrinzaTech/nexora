@@ -6,6 +6,7 @@ import 'package:nexora/core/theme/app_typography.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_appbar_widget.dart';
 import 'package:nexora/core/widgets/moving_watermark.dart';
+import 'package:nexora/features/courses/domain/usecases/get_live_class_recording_usecase.dart';
 import 'package:nexora/features/courses/presentation/widgets/custom_youtube_player.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -56,6 +57,13 @@ class VideoPlayerPage extends StatefulWidget {
   final String nodeId;
   final bool activateWatermark;
 
+  /// Set only when playing a live-class recording: the class roomId. Its
+  /// signed MP4 URL expires after a few hours, so when the player fails to
+  /// load the URL it re-fetches a fresh one from the recording endpoint
+  /// (once automatically, and again on every Retry) instead of failing on
+  /// a dead link.
+  final String? liveRoomId;
+
   const VideoPlayerPage({
     super.key,
     required this.title,
@@ -63,6 +71,7 @@ class VideoPlayerPage extends StatefulWidget {
     this.coursePurchasedId = 0,
     this.nodeId = '',
     this.activateWatermark = false,
+    this.liveRoomId,
   });
 
   @override
@@ -128,7 +137,51 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
 
   /// Resolves to [_kDebugYoutubeOverride] when set, otherwise the URL
   /// the route handed us.
-  String get _effectiveUrl => _kDebugYoutubeOverride ?? widget.url;
+  String get _effectiveUrl => _kDebugYoutubeOverride ?? _url;
+
+  /// The URL currently being played. Starts as the route's URL; replaced
+  /// only for a live-class recording whose signed link was re-fetched.
+  late String _url = widget.url;
+
+  /// Live-class recordings only: the automatic one-time re-fetch after a
+  /// load failure has been used.
+  bool _autoRefetched = false;
+
+  bool get _isLiveRecording => (widget.liveRoomId ?? '').isNotEmpty;
+
+  /// Asks the recording endpoint for a fresh signed URL. Returns false
+  /// (with [_error] set to the server's message where it gave one) when
+  /// there is nothing playable any more.
+  Future<bool> _refreshRecordingUrl() async {
+    final result = await sl<GetLiveClassRecordingUseCase>()(widget.liveRoomId!);
+    return result.fold(
+      (failure) {
+        _error = failure.message.isNotEmpty
+            ? failure.message
+            : 'Failed to load video';
+        return false;
+      },
+      (recording) {
+        if (!recording.isPlayable) {
+          _error =
+              recording.message ??
+              'The recording of this class is not available.';
+          return false;
+        }
+        _url = recording.url!;
+        return true;
+      },
+    );
+  }
+
+  /// Drops a controller whose initialisation failed so a new one can be
+  /// built. Listeners were never attached (see [_playerReady]).
+  void _discardFailedController() {
+    final dead = _controller;
+    _controller = null;
+    _playerReady = false;
+    dead?.dispose();
+  }
 
   @override
   void initState() {
@@ -311,6 +364,18 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         setState(() => _isLoading = false);
       }
     } catch (e) {
+      // Live-class recording: the most likely cause is an expired signed
+      // link (403 from the storage host). Fetch a fresh one and try once.
+      if (_isLiveRecording && !_autoRefetched && mounted) {
+        _autoRefetched = true;
+        _discardFailedController();
+        if (await _refreshRecordingUrl()) {
+          if (mounted) await _initPlayer();
+          return;
+        }
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
       if (mounted) {
         setState(() {
           _error = 'Failed to load video';
@@ -318,6 +383,24 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         });
       }
     }
+  }
+
+  /// Retry button for the pod_player branch. A live-class recording always
+  /// gets a fresh signed URL first — the old one may have expired.
+  Future<void> _retryPlayer() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    _discardFailedController();
+    if (_isLiveRecording) {
+      _autoRefetched = true;
+      if (!await _refreshRecordingUrl()) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+    }
+    if (mounted) await _initPlayer();
   }
 
   /// `youtu.be`, `youtube.com`, `m.youtube.com`, `music.youtube.com`,
@@ -335,8 +418,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   /// (`docs.google.com`) and are never video, so they aren't matched.
   static bool _isGoogleDriveUrl(String url) {
     final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
-    return host == 'drive.google.com' ||
-        host == 'drive.usercontent.google.com';
+    return host == 'drive.google.com' || host == 'drive.usercontent.google.com';
   }
 
   /// Extracts the Drive file id from any of the link shapes an admin is
@@ -602,16 +684,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     }
 
     if (_error != null) {
-      return _buildErrorView(
-        message: _error!,
-        onRetry: () {
-          setState(() {
-            _isLoading = true;
-            _error = null;
-          });
-          _initPlayer();
-        },
-      );
+      return _buildErrorView(message: _error!, onRetry: _retryPlayer);
     }
 
     final controller = _controller;

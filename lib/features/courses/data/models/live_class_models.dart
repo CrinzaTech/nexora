@@ -2,6 +2,60 @@
 // `/hubs/class`). Kept independent of the HLS playback models so the
 // realtime feature can evolve without touching curriculum parsing.
 
+/// What `GET …/live-classes/{roomId}/recording` said about an ended
+/// class's recording.
+enum LiveRecordingStatus {
+  available,
+  processing,
+
+  /// "NotAvailable", or any value this build doesn't know.
+  notAvailable;
+
+  static LiveRecordingStatus fromString(String? raw) {
+    switch (raw?.toLowerCase()) {
+      case 'available':
+        return LiveRecordingStatus.available;
+      case 'processing':
+        return LiveRecordingStatus.processing;
+      default:
+        return LiveRecordingStatus.notAvailable;
+    }
+  }
+}
+
+/// Result of the recording endpoint. [url] is a short-lived signed MP4
+/// (only set when [status] is available) — never store it across taps.
+/// [message] is safe to show the student as-is.
+class LiveRecording {
+  final LiveRecordingStatus status;
+  final String? url;
+  final int? durationSeconds;
+  final String? message;
+
+  const LiveRecording({
+    required this.status,
+    this.url,
+    this.durationSeconds,
+    this.message,
+  });
+
+  bool get isPlayable =>
+      status == LiveRecordingStatus.available && (url ?? '').isNotEmpty;
+
+  /// Parses the envelope `{ success, message, data: { status, url, … } }`.
+  factory LiveRecording.fromEnvelope(Map<String, dynamic> json) {
+    final data = json['data'];
+    final map = data is Map ? Map<String, dynamic>.from(data) : const {};
+    final message = map['message']?.toString() ?? json['message']?.toString();
+    return LiveRecording(
+      status: LiveRecordingStatus.fromString(map['status']?.toString()),
+      url: map['url']?.toString(),
+      durationSeconds: (map['durationSeconds'] as num?)?.toInt(),
+      message: (message == null || message.isEmpty) ? null : message,
+    );
+  }
+}
+
 /// Result of the playback endpoint: the adaptive master HLS URL plus an
 /// audio-only rendition used for weak-network / background fallback.
 class LivePlayback {
@@ -43,7 +97,8 @@ class LivePlayback {
     if (masterMatch != null) {
       audioFile = '${masterMatch.group(1)}_audio.m3u8';
     } else {
-      audioFile = '${file.substring(0, file.length - '.m3u8'.length)}_audio.m3u8';
+      audioFile =
+          '${file.substring(0, file.length - '.m3u8'.length)}_audio.m3u8';
     }
     segments[segments.length - 1] = audioFile;
     return uri.replace(pathSegments: segments).toString();
@@ -184,17 +239,17 @@ class LiveChatMessage {
   bool get isLocal => id < 0;
 
   LiveChatMessage withDelivery(ChatDelivery value) => LiveChatMessage(
-        id: id,
-        senderId: senderId,
-        senderRole: senderRole,
-        senderName: senderName,
-        body: body,
-        createdAt: createdAt,
-        kind: kind,
-        pollId: pollId,
-        poll: poll,
-        delivery: value,
-      );
+    id: id,
+    senderId: senderId,
+    senderRole: senderRole,
+    senderName: senderName,
+    body: body,
+    createdAt: createdAt,
+    kind: kind,
+    pollId: pollId,
+    poll: poll,
+    delivery: value,
+  );
 
   /// True for any non-student sender. The backend role for the teacher
   /// may be spelled `educator`, `teacher`, `host`, `instructor`,
@@ -232,20 +287,38 @@ class LiveChatMessage {
       return null;
     }
 
-    final createdRaw = readStr(
-      ['createdAt', 'created_at', 'timestamp', 'sentAt', 'createdOn', 'time'],
-    );
+    final createdRaw = readStr([
+      'createdAt',
+      'created_at',
+      'timestamp',
+      'sentAt',
+      'createdOn',
+      'time',
+    ]);
     return LiveChatMessage(
-      id: readNum(['id', 'messageId', 'chatMessageId', 'chatId', 'msgId'])
-              ?.toInt() ??
+      id:
+          readNum([
+            'id',
+            'messageId',
+            'chatMessageId',
+            'chatId',
+            'msgId',
+          ])?.toInt() ??
           0,
       senderId:
-          readNum(['senderId', 'userId', 'appUserId', 'studentId', 'fromId'])
-              ?.toInt() ??
+          readNum([
+            'senderId',
+            'userId',
+            'appUserId',
+            'studentId',
+            'fromId',
+          ])?.toInt() ??
           0,
       senderRole:
-          readStr(['senderRole', 'role', 'userRole', 'senderType']) ?? 'student',
-      senderName: readStr([
+          readStr(['senderRole', 'role', 'userRole', 'senderType']) ??
+          'student',
+      senderName:
+          readStr([
             'senderName',
             'name',
             'userName',
@@ -254,7 +327,8 @@ class LiveChatMessage {
           ]) ??
           '',
       body: readStr(['body', 'message', 'text', 'content', 'msg']) ?? '',
-      createdAt: (createdRaw != null
+      createdAt:
+          (createdRaw != null
               ? DateTime.tryParse(createdRaw)?.toLocal()
               : null) ??
           DateTime.now(),

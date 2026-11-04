@@ -217,6 +217,41 @@ class CourseRepositoryImpl implements CourseRepository {
   }
 
   @override
+  Future<Either<Failure, LiveRecording>> getLiveClassRecording(
+    String roomId,
+  ) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        ApiEndpoints.liveClassRecording.replaceFirst(
+          '{roomId}',
+          Uri.encodeComponent(roomId),
+        ),
+      );
+      final json = res.data;
+      if (json == null) {
+        return const Left(
+          Failure.server(message: 'Invalid recording payload'),
+        );
+      }
+      return Right(LiveRecording.fromEnvelope(json));
+    } on DioException catch (e) {
+      // 403/404/503 carry a student-safe `message` in the error envelope.
+      final body = e.response?.data;
+      final message = body is Map ? body['message']?.toString() : null;
+      final status = e.response?.statusCode;
+      if (status != null &&
+          status != 401 &&
+          message != null &&
+          message.isNotEmpty) {
+        return Left(Failure.server(message: message, statusCode: status));
+      }
+      return Left(mapDioExceptionToFailure(e));
+    } catch (e) {
+      return Left(Failure.unknown(message: e.toString()));
+    }
+  }
+
+  @override
   Future<Either<Failure, String>> getStreamToken() async {
     try {
       final json = await _apiClient.getStreamToken();

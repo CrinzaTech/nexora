@@ -47,6 +47,12 @@ abstract class CourseRepository {
   /// 503 (streaming down).
   Future<Either<Failure, LivePlayback>> getLiveClassPlayback(String roomId);
 
+  /// Fetches the recording of an ENDED live class. A fresh signed MP4 URL
+  /// on every call (it expires). Success covers Available / Processing /
+  /// NotAvailable; failures carry the server `message` (403 not enrolled
+  /// or app-only, 404 not found, 503 streaming down).
+  Future<Either<Failure, LiveRecording>> getLiveClassRecording(String roomId);
+
   /// Mints a short-lived StreamApi JWT for the SignalR class hub. The
   /// student never holds the internal key — the proxy signs on their
   /// behalf. Returns the raw token string.

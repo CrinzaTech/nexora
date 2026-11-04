@@ -697,7 +697,24 @@ class CategorySection extends StatelessWidget {
                 // width, so it stays square at any column count and on any
                 // screen rather than tracking a design constant that only
                 // happens to be square at one size.
-                final double cellHeight = tileBig ? cellWidth : tileHeight;
+                //
+                // A bare icon (Tile_Bg off on the neumorphic style) has no
+                // card shadow to fill a tall cell, so the leftover space read
+                // as a large gap. It gets a square cell instead and the icon
+                // fills its full width — label line added underneath when
+                // Tile_Text is on.
+                final bool bareIcon =
+                    !tileBig &&
+                    !currentBranding.tileBgFill &&
+                    !currentBranding.tileBg;
+                final double cellHeight = tileBig
+                    ? cellWidth
+                    : bareIcon
+                    ? cellWidth +
+                          (showText
+                              ? iconMetrics.gap + iconMetrics.labelHeight
+                              : 0)
+                    : tileHeight;
 
                 return Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1166,15 +1183,11 @@ class _DefaultCard extends StatelessWidget {
         );
       }
 
-      final Widget nmContainer = Container(
-        height: containerSize,
-        width: containerSize,
-        decoration: cardDecoration,
-        padding: EdgeInsets.all(paddingVal),
-        child: artwork,
-      );
-
-      return GestureDetector(
+      // With the card the icon keeps the fixed footprint the shadows need.
+      // Without it the icon fills the cell's full width instead (the grid
+      // gives a bare icon a square cell), so no empty margin is left around
+      // it — the side is measured from the cell, minus the label line.
+      Widget buildTile(Widget icon) => GestureDetector(
         onTap: onTap,
         child: Center(
           child: showText
@@ -1182,14 +1195,56 @@ class _DefaultCard extends StatelessWidget {
               ? Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    nmContainer,
+                    icon,
                     SizedBox(height: metrics.gap),
                     label,
                   ],
                 )
               // ── Icon only: just the neumorphic container ─────────────────────
-              : nmContainer,
+              : icon,
         ),
+      );
+
+      if (showCard) {
+        return buildTile(
+          Container(
+            height: containerSize,
+            width: containerSize,
+            decoration: cardDecoration,
+            padding: EdgeInsets.all(paddingVal),
+            child: artwork,
+          ),
+        );
+      }
+
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final double availH =
+              constraints.maxHeight -
+              (showText ? metrics.gap + metrics.labelHeight : 0);
+          final double side = constraints.maxWidth < availH
+              ? constraints.maxWidth
+              : availH;
+          return buildTile(
+            SizedBox(
+              height: side,
+              width: side,
+              child: CustomNetworkImage(
+                url: tile.tileLogoURL,
+                fit: BoxFit.contain,
+                errorWidget: Image.asset(AppImages.bookImg),
+                imageBuilder: pngBg
+                    ? (context, image) => _ContourShadow(
+                        color: shadowColor,
+                        extent: side,
+                        deep: pngBgDark,
+                        child: image,
+                      )
+                    : null,
+              ),
+            ),
+          );
+        },
       );
     }
 

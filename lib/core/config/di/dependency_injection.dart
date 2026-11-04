@@ -27,6 +27,7 @@ import 'package:nexora/features/courses/domain/usecases/get_my_courses_usecase.d
 import 'package:nexora/features/courses/domain/usecases/rewatch_course_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/record_content_completion_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/get_live_class_playback_usecase.dart';
+import 'package:nexora/features/courses/domain/usecases/get_live_class_recording_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/get_stream_token_usecase.dart';
 import 'package:nexora/features/courses/domain/usecases/get_live_class_chat_usecase.dart';
 import 'package:nexora/features/courses/data/services/free_course_registry.dart';
@@ -247,6 +248,7 @@ Future<void> setupLocator() async {
   // (replay, seek-back, hot-reload) on the same node don't re-POST.
   sl.registerLazySingleton(() => ContentCompletionService(sl()));
   sl.registerLazySingleton(() => GetLiveClassPlaybackUseCase(sl()));
+  sl.registerLazySingleton(() => GetLiveClassRecordingUseCase(sl()));
   sl.registerLazySingleton(() => GetStreamTokenUseCase(sl()));
   sl.registerLazySingleton(() => GetLiveClassChatUseCase(sl()));
   sl.registerLazySingleton(() => GetLiveClassPollsUseCase(sl()));

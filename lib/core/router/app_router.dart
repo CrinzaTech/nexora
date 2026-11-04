@@ -444,12 +444,16 @@ class AppRouter {
           final nodeId = state.uri.queryParameters['nodeId'] ?? '';
           final activateWatermark =
               state.uri.queryParameters['activateWatermark'] == 'true';
+          // Live-class recordings pass their roomId so an expired signed
+          // MP4 link can be re-fetched from the recording endpoint.
+          final liveRoomId = state.uri.queryParameters['liveRoomId'];
           return VideoPlayerPage(
             title: title,
             url: url,
             coursePurchasedId: coursePurchasedId,
             nodeId: nodeId,
             activateWatermark: activateWatermark,
+            liveRoomId: (liveRoomId ?? '').isEmpty ? null : liveRoomId,
           );
         },
       ),

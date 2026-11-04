@@ -10,7 +10,9 @@ import 'package:nexora/core/theme/responsive_helper.dart';
 import 'package:nexora/core/theme/screen.dart';
 import 'package:nexora/core/widgets/custom_snackbar.dart';
 import 'package:nexora/features/courses/data/models/course_model.dart';
+import 'package:nexora/features/courses/data/models/live_class_models.dart';
 import 'package:nexora/features/courses/data/services/live_status_probe.dart';
+import 'package:nexora/features/courses/domain/usecases/get_live_class_recording_usecase.dart';
 import 'package:nexora/features/courses/presentation/folder_navigation_cache.dart';
 import 'package:nexora/features/courses/presentation/widgets/scheduled_content_dialog.dart';
 import 'dart:async';
@@ -296,7 +298,14 @@ class ModuleCard extends StatelessWidget {
               '&coursePurchasedId=$coursePurchasedId',
             );
           } else if (module.type == CourseContentType.liveClass) {
-            if (module.isEnded) {
+            if (module.isEnded &&
+                (module.hasRecording || module.isRecordingProcessing) &&
+                (module.url ?? '').isNotEmpty) {
+              // Ended class with a recording (or one still saving): ask
+              // the recording endpoint — it is the source of truth, and a
+              // "Processing" tile may already be ready.
+              _openLiveRecording(context, completionArgs);
+            } else if (module.isEnded) {
               CustomSnackbar.info(
                 context,
                 title: module.isCancelled ? 'Class cancelled' : 'Class ended',
@@ -509,12 +518,111 @@ class ModuleCard extends StatelessWidget {
     );
   }
 
+  /// Fetches a fresh signed URL for the ended class's recording and opens
+  /// it in the regular video player — same watermark, screen-capture
+  /// protection and completion tracking (75%) as a video node. The URL is
+  /// never cached: it expires, so every tap asks again. Free to watch —
+  /// no token charge, handled server-side.
+  Future<void> _openLiveRecording(
+    BuildContext context,
+    String completionArgs,
+  ) async {
+    final roomId = module.url!;
+    final router = GoRouter.of(context);
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+
+    var loaderOpen = true;
+    showDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: Center(child: CircularProgressIndicator()),
+      ),
+    ).whenComplete(() => loaderOpen = false);
+
+    final result = await sl<GetLiveClassRecordingUseCase>()(roomId);
+
+    if (loaderOpen && rootNavigator.mounted) rootNavigator.pop();
+
+    result.fold(
+      (failure) {
+        if (!context.mounted) return;
+        CustomSnackbar.error(
+          context,
+          title: 'Recording unavailable',
+          message: failure.message.isNotEmpty
+              ? failure.message
+              : 'The recording could not be opened. Please try again.',
+        );
+      },
+      (recording) {
+        if (recording.isPlayable) {
+          router.push(
+            '${AppRoutes.videoPlayer}'
+            '?title=${Uri.encodeComponent(module.nodeName)}'
+            '&url=${Uri.encodeComponent(recording.url!)}'
+            '&liveRoomId=${Uri.encodeComponent(roomId)}'
+            '$completionArgs'
+            '&activateWatermark=$activateWatermark',
+          );
+          return;
+        }
+        if (!context.mounted) return;
+        final processing =
+            recording.status == LiveRecordingStatus.processing;
+        CustomSnackbar.info(
+          context,
+          title: processing ? 'Recording processing' : 'Recording unavailable',
+          message:
+              recording.message ??
+              (processing
+                  ? 'The recording is being processed. Please check back in a few minutes.'
+                  : 'The recording of this class is not available.'),
+        );
+      },
+    );
+  }
+
   /// Coloured status pill for a live-class row, derived from the node's
   /// time state at build time (the row rebuilds on a 30s tick).
   Widget _buildLiveClassSubtitle(ResponsiveHelper rh) {
     final fontSize = rh.isLargeScreen
         ? rh.cappedFontSize(12)
         : Screen.getFontSize(12);
+    // Ended class with a recording. No expiry text, ever — students are
+    // not told when recordings are deleted. The node's durationSeconds is
+    // the booked slot, not the recording length, so it isn't shown here.
+    if (module.hasRecording) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.play_circle_fill,
+            size: Screen.getSize(12),
+            color: AppColors.primary,
+          ),
+          SizedBox(width: Screen.getHorizontalSize(5)),
+          Text(
+            'Recording',
+            style: AppTypography.bodyTextSemiBold.copyWith(
+              color: AppColors.primary,
+              fontSize: fontSize,
+            ),
+          ),
+        ],
+      );
+    }
+    if (module.isRecordingProcessing) {
+      return Text(
+        'Recording processing…',
+        style: AppTypography.bodyTextMedium.copyWith(
+          color: AppColors.mutedTextPrimary,
+          fontSize: fontSize,
+        ),
+      );
+    }
     if (module.isLiveNow) {
       if (_offAir) {
         return Text(
@@ -652,7 +760,11 @@ Widget _getLeading(CourseContent module, {bool offAir = false}) {
       // The illustration is full colour, so the old red/muted tint can't
       // carry the state any more: the "LIVE NOW" subtitle and the Join
       // pill say it's on air, and an ended class is simply faded.
-      return _contentIcon(AppImages.contentLiveIcon, faded: module.isEnded);
+      // A watchable recording brings the ended class back to full colour.
+      return _contentIcon(
+        AppImages.contentLiveIcon,
+        faded: module.isEnded && !module.hasRecording,
+      );
   }
 }
 
@@ -695,6 +807,14 @@ Widget? _getTrailing(CourseContent module, {bool offAir = false}) {
       width: Screen.getSize(20),
       height: Screen.getSize(20),
       color: AppColors.mutedTextPrimary,
+    );
+  }
+  if (module.type == CourseContentType.liveClass && module.hasRecording) {
+    // Ended class with a recording ready — reads as playable.
+    return Icon(
+      Icons.play_circle_outline,
+      size: Screen.getSize(24),
+      color: AppColors.primary,
     );
   }
   if (module.type == CourseContentType.liveClass && module.isUpcoming) {

@@ -156,6 +156,14 @@ class ApiEndpoints {
   static const String liveClassPlayback =
       '/api/stream/live-classes/{roomId}/playback';
 
+  /// Signed MP4 URL for an ENDED live class's recording. Same roomId as
+  /// [liveClassPlayback]. Always 200 on success — branch on
+  /// `data.status` ("Available" / "Processing" / "NotAvailable").
+  /// 403 not enrolled / app-only, 404 not found, 503 streaming down.
+  /// The URL expires after a few hours: fetch on every tap, never cache.
+  static const String liveClassRecording =
+      '/api/stream/live-classes/{roomId}/recording';
+
   /// Mints a short-lived StreamApi JWT so the student can open the
   /// SignalR class hub without ever holding the internal key.
   /// POST /api/stream/token → { success, message, data: { token } }.
